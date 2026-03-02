@@ -1,0 +1,16 @@
+# Godot
+client/.godot/
+client/.import/
+client/export/
+client/*.tmp
+client/.mono/
+client/.vs/
+
+# Node
+server/node_modules/
+server/dist/
+server/*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
