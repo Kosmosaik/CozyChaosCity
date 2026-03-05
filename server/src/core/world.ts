@@ -9,7 +9,11 @@ function makeInitialPlots(): Plot[] {
 }
 
 export function newWorld(): WorldState {
-  return { version: 1, plots: makeInitialPlots() };
+  return {
+    version: 1,
+    plots: makeInitialPlots(),
+    players: {}, // NEW: player registry persists identities
+  };
 }
 
 export function countFreePlayerPlots(world: WorldState): number {

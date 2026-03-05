@@ -1,0 +1,157 @@
+{
+  "version": 17,
+  "plots": [
+    {
+      "id": "P_0",
+      "type": "PLAYER",
+      "claimed_by": "plr_f4c1f116e97e"
+    },
+    {
+      "id": "P_1",
+      "type": "PLAYER",
+      "claimed_by": "plr_5a1997866998"
+    },
+    {
+      "id": "P_2",
+      "type": "PLAYER",
+      "claimed_by": "plr_f4c1f116e97e"
+    },
+    {
+      "id": "P_3",
+      "type": "PLAYER",
+      "claimed_by": "plr_f4c1f116e97e"
+    },
+    {
+      "id": "P_4",
+      "type": "PLAYER",
+      "claimed_by": "plr_f4c1f116e97e"
+    },
+    {
+      "id": "P_5",
+      "type": "PLAYER",
+      "claimed_by": "plr_f4c1f116e97e"
+    },
+    {
+      "id": "P_6",
+      "type": "PLAYER",
+      "claimed_by": "plr_f4c1f116e97e"
+    },
+    {
+      "id": "P_7",
+      "type": "PLAYER",
+      "claimed_by": "plr_5a1997866998"
+    },
+    {
+      "id": "P_8",
+      "type": "PLAYER",
+      "claimed_by": "plr_5a1997866998"
+    },
+    {
+      "id": "P_9",
+      "type": "PLAYER",
+      "claimed_by": "plr_5a1997866998"
+    },
+    {
+      "id": "P_10",
+      "type": "PLAYER",
+      "claimed_by": "plr_6d7fd6ff4e1f"
+    },
+    {
+      "id": "P_11",
+      "type": "PLAYER",
+      "claimed_by": "plr_6d7fd6ff4e1f"
+    },
+    {
+      "id": "R_0",
+      "type": "RES_SHARED",
+      "claimed_by": null
+    },
+    {
+      "id": "R_1",
+      "type": "RES_SHARED",
+      "claimed_by": null
+    },
+    {
+      "id": "R_2",
+      "type": "RES_SHARED",
+      "claimed_by": null
+    },
+    {
+      "id": "R_3",
+      "type": "RES_SHARED",
+      "claimed_by": null
+    },
+    {
+      "id": "P_12",
+      "type": "PLAYER",
+      "claimed_by": null
+    },
+    {
+      "id": "P_13",
+      "type": "PLAYER",
+      "claimed_by": "plr_d34d0a9993f0"
+    },
+    {
+      "id": "P_14",
+      "type": "PLAYER",
+      "claimed_by": null
+    },
+    {
+      "id": "P_15",
+      "type": "PLAYER",
+      "claimed_by": null
+    },
+    {
+      "id": "P_16",
+      "type": "PLAYER",
+      "claimed_by": null
+    },
+    {
+      "id": "P_17",
+      "type": "PLAYER",
+      "claimed_by": null
+    },
+    {
+      "id": "P_18",
+      "type": "PLAYER",
+      "claimed_by": "plr_5a1997866998"
+    },
+    {
+      "id": "P_19",
+      "type": "PLAYER",
+      "claimed_by": "plr_6d7fd6ff4e1f"
+    }
+  ],
+  "players": {
+    "plr_1edc1721e06f": {
+      "id": "plr_1edc1721e06f",
+      "secret": "06fe2130bea9a38d307dea505fa47c9263d0474e43f4f68e",
+      "display_name": "Kneppe"
+    },
+    "plr_f4c1f116e97e": {
+      "id": "plr_f4c1f116e97e",
+      "secret": "c7786907988027ced379bf433cd4cd9fd2938d18124c1afb",
+      "display_name": "plr_f4c1f116e97e"
+    },
+    "plr_5a1997866998": {
+      "id": "plr_5a1997866998",
+      "secret": "82f48051c67d5ea9665c6bddefc925fe6313f6aa1f4b8672",
+      "display_name": "snuppen"
+    },
+    "plr_6d7fd6ff4e1f": {
+      "id": "plr_6d7fd6ff4e1f",
+      "secret": "37526670d033ae63e1a093b626ff03ae8db7620a7db4d329",
+      "display_name": "huppel"
+    },
+    "plr_41568defb8be": {
+      "id": "plr_41568defb8be",
+      "secret": "ad395ad6385a997ce5ab86d1ef0c4128ef708b03797fbd17",
+      "display_name": "x"
+    },
+    "plr_d34d0a9993f0": {
+      "id": "plr_d34d0a9993f0",
+      "secret": "3292fa3c5fad8c443874a84c0e508d792e4e857c69e94af9",
+      "display_name": "aaa"
+    }
+  }
+}

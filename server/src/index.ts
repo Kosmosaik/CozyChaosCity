@@ -3,14 +3,30 @@ import { CONFIG } from "./core/config";
 import { EnvelopeSchema, makeMsg, WorldState } from "./net/protocol";
 import { countFreePlayerPlots, expandWorld, newWorld } from "./core/world";
 import { loadWorld, saveWorldAtomic } from "./storage/persist";
+import { toLowerCase } from "zod";
+import { createPlayer, validatePlayer } from "./core/players";
 
 type ConnState = {
-  player_token: string | null;
+  /**
+   * Server-issued player id for this connection (after hello).
+   */
+  player_id: string | null;
+
   lastSeen: number;
 };
 
 const wss = new WebSocketServer({ port: CONFIG.port });
 let world: WorldState = loadWorld(CONFIG.persistPath) ?? newWorld();
+
+/**
+ * Migration/normalization:
+ * Older saved worlds may not have the new fields we add over time.
+ * Ensure they exist so the server doesn't crash.
+ */
+if (!world.players) {
+  world.players = {};
+  saveWorldAtomic(CONFIG.persistPath, world);
+}
 
 const conns = new Map<any, ConnState>();
 
@@ -25,7 +41,7 @@ function sendWorld(ws: any) {
 }
 
 wss.on("connection", (ws) => {
-  conns.set(ws, { player_token: null, lastSeen: Date.now() });
+	conns.set(ws, { player_id: null, lastSeen: Date.now() });
 
   ws.on("message", (data) => {
     const st = conns.get(ws);
@@ -52,26 +68,56 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    if (env.type === "hello") {
-      const token = env.payload?.player_token;
-      if (typeof token !== "string" || token.length < 8) {
-        ws.send(makeMsg("error", { reason: "invalid_player_token" }, env.req_id));
-        return;
-      }
-      st.player_token = token;
-      ws.send(makeMsg("hello_ok", { server_time: Date.now() }, env.req_id));
-      sendWorld(ws);
-      return;
-    }
+	if (env.type === "hello") {
+	  /**
+	   * Client can send:
+	   * - { player_id, secret } to authenticate (reconnect)
+	   * - OR { display_name } to register a new identity
+	   */
+	  const pid = env.payload?.player_id;
+	  const sec = env.payload?.secret;
+	  const displayName = env.payload?.display_name;
+
+	  let player = null;
+
+	  // Try to authenticate if credentials are provided
+	  if (typeof pid === "string" && typeof sec === "string") {
+		player = validatePlayer(world, pid, sec);
+	  }
+
+	  // If no valid credentials, create a new player identity
+	  if (!player) {
+		player = createPlayer(world, typeof displayName === "string" ? displayName : undefined);
+		saveWorldAtomic(CONFIG.persistPath, world); // persist new identity immediately
+	  }
+
+	  st.player_id = player.id;
+
+	  // Tell the client who they are (and give them their secret)
+	  ws.send(makeMsg("welcome", {
+		player_id: player.id,
+		secret: player.secret,
+		display_name: player.display_name,
+	  }, env.req_id));
+
+	  // Send world state snapshot
+	  sendWorld(ws);
+	  return;
+	}
 
     // Require hello first
-    if (!st.player_token) {
-      ws.send(makeMsg("error", { reason: "not_helloed" }, env.req_id));
+	if (!st.player_id) {
+	  ws.send(makeMsg("error", { reason: "not_helloed" }, env.req_id));
+	  return;
+	}
+	
+    if (env.type === "request_world") {
+      sendWorld(ws);
       return;
     }
 
-    if (env.type === "request_world") {
-      sendWorld(ws);
+    if (env.type === "client_ping") {
+      ws.send(makeMsg("server_pong", {}, env.req_id));
       return;
     }
 
@@ -97,7 +143,7 @@ wss.on("connection", (ws) => {
       }
 
       // Claim (atomic in one tick)
-      plot.claimed_by = st.player_token;
+      plot.claimed_by = st.player_id;
       world.version += 1;
       saveWorldAtomic(CONFIG.persistPath, world);
 
