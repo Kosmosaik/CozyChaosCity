@@ -1,0 +1,29 @@
+**Patch Notes — v0.0.1 (Milestone 0 Complete) — 2026-03-05**
+
+✅ **Server + Multiplayer Foundation**
+- Dedicated server is running (no player hosting)
+- Multiple clients can connect at the same time
+- Everyone sees the same world state
+
+✅ **Plot Claiming**
+- Click a free plot to select it
+- Press **Claim** to claim it
+- Claimed plots update live for everyone
+
+✅ **Persistence**
+- Claimed plots stay claimed after:
+  - restarting the game
+  - restarting the server
+
+✅ **World Expansion**
+- When free plots get low, the server automatically adds more plots
+
+✅ **Profiles / Username Login (Prototype)**
+- On start: enter a username (used as a local profile)
+- Server assigns a unique player identity behind the scenes
+- Plots show as:
+  - **MINE** (claimed by you)
+  - **TAKEN** (claimed by someone else)
+
+🛠️ **Next up**
+- Implement the intended world layout pattern (player plots + resource plots arrangement)
