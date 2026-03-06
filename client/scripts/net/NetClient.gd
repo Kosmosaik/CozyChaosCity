@@ -16,11 +16,27 @@ signal plot_updated(plot: Dictionary)
 signal world_patch_received(patch: Dictionary)
 signal claim_result_received(result: Dictionary)
 
+signal latency_updated(ms: int)
+signal presence_updated(online: Array) # array of {player_id, display_name}
+
 # -------------------------
 # Networking constants
 # -------------------------
-const WS_URL := "ws://localhost:8080"
-const PROTOCOL_VERSION := 1
+# Default: what the shipped game will auto-connect to (your public IP for now).
+# Example: "ws://83.12.34.56:27015"
+const DEFAULT_SERVER_URL := "ws://90.225.57.62:27015"
+const PROTOCOL_VERSION := 2
+
+# Optional local override:
+# If this file exists, its contents will be used as the server URL.
+# Put your LAN URL here on YOUR PC only (e.g. ws://192.168.0.50:27015)
+const OVERRIDE_PATH := "user://server_url.txt"
+
+var _server_url: String = DEFAULT_SERVER_URL
+
+var _online_players: Array = []  # last known presence snapshot
+var _pending_pings := {}         # req_id -> send_time_ms
+var _latency_ms: float = -1.0
 
 # -------------------------
 # Internal networking state
@@ -30,7 +46,7 @@ var _is_connected := false
 var _req_counter: int = 0
 
 # Heartbeat: keeps server from disconnecting us due to inactivity
-var _heartbeat_interval := 10.0
+var _heartbeat_interval := 3.0
 var _heartbeat_accum := 0.0
 
 # -------------------------
@@ -58,7 +74,9 @@ func _process(delta: float) -> void:
 		_heartbeat_accum += delta
 		if _heartbeat_accum >= _heartbeat_interval:
 			_heartbeat_accum = 0.0
-			_send("client_ping", {}, _next_req_id())
+			var rid := _next_req_id()
+			_pending_pings[rid] = Time.get_ticks_msec()
+			_send("client_ping", { "client_ms": Time.get_ticks_msec() }, rid)
 
 # -------------------------
 # Public API (HUD calls these)
@@ -77,7 +95,7 @@ func connect_with_profile(name: String) -> void:
 	secret = str(prof.get("secret", ""))
 	display_name = str(prof.get("display_name", profile_name))
 
-	_emit_status("Connecting as '%s'..." % profile_name)
+	_emit_status("Connecting as '%s' to %s..." % [profile_name, _resolve_server_url()])
 	_connect_ws()
 
 func request_world() -> void:
@@ -86,13 +104,25 @@ func request_world() -> void:
 func claim_plot(plot_id: String) -> void:
 	_send("claim_plot", { "plot_id": plot_id }, _next_req_id())
 
+func _resolve_server_url() -> String:
+	# Local override for you (LAN testing) without typing in-game.
+	if FileAccess.file_exists(OVERRIDE_PATH):
+		var f := FileAccess.open(OVERRIDE_PATH, FileAccess.READ)
+		if f:
+			var txt := f.get_as_text().strip_edges()
+			if txt != "":
+				return txt
+
+	return DEFAULT_SERVER_URL
+
 # -------------------------
 # Internal networking
 # -------------------------
 func _connect_ws() -> void:
-	var err = _ws.connect_to_url(WS_URL)
+	_server_url = _resolve_server_url()
+	var err = _ws.connect_to_url(_server_url)
 	if err != OK:
-		_emit_status("WS connect failed: %s" % err)
+		_emit_status("WS connect failed (%s): %s" % [_server_url, str(err)])
 		return
 
 func _poll_ws() -> void:
@@ -167,7 +197,16 @@ func _handle_message(txt: String) -> void:
 			emit_signal("world_state_received", payload.get("world", {}))
 
 		"plot_update":
-			emit_signal("plot_updated", payload.get("plot", {}))
+			# payload: { plot: {...}, owner_display_name?: "Alice" }
+			var p: Dictionary = payload.get("plot", {})
+
+			# If server provided a name, store it on the plot dict.
+			# This makes PlotView able to show the correct owner name even if
+			# world.players is stale on this client.
+			if payload.has("owner_display_name"):
+				p["owner_display_name"] = str(payload.get("owner_display_name", ""))
+
+			emit_signal("plot_updated", p)
 
 		"world_patch":
 			emit_signal("world_patch_received", payload)
@@ -175,12 +214,29 @@ func _handle_message(txt: String) -> void:
 		"claim_result":
 			emit_signal("claim_result_received", payload)
 
-		"server_pong":
-			# Optional response to our heartbeat. No gameplay effect.
-			pass
-
 		"error":
 			_emit_status("Server error: %s" % str(payload))
+			
+		"presence_state":
+			# payload: { online: [ {player_id, display_name}, ... ] }
+			_online_players = payload.get("online", [])
+			emit_signal("presence_updated", _online_players)
+
+		"server_pong":
+			# Compute RTT using the request id of the pong (if present)
+			var rid = str(msg.get("req_id", ""))
+			if _pending_pings.has(rid):
+				var sent_ms = int(_pending_pings[rid])
+				_pending_pings.erase(rid)
+				var rtt = Time.get_ticks_msec() - sent_ms
+
+				# Light smoothing so it doesn't jump around
+				if _latency_ms < 0:
+					_latency_ms = float(rtt)
+				else:
+					_latency_ms = lerp(_latency_ms, float(rtt), 0.25)
+
+				emit_signal("latency_updated", int(round(_latency_ms)))
 
 		_:
 			# Ignore unknown messages for now.

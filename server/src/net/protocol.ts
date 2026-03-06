@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONFIG } from "../core/config";
 
 export const EnvelopeSchema = z.object({
   v: z.number(),
@@ -9,45 +10,42 @@ export const EnvelopeSchema = z.object({
 
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
-export type PlotType = "PLAYER" | "RES_SHARED";
+export type PlotType = "PLAYER" | "RESOURCE";
 
 export type Plot = {
+  /**
+   * Stable unique id. For M0.5 we derive it from coordinates: T_<x>_<y>
+   */
   id: string;
+
   type: PlotType;
-  claimed_by: string | null; // player_id
+
+  /**
+   * Grid coordinate (integer)
+   */
+  x: number;
+  y: number;
+
+  /**
+   * player_id of the owner, or null if unclaimed.
+   * (RESOURCE plots should remain unclaimable; claimed_by should stay null.)
+   */
+  claimed_by: string | null;
 };
 
 export type PlayerRecord = {
-  /**
-   * Server-issued stable player id.
-   * Used for plot ownership and "MINE" checks.
-   */
   id: string;
-
-  /**
-   * Secret auth key for this player id.
-   * Client must present this to prove they are the same player.
-   */
   secret: string;
-
-  /**
-   * Human-readable name (username/profile name).
-   * This can change later without breaking ownership.
-   */
   display_name: string;
 };
 
 export type WorldState = {
   version: number;
   plots: Plot[];
-
-  /**
-   * All known players (persisted in world_state.json).
-   * Key = player_id
-   */
   players: Record<string, PlayerRecord>;
 };
 
 export function makeMsg(type: string, payload?: any, req_id?: string) {
-  return JSON.stringify({ v: 1, type, req_id, payload });
+  // Server always responds using its protocol version.
+  return JSON.stringify({ v: CONFIG.protocolVersion, type, req_id, payload });
 }

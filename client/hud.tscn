@@ -34,21 +34,29 @@ grow_horizontal = 2
 [node name="HBoxContainer" type="HBoxContainer" parent="TopBar" unique_id=293860032]
 self_modulate = Color(0.9867516, 0.9867516, 0.9867516, 1)
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 4
 
 [node name="UsernameLineEdit" type="LineEdit" parent="TopBar/HBoxContainer" unique_id=1496561075]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.8
+size_flags_stretch_ratio = 0.6
 theme_override_constants/minimum_character_width = 4
+theme_override_font_sizes/font_size = 14
 placeholder_text = "Username"
+
+[node name="VSeparator5" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=772328628]
+layout_mode = 2
 
 [node name="ConnectButton" type="Button" parent="TopBar/HBoxContainer" unique_id=237408957]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.25
 theme_override_colors/font_color = Color(0.8260597, 0.8260602, 0.82605976, 1)
+theme_override_font_sizes/font_size = 14
 text = "Connect"
+
+[node name="VSeparator4" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=1539083814]
+layout_mode = 2
 
 [node name="ClaimButton" type="Button" parent="TopBar/HBoxContainer" unique_id=1394737526]
 layout_mode = 2
@@ -57,12 +65,38 @@ size_flags_stretch_ratio = 0.2
 disabled = true
 text = "Claim"
 
+[node name="VSeparator3" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=1919412610]
+layout_mode = 2
+
 [node name="StatusLabel" type="Label" parent="TopBar/HBoxContainer" unique_id=1231392831]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 1
-size_flags_stretch_ratio = 1.5
+size_flags_stretch_ratio = 1.1
 theme_override_constants/line_spacing = 3
-theme_override_font_sizes/font_size = 16
+theme_override_font_sizes/font_size = 14
 text = "Not connected"
+vertical_alignment = 1
+
+[node name="VSeparator2" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=1043171074]
+layout_mode = 2
+
+[node name="LatencyLabel" type="Label" parent="TopBar/HBoxContainer" unique_id=228888741]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+size_flags_stretch_ratio = 0.2
+theme_override_font_sizes/font_size = 14
+text = "Ping: - ms"
+vertical_alignment = 1
+
+[node name="VSeparator" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=122815616]
+layout_mode = 2
+
+[node name="OnlineLabel" type="Label" parent="TopBar/HBoxContainer" unique_id=1034485982]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+theme_override_font_sizes/font_size = 14
+text = "Online: -"
 vertical_alignment = 1

@@ -1,10 +1,10 @@
 import { WebSocketServer } from "ws";
 import { CONFIG } from "./core/config";
 import { EnvelopeSchema, makeMsg, WorldState } from "./net/protocol";
-import { countFreePlayerPlots, expandWorld, newWorld } from "./core/world";
+import { countFreePlayerPlots, expandWorld, newWorld, normalizeWorldForM0_5 } from "./core/world";
 import { loadWorld, saveWorldAtomic } from "./storage/persist";
-import { toLowerCase } from "zod";
 import { createPlayer, validatePlayer } from "./core/players";
+import { getOnlinePlayers } from "./core/presence";
 
 type ConnState = {
   /**
@@ -23,8 +23,9 @@ let world: WorldState = loadWorld(CONFIG.persistPath) ?? newWorld();
  * Older saved worlds may not have the new fields we add over time.
  * Ensure they exist so the server doesn't crash.
  */
-if (!world.players) {
-  world.players = {};
+const norm = normalizeWorldForM0_5(world);
+if (norm.changed) {
+  console.log(`[world] normalized: ${norm.reason ?? "changed"}`);
   saveWorldAtomic(CONFIG.persistPath, world);
 }
 
@@ -40,8 +41,16 @@ function sendWorld(ws: any) {
   ws.send(makeMsg("world_state", { world }));
 }
 
+function sendPresenceState(ws: any) {
+  ws.send(makeMsg("presence_state", { online: getOnlinePlayers(conns, world) }));
+}
+
+function broadcastPresenceState() {
+  broadcast(makeMsg("presence_state", { online: getOnlinePlayers(conns, world) }));
+}
+
 wss.on("connection", (ws) => {
-	conns.set(ws, { player_id: null, lastSeen: Date.now() });
+  conns.set(ws, { player_id: null, lastSeen: Date.now() });
 
   ws.on("message", (data) => {
     const st = conns.get(ws);
@@ -56,7 +65,11 @@ wss.on("connection", (ws) => {
     }
 
     let parsed: any;
-    try { parsed = JSON.parse(raw); } catch { return; }
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return;
+    }
 
     const envRes = EnvelopeSchema.safeParse(parsed);
     if (!envRes.success) return;
@@ -68,49 +81,61 @@ wss.on("connection", (ws) => {
       return;
     }
 
-	if (env.type === "hello") {
-	  /**
-	   * Client can send:
-	   * - { player_id, secret } to authenticate (reconnect)
-	   * - OR { display_name } to register a new identity
-	   */
-	  const pid = env.payload?.player_id;
-	  const sec = env.payload?.secret;
-	  const displayName = env.payload?.display_name;
+    if (env.type === "hello") {
+      /**
+       * Client can send:
+       * - { player_id, secret } to authenticate (reconnect)
+       * - OR { display_name } to register a new identity
+       */
+      const pid = env.payload?.player_id;
+      const sec = env.payload?.secret;
+      const displayName = env.payload?.display_name;
 
-	  let player = null;
+      let player = null;
 
-	  // Try to authenticate if credentials are provided
-	  if (typeof pid === "string" && typeof sec === "string") {
-		player = validatePlayer(world, pid, sec);
-	  }
+      // Try to authenticate if credentials are provided
+      if (typeof pid === "string" && typeof sec === "string") {
+        player = validatePlayer(world, pid, sec);
+      }
 
-	  // If no valid credentials, create a new player identity
-	  if (!player) {
-		player = createPlayer(world, typeof displayName === "string" ? displayName : undefined);
-		saveWorldAtomic(CONFIG.persistPath, world); // persist new identity immediately
-	  }
+      // If no valid credentials, create a new player identity
+      if (!player) {
+        player = createPlayer(world, typeof displayName === "string" ? displayName : undefined);
+        saveWorldAtomic(CONFIG.persistPath, world); // persist new identity immediately
+      }
 
-	  st.player_id = player.id;
+      st.player_id = player.id;
 
-	  // Tell the client who they are (and give them their secret)
-	  ws.send(makeMsg("welcome", {
-		player_id: player.id,
-		secret: player.secret,
-		display_name: player.display_name,
-	  }, env.req_id));
+      // Tell the client who they are (and give them their secret)
+      ws.send(
+        makeMsg(
+          "welcome",
+          {
+            player_id: player.id,
+            secret: player.secret,
+            display_name: player.display_name,
+          },
+          env.req_id
+        )
+      );
 
-	  // Send world state snapshot
-	  sendWorld(ws);
-	  return;
-	}
+      // Send world state snapshot
+      sendWorld(ws);
+
+      // Send a presence snapshot to the newly joined player
+      sendPresenceState(ws);
+
+      // Notify everyone (including this client) that presence changed
+      broadcastPresenceState();
+      return;
+    }
 
     // Require hello first
-	if (!st.player_id) {
-	  ws.send(makeMsg("error", { reason: "not_helloed" }, env.req_id));
-	  return;
-	}
-	
+    if (!st.player_id) {
+      ws.send(makeMsg("error", { reason: "not_helloed" }, env.req_id));
+      return;
+    }
+
     if (env.type === "request_world") {
       sendWorld(ws);
       return;
@@ -128,7 +153,7 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      const plot = world.plots.find(p => p.id === plotId);
+      const plot = world.plots.find((p) => p.id === plotId);
       if (!plot) {
         ws.send(makeMsg("claim_result", { ok: false, reason: "plot_not_found" }, env.req_id));
         return;
@@ -148,7 +173,12 @@ wss.on("connection", (ws) => {
       saveWorldAtomic(CONFIG.persistPath, world);
 
       // Notify everyone (delta + optional full state)
-      broadcast(makeMsg("plot_update", { plot }));
+	  // Include display name in plot_update so clients can show "Owner: Alice"
+      // even if their local players_by_id cache is missing that player.
+      const ownerRec = world.players[st.player_id];
+      const ownerDisplayName = ownerRec?.display_name ?? st.player_id;
+
+      broadcast(makeMsg("plot_update", { plot, owner_display_name: ownerDisplayName }));
       ws.send(makeMsg("claim_result", { ok: true, plot_id: plotId }, env.req_id));
 
       // Expansion check
@@ -163,19 +193,28 @@ wss.on("connection", (ws) => {
 
   ws.on("close", () => {
     conns.delete(ws);
-  });
-});
 
+    // Presence changed: broadcast a fresh snapshot.
+    // (Snapshot approach keeps logic simple and robust.)
+    broadcastPresenceState();
+  });
+}); // ✅ IMPORTANT: closes wss.on("connection", ...)
+
+// Keepalive / timeout watchdog for all connections
 setInterval(() => {
   const now = Date.now();
   for (const [ws, st] of conns.entries()) {
     if (now - st.lastSeen > CONFIG.clientTimeoutMs) {
-      try { ws.terminate(); } catch {}
+      try {
+        ws.terminate();
+      } catch {}
       conns.delete(ws);
     } else {
-      try { ws.ping(); } catch {}
+      try {
+        ws.ping();
+      } catch {}
     }
   }
 }, CONFIG.pingIntervalMs);
 
-console.log(`Server listening on ws://localhost:${CONFIG.port}`);
+console.log(`Server listening on ws://0.0.0.0:${CONFIG.port} (LAN/Public via port-forward)`);

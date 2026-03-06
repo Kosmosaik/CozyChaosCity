@@ -24,7 +24,7 @@ Concept/design is captured separately in:
 ### Next milestone
 ### M0.5 — World Layout Pattern (next)
 Implement intended macro world layout pattern:
-- player plots and **resource plots (res-plots)** in a repeating arrangement
+- player plots and resource plots in a repeating arrangement
 - requires plot coordinates (x,y) and pattern-based generation
 - expansion must preserve the pattern when adding new plots
 

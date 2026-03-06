@@ -11,6 +11,9 @@ extends Control
 @onready var claim_button := $TopBar/HBoxContainer/ClaimButton
 @onready var status_label := $TopBar/HBoxContainer/StatusLabel
 
+@onready var latency_label := $TopBar/HBoxContainer/LatencyLabel
+@onready var online_label := $TopBar/HBoxContainer/OnlineLabel
+
 var net: NetClient
 var selected_plot_id: String = ""
 var _is_logged_in: bool = false
@@ -46,6 +49,9 @@ func _ready() -> void:
 
 	# Friendly starting text (NetClient already emits a default status too)
 	status_label.text = "Enter username and press Connect."
+	
+	net.latency_updated.connect(_on_latency_updated)
+	net.presence_updated.connect(_on_presence_updated)
 
 func _on_connect_pressed() -> void:
 	if net == null:
@@ -121,3 +127,14 @@ func _on_claim_result(result: Dictionary) -> void:
 	else:
 		status_label.text = "Claim failed: %s" % result.get("reason", "unknown")
 		# PlotView updates will arrive via plot_update/world_state and re-enable button if appropriate
+		
+func _on_latency_updated(ms: int) -> void:
+	latency_label.text = "Ping: %d ms" % ms
+
+func _on_presence_updated(online: Array) -> void:
+	# Show a compact list: "Online (3): Alice, Bob, ..."
+	var names: Array = []
+	for p in online:
+		names.append(str(p.get("display_name", "?")))
+
+	online_label.text = "Online (%d): %s" % [names.size(), ", ".join(names)]

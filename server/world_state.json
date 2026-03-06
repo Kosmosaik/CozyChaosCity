@@ -1,157 +1,158 @@
 {
-  "version": 17,
+  "version": 5,
   "plots": [
     {
-      "id": "P_0",
-      "type": "PLAYER",
-      "claimed_by": "plr_f4c1f116e97e"
-    },
-    {
-      "id": "P_1",
-      "type": "PLAYER",
-      "claimed_by": "plr_5a1997866998"
-    },
-    {
-      "id": "P_2",
-      "type": "PLAYER",
-      "claimed_by": "plr_f4c1f116e97e"
-    },
-    {
-      "id": "P_3",
-      "type": "PLAYER",
-      "claimed_by": "plr_f4c1f116e97e"
-    },
-    {
-      "id": "P_4",
-      "type": "PLAYER",
-      "claimed_by": "plr_f4c1f116e97e"
-    },
-    {
-      "id": "P_5",
-      "type": "PLAYER",
-      "claimed_by": "plr_f4c1f116e97e"
-    },
-    {
-      "id": "P_6",
-      "type": "PLAYER",
-      "claimed_by": "plr_f4c1f116e97e"
-    },
-    {
-      "id": "P_7",
-      "type": "PLAYER",
-      "claimed_by": "plr_5a1997866998"
-    },
-    {
-      "id": "P_8",
-      "type": "PLAYER",
-      "claimed_by": "plr_5a1997866998"
-    },
-    {
-      "id": "P_9",
-      "type": "PLAYER",
-      "claimed_by": "plr_5a1997866998"
-    },
-    {
-      "id": "P_10",
-      "type": "PLAYER",
-      "claimed_by": "plr_6d7fd6ff4e1f"
-    },
-    {
-      "id": "P_11",
-      "type": "PLAYER",
-      "claimed_by": "plr_6d7fd6ff4e1f"
-    },
-    {
-      "id": "R_0",
-      "type": "RES_SHARED",
+      "id": "T_0_0",
+      "type": "RESOURCE",
+      "x": 0,
+      "y": 0,
       "claimed_by": null
     },
     {
-      "id": "R_1",
-      "type": "RES_SHARED",
+      "id": "T_1_0",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 0,
+      "claimed_by": "plr_f1166202cee3"
+    },
+    {
+      "id": "T_2_0",
+      "type": "RESOURCE",
+      "x": 2,
+      "y": 0,
       "claimed_by": null
     },
     {
-      "id": "R_2",
-      "type": "RES_SHARED",
+      "id": "T_0_1",
+      "type": "PLAYER",
+      "x": 0,
+      "y": 1,
+      "claimed_by": "plr_f1166202cee3"
+    },
+    {
+      "id": "T_1_1",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 1,
+      "claimed_by": "plr_81c5cc0f77d0"
+    },
+    {
+      "id": "T_2_1",
+      "type": "PLAYER",
+      "x": 2,
+      "y": 1,
       "claimed_by": null
     },
     {
-      "id": "R_3",
-      "type": "RES_SHARED",
+      "id": "T_0_2",
+      "type": "RESOURCE",
+      "x": 0,
+      "y": 2,
       "claimed_by": null
     },
     {
-      "id": "P_12",
+      "id": "T_1_2",
       "type": "PLAYER",
+      "x": 1,
+      "y": 2,
       "claimed_by": null
     },
     {
-      "id": "P_13",
-      "type": "PLAYER",
-      "claimed_by": "plr_d34d0a9993f0"
-    },
-    {
-      "id": "P_14",
-      "type": "PLAYER",
+      "id": "T_2_2",
+      "type": "RESOURCE",
+      "x": 2,
+      "y": 2,
       "claimed_by": null
     },
     {
-      "id": "P_15",
+      "id": "T_3_0",
       "type": "PLAYER",
+      "x": 3,
+      "y": 0,
       "claimed_by": null
     },
     {
-      "id": "P_16",
-      "type": "PLAYER",
+      "id": "T_4_0",
+      "type": "RESOURCE",
+      "x": 4,
+      "y": 0,
       "claimed_by": null
     },
     {
-      "id": "P_17",
+      "id": "T_5_0",
       "type": "PLAYER",
+      "x": 5,
+      "y": 0,
       "claimed_by": null
     },
     {
-      "id": "P_18",
+      "id": "T_3_1",
       "type": "PLAYER",
-      "claimed_by": "plr_5a1997866998"
+      "x": 3,
+      "y": 1,
+      "claimed_by": null
     },
     {
-      "id": "P_19",
+      "id": "T_4_1",
       "type": "PLAYER",
-      "claimed_by": "plr_6d7fd6ff4e1f"
+      "x": 4,
+      "y": 1,
+      "claimed_by": null
+    },
+    {
+      "id": "T_5_1",
+      "type": "PLAYER",
+      "x": 5,
+      "y": 1,
+      "claimed_by": null
+    },
+    {
+      "id": "T_3_2",
+      "type": "PLAYER",
+      "x": 3,
+      "y": 2,
+      "claimed_by": null
+    },
+    {
+      "id": "T_4_2",
+      "type": "RESOURCE",
+      "x": 4,
+      "y": 2,
+      "claimed_by": null
+    },
+    {
+      "id": "T_5_2",
+      "type": "PLAYER",
+      "x": 5,
+      "y": 2,
+      "claimed_by": null
     }
   ],
   "players": {
-    "plr_1edc1721e06f": {
-      "id": "plr_1edc1721e06f",
-      "secret": "06fe2130bea9a38d307dea505fa47c9263d0474e43f4f68e",
-      "display_name": "Kneppe"
+    "plr_81c5cc0f77d0": {
+      "id": "plr_81c5cc0f77d0",
+      "secret": "4ca87e0a159c8a1edd85f359e73981cf9ea8e874af5e0e11",
+      "display_name": "sader"
     },
-    "plr_f4c1f116e97e": {
-      "id": "plr_f4c1f116e97e",
-      "secret": "c7786907988027ced379bf433cd4cd9fd2938d18124c1afb",
-      "display_name": "plr_f4c1f116e97e"
+    "plr_f1166202cee3": {
+      "id": "plr_f1166202cee3",
+      "secret": "1968ff675221adfead95500fba43673538f9d773b0857bd6",
+      "display_name": "fafa"
     },
-    "plr_5a1997866998": {
-      "id": "plr_5a1997866998",
-      "secret": "82f48051c67d5ea9665c6bddefc925fe6313f6aa1f4b8672",
-      "display_name": "snuppen"
+    "plr_7fcc6c4fa52e": {
+      "id": "plr_7fcc6c4fa52e",
+      "secret": "ee4c2d8c688c4db98a536ed34ae2f6d3b509cee76aa35438",
+      "display_name": "ssssssssssss"
     },
-    "plr_6d7fd6ff4e1f": {
-      "id": "plr_6d7fd6ff4e1f",
-      "secret": "37526670d033ae63e1a093b626ff03ae8db7620a7db4d329",
-      "display_name": "huppel"
+    "plr_79a77f610fb5": {
+      "id": "plr_79a77f610fb5",
+      "secret": "86552a16c612a9a8edfa03e4182ab0a74c2b20260ede11a0",
+      "display_name": "eeeeee"
     },
-    "plr_41568defb8be": {
-      "id": "plr_41568defb8be",
-      "secret": "ad395ad6385a997ce5ab86d1ef0c4128ef708b03797fbd17",
-      "display_name": "x"
-    },
-    "plr_d34d0a9993f0": {
-      "id": "plr_d34d0a9993f0",
-      "secret": "3292fa3c5fad8c443874a84c0e508d792e4e857c69e94af9",
-      "display_name": "aaa"
+    "plr_85a2eb0190bf": {
+      "id": "plr_85a2eb0190bf",
+      "secret": "4b8e68574b3bf9453efe6545e88fcb008948e1b394895a9e",
+      "display_name": "dwdwdwd"
     }
   }
 }
