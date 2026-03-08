@@ -2,8 +2,11 @@
 
 [ext_resource type="PackedScene" uid="uid://dhi374i2vx04k" path="res://hud.tscn" id="1_ig7tw"]
 [ext_resource type="Script" uid="uid://b6wt7w2t1iedc" path="res://scripts/net/NetClient.gd" id="2_0xm2m"]
+[ext_resource type="PackedScene" uid="uid://bkx61xsr6yqsa" path="res://scenes/world/GameWorld3D.tscn" id="3_h2yge"]
 
 [node name="Main" type="Node" unique_id=1622711859]
+
+[node name="GameWorld3D" parent="." unique_id=1513630665 instance=ExtResource("3_h2yge")]
 
 [node name="UI" type="CanvasLayer" parent="." unique_id=1006544640]
 

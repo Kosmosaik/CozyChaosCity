@@ -3,7 +3,7 @@ extends Control
 # IMPORTANT:
 # These paths match the node structure you showed + the two new nodes we just added.
 
-@onready var plot_view := $PlotView
+@onready var game_world := get_tree().get_root().get_node_or_null("Main/GameWorld3D")
 
 @onready var username_line_edit := $TopBar/HBoxContainer/UsernameLineEdit
 @onready var connect_button := $TopBar/HBoxContainer/ConnectButton
@@ -26,7 +26,6 @@ func _ready() -> void:
 	# Hook UI events
 	connect_button.pressed.connect(_on_connect_pressed)
 	claim_button.pressed.connect(_on_claim_pressed)
-	plot_view.plot_selected.connect(_on_plot_selected)
 
 	# Find NetClient (you already used this pattern)
 	net = get_tree().get_first_node_in_group("netclient") as NetClient
@@ -76,8 +75,9 @@ func _on_identity_ready(player_id: String, display_name: String) -> void:
 	# We are now authenticated as this server-issued player_id
 	_is_logged_in = true
 
-	# Tell PlotView what "me" means, so it can show MINE vs TAKEN correctly
-	plot_view.set_my_player_id(player_id)
+	# Tell the 3D world who the local player is.
+	if game_world != null:
+		game_world.set_my_player_id(player_id)
 
 	# Once logged in, allow claim button logic to work (still needs plot selection)
 	connect_button.disabled = false
@@ -94,13 +94,16 @@ func _on_status(t: String) -> void:
 		claim_button.disabled = true
 
 func _on_world_state(world: Dictionary) -> void:
-	plot_view.set_world(world)
+	if game_world != null:
+		game_world.set_world(world)
 
 func _on_plot_update(plot: Dictionary) -> void:
-	plot_view.apply_plot_update(plot)
+	if game_world != null:
+		game_world.apply_plot_update(plot)
 
 func _on_world_patch(patch: Dictionary) -> void:
-	plot_view.apply_world_patch(patch)
+	if game_world != null:
+		game_world.apply_world_patch(patch)
 
 func _on_plot_selected(plot_id: String, is_claimable: bool) -> void:
 	selected_plot_id = plot_id

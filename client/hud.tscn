@@ -1,7 +1,6 @@
 [gd_scene format=3 uid="uid://dhi374i2vx04k"]
 
 [ext_resource type="Script" uid="uid://mot3gd0r21v3" path="res://scripts/ui/HUD.gd" id="1_37p78"]
-[ext_resource type="Script" uid="uid://c05gepiukq5vc" path="res://PlotView.gd" id="2_64ctp"]
 
 [node name="HUD" type="Control" unique_id=180577428]
 layout_mode = 3
@@ -10,19 +9,6 @@ offset_right = 1152.0
 offset_bottom = 648.0
 mouse_filter = 2
 script = ExtResource("1_37p78")
-
-[node name="PlotView" type="Control" parent="." unique_id=541067595]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_top = 32.0
-offset_bottom = -2.0
-grow_horizontal = 2
-grow_vertical = 2
-scale = Vector2(0.995, 0.995)
-pivot_offset_ratio = Vector2(0.5, 0.5)
-script = ExtResource("2_64ctp")
 
 [node name="TopBar" type="PanelContainer" parent="." unique_id=592806605]
 layout_mode = 1

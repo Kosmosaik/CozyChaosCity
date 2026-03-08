@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 16,
   "plots": [
     {
       "id": "T_0_0",
@@ -41,7 +41,7 @@
       "type": "PLAYER",
       "x": 2,
       "y": 1,
-      "claimed_by": null
+      "claimed_by": "plr_7d4bf27b15ed"
     },
     {
       "id": "T_0_2",
@@ -55,7 +55,7 @@
       "type": "PLAYER",
       "x": 1,
       "y": 2,
-      "claimed_by": null
+      "claimed_by": "plr_21e3016102ee"
     },
     {
       "id": "T_2_2",
@@ -69,7 +69,7 @@
       "type": "PLAYER",
       "x": 3,
       "y": 0,
-      "claimed_by": null
+      "claimed_by": "plr_21e3016102ee"
     },
     {
       "id": "T_4_0",
@@ -90,14 +90,14 @@
       "type": "PLAYER",
       "x": 3,
       "y": 1,
-      "claimed_by": null
+      "claimed_by": "plr_7d4bf27b15ed"
     },
     {
       "id": "T_4_1",
       "type": "PLAYER",
       "x": 4,
       "y": 1,
-      "claimed_by": null
+      "claimed_by": "plr_21e3016102ee"
     },
     {
       "id": "T_5_1",
@@ -111,7 +111,7 @@
       "type": "PLAYER",
       "x": 3,
       "y": 2,
-      "claimed_by": null
+      "claimed_by": "plr_21e3016102ee"
     },
     {
       "id": "T_4_2",
@@ -125,7 +125,70 @@
       "type": "PLAYER",
       "x": 5,
       "y": 2,
+      "claimed_by": "plr_21e3016102ee"
+    },
+    {
+      "id": "T_0_3",
+      "type": "PLAYER",
+      "x": 0,
+      "y": 3,
       "claimed_by": null
+    },
+    {
+      "id": "T_1_3",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 3,
+      "claimed_by": null
+    },
+    {
+      "id": "T_2_3",
+      "type": "PLAYER",
+      "x": 2,
+      "y": 3,
+      "claimed_by": "plr_7d4bf27b15ed"
+    },
+    {
+      "id": "T_0_4",
+      "type": "RESOURCE",
+      "x": 0,
+      "y": 4,
+      "claimed_by": null
+    },
+    {
+      "id": "T_1_4",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 4,
+      "claimed_by": null
+    },
+    {
+      "id": "T_2_4",
+      "type": "RESOURCE",
+      "x": 2,
+      "y": 4,
+      "claimed_by": null
+    },
+    {
+      "id": "T_0_5",
+      "type": "PLAYER",
+      "x": 0,
+      "y": 5,
+      "claimed_by": "plr_6035dbd6a7a1"
+    },
+    {
+      "id": "T_1_5",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 5,
+      "claimed_by": null
+    },
+    {
+      "id": "T_2_5",
+      "type": "PLAYER",
+      "x": 2,
+      "y": 5,
+      "claimed_by": "plr_21e3016102ee"
     }
   ],
   "players": {
@@ -153,6 +216,31 @@
       "id": "plr_85a2eb0190bf",
       "secret": "4b8e68574b3bf9453efe6545e88fcb008948e1b394895a9e",
       "display_name": "dwdwdwd"
+    },
+    "plr_21e3016102ee": {
+      "id": "plr_21e3016102ee",
+      "secret": "b1ce117387a0cefffb6b253a109bd37bfe19cfb82af71080",
+      "display_name": "Player 1"
+    },
+    "plr_7d4bf27b15ed": {
+      "id": "plr_7d4bf27b15ed",
+      "secret": "1b08f752de9a084be980e809612beee11ac13b60854841c3",
+      "display_name": "Player 2"
+    },
+    "plr_d27f1a75b324": {
+      "id": "plr_d27f1a75b324",
+      "secret": "0d1581eb0e04424eff680298530ccc1708a3241349747d49",
+      "display_name": "fwfewfwe"
+    },
+    "plr_6035dbd6a7a1": {
+      "id": "plr_6035dbd6a7a1",
+      "secret": "f207e23ff68909e3e56629f55cf1b36b3dfabe4b6831abd7",
+      "display_name": "plr_6035dbd6a7a1"
+    },
+    "plr_3d12c85de627": {
+      "id": "plr_3d12c85de627",
+      "secret": "899af2dff5802c5e68547fcdc972e15c321a9992bd7004e1",
+      "display_name": "sasasasa"
     }
   }
 }
