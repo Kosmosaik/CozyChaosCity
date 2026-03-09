@@ -64,13 +64,13 @@ func _refresh_visual(my_player_id: String = "") -> void:
 	#
 	# Selection and hover add simple roughness/emission tweaks for visibility.
 	if plot_type == "RESOURCE":
-		material.albedo_color = Color(0.62, 0.54, 0.42)
+		material.albedo_color = Color(0.771, 0.68, 0.195, 1.0)
 	elif claimed_by == "":
-		material.albedo_color = Color(0.46, 0.72, 0.48)
+		material.albedo_color = Color(0.886, 0.7, 0.803, 1.0)
 	elif claimed_by == my_player_id:
 		material.albedo_color = Color(0.35, 0.58, 0.88)
 	else:
-		material.albedo_color = Color(0.82, 0.42, 0.42)
+		material.albedo_color = Color(0.851, 0.417, 0.128, 1.0)
 
 	# Keep a fairly matte look by default.
 	material.roughness = 0.95
@@ -81,9 +81,9 @@ func _refresh_visual(my_player_id: String = "") -> void:
 	# We are proving the rendering pipeline first, not polishing UX yet.
 	if _is_hovered:
 		material.emission_enabled = true
-		material.emission = material.albedo_color * 0.15
+		material.emission = material.albedo_color * 0.35
 
 	if _is_selected:
 		material.emission_enabled = true
-		material.emission = material.albedo_color * 0.30
+		material.emission = material.albedo_color * 0.60
 		material.roughness = 0.75

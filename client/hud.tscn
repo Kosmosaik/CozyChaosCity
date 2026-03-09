@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://dhi374i2vx04k"]
 
 [ext_resource type="Script" uid="uid://mot3gd0r21v3" path="res://scripts/ui/HUD.gd" id="1_37p78"]
+[ext_resource type="Script" uid="uid://6rkiff4usybq" path="res://scripts/ui/PlotInfoPanel.gd" id="2_64ctp"]
 
 [node name="HUD" type="Control" unique_id=180577428]
 layout_mode = 3
@@ -86,3 +87,52 @@ size_flags_vertical = 1
 theme_override_font_sizes/font_size = 14
 text = "Online: -"
 vertical_alignment = 1
+
+[node name="PlotInfoPanel" type="PanelContainer" parent="." unique_id=344299378]
+layout_mode = 1
+offset_left = 16.0
+offset_top = 48.0
+offset_right = 256.0
+offset_bottom = 180.0
+script = ExtResource("2_64ctp")
+
+[node name="MarginContainer" type="MarginContainer" parent="PlotInfoPanel" unique_id=895067577]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PlotInfoPanel/MarginContainer" unique_id=1872682394]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=1990417618]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Plot"
+
+[node name="InfoGrid" type="GridContainer" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=877524855]
+layout_mode = 2
+columns = 2
+
+[node name="TypeLabel" type="Label" parent="PlotInfoPanel/MarginContainer/VBoxContainer/InfoGrid" unique_id=190845803]
+layout_mode = 2
+text = "Type: "
+
+[node name="TypeValueLabel" type="Label" parent="PlotInfoPanel/MarginContainer/VBoxContainer/InfoGrid" unique_id=243933213]
+layout_mode = 2
+text = "-"
+
+[node name="OwnerLabel" type="Label" parent="PlotInfoPanel/MarginContainer/VBoxContainer/InfoGrid" unique_id=1492542117]
+layout_mode = 2
+text = "Owner: "
+
+[node name="OwnerValueLabel" type="Label" parent="PlotInfoPanel/MarginContainer/VBoxContainer/InfoGrid" unique_id=261162700]
+layout_mode = 2
+text = "-"
+
+[node name="ClaimButton" type="Button" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=558733045]
+visible = false
+layout_mode = 2
+text = "Claim"

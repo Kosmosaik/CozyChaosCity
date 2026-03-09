@@ -1,18 +1,11 @@
 extends Node3D
 class_name GameWorld3D
 
-const PLOT_TILE_SCENE := preload("res://scenes/world/PlotTile3D.tscn")
-const TEST_TILE_SPACING: float = 1.1
+# GameWorld3D owns client-side world state and coordinates the 3D world.
+# Rendering is delegated to PlotRenderer3D so this script stays focused on
+# world data flow instead of tile instancing details.
 
-# World3D is the root controller for the 3D game world.
-# Step 1 keeps this script intentionally small:
-# - it owns references to the camera rig and future tile parent
-# - it does NOT talk to NetClient yet
-# - it does NOT contain tile spawning logic yet
-#
-# Why this exists now:
-# We want the 3D world to have a permanent owner from day one,
-# instead of letting HUD or Main grow into a god-object later.
+signal plot_selected(plot: Dictionary, is_claimable: bool)
 
 @onready var camera_rig: Node3D = $CameraRig
 @onready var camera_3d: Camera3D = $CameraRig/YawPivot/PitchPivot/Camera3D
@@ -23,11 +16,20 @@ const TEST_TILE_SPACING: float = 1.1
 var my_player_id: String = ""
 var world_state: Dictionary = {}
 var plots_by_id: Dictionary = {}
+var plot_renderer: PlotRenderer3D = null
+var tile_picker: TilePicker3D = null
+var selected_plot_id: String = ""
+var hovered_plot_id: String = ""
 
 func set_my_player_id(player_id: String) -> void:
-	# Stores the authenticated player id so future tile visuals can know
+	# Stores the authenticated player id so tile visuals can know
 	# which claimed plots belong to the local player.
 	my_player_id = player_id
+
+	# The renderer may already have spawned tiles before identity arrived.
+	# Refresh those visuals so "mine" vs "taken" colors become correct.
+	if plot_renderer != null:
+		plot_renderer.set_my_player_id(player_id)
 
 func set_world(world: Dictionary) -> void:
 	# Replace the current world snapshot with the latest full snapshot
@@ -35,13 +37,25 @@ func set_world(world: Dictionary) -> void:
 	world_state = world.duplicate(true)
 	_rebuild_plot_index()
 
+	# Render the authoritative snapshot in 3D.
+	if plot_renderer != null:
+		plot_renderer.apply_world(world_state)
+		
+	# Keep popup/UI state aligned with the latest authoritative world snapshot.
+	if selected_plot_id != "" and not plots_by_id.has(selected_plot_id):
+		selected_plot_id = ""
+		if plot_renderer != null:
+			plot_renderer.set_selected_plot("")
+	_emit_selected_plot_state()
+
 func apply_plot_update(plot: Dictionary) -> void:
 	# Update one plot inside our local world cache.
 	var plot_id := str(plot.get("id", ""))
 	if plot_id == "":
 		return
 
-	plots_by_id[plot_id] = plot.duplicate(true)
+	var plot_copy := plot.duplicate(true)
+	plots_by_id[plot_id] = plot_copy
 
 	var plots: Array = world_state.get("plots", [])
 	var replaced := false
@@ -49,24 +63,80 @@ func apply_plot_update(plot: Dictionary) -> void:
 	for i in range(plots.size()):
 		var existing: Dictionary = plots[i]
 		if str(existing.get("id", "")) == plot_id:
-			plots[i] = plot.duplicate(true)
+			plots[i] = plot_copy
 			replaced = true
 			break
 
 	if not replaced:
-		plots.append(plot.duplicate(true))
+		plots.append(plot_copy)
 
 	world_state["plots"] = plots
 
+	# Update or spawn the corresponding 3D tile.
+	if plot_renderer != null:
+		plot_renderer.apply_plot_update(plot_copy)
+		
+	# If the selected plot changed on the server, refresh the popup/HUD state.
+	if selected_plot_id == plot_id:
+		_emit_selected_plot_state()
+
 func apply_world_patch(patch: Dictionary) -> void:
-	# For now, keep patch handling simple and safe:
-	# if the server sends a plot list inside the patch, merge those plots.
-	# This gives us a stable world-data owner without guessing future patch shape.
-	var patch_plots = patch.get("plots", null)
-	if typeof(patch_plots) == TYPE_ARRAY:
-		for p in patch_plots:
+	# The real server currently sends:
+	#   { added: [...], world_version: number }
+	#
+	# We merge each added plot through the normal single-plot path so both:
+	# - local world cache
+	# - 3D renderer
+	# stay in sync through one code path.
+	var added_plots = patch.get("added", null)
+	if typeof(added_plots) == TYPE_ARRAY:
+		for p in added_plots:
 			if typeof(p) == TYPE_DICTIONARY:
 				apply_plot_update(p)
+
+	# Keep the cached world version aligned with the server if provided.
+	if patch.has("world_version"):
+		world_state["version"] = int(patch.get("world_version", world_state.get("version", 0)))
+		
+func _is_plot_claimable(plot: Dictionary) -> bool:
+	# A plot is claimable only if:
+	# - it is a PLAYER tile
+	# - it is currently unclaimed
+	if str(plot.get("type", "")) != "PLAYER":
+		return false
+
+	var raw_claimed_by = plot.get("claimed_by", null)
+	var claimed_by := "" if raw_claimed_by == null else str(raw_claimed_by)
+	return claimed_by == ""
+
+func refresh_selected_plot_ui() -> void:
+	_emit_selected_plot_state()
+
+func _emit_selected_plot_state() -> void:
+	if selected_plot_id == "":
+		plot_selected.emit({}, false)
+		return
+
+	var plot: Dictionary = plots_by_id.get(selected_plot_id, {})
+	if plot.is_empty():
+		plot_selected.emit({}, false)
+		return
+
+	plot_selected.emit(plot.duplicate(true), _is_plot_claimable(plot))
+	
+func _on_tile_hovered(plot_id: String) -> void:
+	hovered_plot_id = plot_id
+
+	if plot_renderer != null:
+		plot_renderer.set_hovered_plot(hovered_plot_id)
+
+func _on_tile_clicked(plot_id: String) -> void:
+	selected_plot_id = plot_id
+
+	if plot_renderer != null:
+		plot_renderer.set_selected_plot(selected_plot_id)
+
+	_emit_selected_plot_state()
 
 func _rebuild_plot_index() -> void:
 	plots_by_id.clear()
@@ -82,60 +152,28 @@ func _rebuild_plot_index() -> void:
 
 		plots_by_id[plot_id] = p.duplicate(true)
 
-func _grid_to_world(grid_x: int, grid_y: int) -> Vector3:
-	# M1 uses grid x/y from the server and maps them onto 3D x/z.
-	# Y stays vertical in world space, so we place tiles on y = 0.
-	return Vector3(grid_x * TEST_TILE_SPACING, 0.0, grid_y * TEST_TILE_SPACING)
-
-func _clear_tiles_root() -> void:
-	# Safe cleanup helper for local rendering tests.
-	for child in tiles_root.get_children():
-		child.queue_free()
-
-func _spawn_test_tile(plot: Dictionary) -> void:
-	var tile := PLOT_TILE_SCENE.instantiate() as PlotTile3D
-	if tile == null:
-		push_error("Failed to instantiate PlotTile3D scene.")
-		return
-
-	tile.position = _grid_to_world(int(plot.get("x", 0)), int(plot.get("y", 0)))
-
-	# Add the tile to the scene tree before calling methods that depend on
-	# @onready child references inside PlotTile3D.
-	tiles_root.add_child(tile)
-
-	# Now the tile can safely access child nodes like $Visual.
-	tile.apply_plot(plot, my_player_id)
-
-func _spawn_local_test_grid() -> void:
-	# Temporary local rendering test for Step 3 only.
-	# This is intentionally isolated so we can delete it cleanly once the
-	# real PlotRenderer3D takes over.
-	_clear_tiles_root()
-
-	for y in range(3):
-		for x in range(3):
-			var plot_type := "RESOURCE" if (x % 2 == 0 and y % 2 == 0) else "PLAYER"
-
-			var plot := {
-				"id": "TEST_%d_%d" % [x, y],
-				"x": x,
-				"y": y,
-				"type": plot_type,
-				"claimed_by": null,
-			}
-
-			_spawn_test_tile(plot)
-
 func _ready() -> void:
-	# Step 3 verification:
-	# If this scene is instanced correctly by Main, this message should
-	# appear in the Output panel when the project runs.
+	# This scene is now the real runtime 3D world entry point.
 	print("GameWorld3D ready: 3D world shell loaded.")
 
-	# Step 3 local render test:
-	# spawn a tiny 3x3 grid in 3D so we can verify the tile scene,
-	# material logic, spacing, and instancing pipeline before wiring
-	# real server-driven rendering.
-	_spawn_local_test_grid()
+	# Create the modular renderer once and let it own all tile instances.
+	plot_renderer = PlotRenderer3D.new()
+	plot_renderer.setup(tiles_root, my_player_id)
+
+	# Create the picker once and let it emit clean tile interaction events.
+	# This is what turns mouse clicks in 3D into selected plot ids.
+	tile_picker = TilePicker3D.new()
+	tile_picker.name = "TilePicker3D"
+	add_child(tile_picker)
+	tile_picker.setup(camera_3d)
+	tile_picker.tile_hovered.connect(_on_tile_hovered)
+	tile_picker.tile_clicked.connect(_on_tile_clicked)
+
+	# If HUD/NetClient already delivered world data before _ready finished,
+	# render that cached snapshot now.
+	if not world_state.is_empty():
+		plot_renderer.apply_world(world_state)
+
+	# Keep UI state synchronized on startup.
+	_emit_selected_plot_state()
 	

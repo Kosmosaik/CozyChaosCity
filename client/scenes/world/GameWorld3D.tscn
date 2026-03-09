@@ -19,6 +19,8 @@ script = ExtResource("1_cepi3")
 [node name="CameraRig" type="Node3D" parent="." unique_id=632905009]
 script = ExtResource("2_lhvpt")
 base_move_speed = 15.0
+min_zoom_distance = 2.0
+max_zoom_distance = 50.0
 
 [node name="YawPivot" type="Node3D" parent="CameraRig" unique_id=1201314344]
 
@@ -27,6 +29,7 @@ base_move_speed = 15.0
 [node name="Camera3D" type="Camera3D" parent="CameraRig/YawPivot/PitchPivot" unique_id=975528525]
 transform = Transform3D(1, 0, 0, 0, 0.99999994, 0, 0, 0, 0.99999994, 0, 14, 14)
 current = true
+fov = 65.0
 
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=605205620]
 transform = Transform3D(0.70710677, -0.61237246, 0.35355335, 0, 0.49999997, 0.86602545, -0.70710677, -0.61237246, 0.35355335, 0, 0, 0)

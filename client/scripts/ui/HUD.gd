@@ -4,6 +4,7 @@ extends Control
 # These paths match the node structure you showed + the two new nodes we just added.
 
 @onready var game_world := get_tree().get_root().get_node_or_null("Main/GameWorld3D")
+@onready var plot_info_panel: PlotInfoPanel = $PlotInfoPanel
 
 @onready var username_line_edit := $TopBar/HBoxContainer/UsernameLineEdit
 @onready var connect_button := $TopBar/HBoxContainer/ConnectButton
@@ -21,11 +22,17 @@ var _is_logged_in: bool = false
 func _ready() -> void:
 	# Initial UI state
 	claim_button.disabled = true
+	claim_button.visible = false
 	_is_logged_in = false
+	plot_info_panel.clear_panel()
 
 	# Hook UI events
 	connect_button.pressed.connect(_on_connect_pressed)
+
+	# Keep the old top-bar claim button hidden for now.
+	# The popup panel is the new interaction path for plot claims.
 	claim_button.pressed.connect(_on_claim_pressed)
+	plot_info_panel.claim_requested.connect(_on_plot_info_claim_requested)
 
 	# Find NetClient (you already used this pattern)
 	net = get_tree().get_first_node_in_group("netclient") as NetClient
@@ -35,6 +42,11 @@ func _ready() -> void:
 	if net == null:
 		status_label.text = "NetClient not found!"
 		return
+		
+	# Listen for 3D world selection events so the popup can reflect
+	# the currently selected plot.
+	if game_world != null:
+		game_world.plot_selected.connect(_on_plot_selected)
 
 	# Hook NetClient signals
 	net.status_changed.connect(_on_status)
@@ -79,9 +91,12 @@ func _on_identity_ready(player_id: String, display_name: String) -> void:
 	if game_world != null:
 		game_world.set_my_player_id(player_id)
 
-	# Once logged in, allow claim button logic to work (still needs plot selection)
+	# Once logged in, allow claim logic to work for the currently selected plot too.
 	connect_button.disabled = false
 	status_label.text = "Logged in as %s (%s)" % [display_name, player_id]
+
+	if game_world != null:
+		game_world.refresh_selected_plot_ui()
 
 func _on_status(t: String) -> void:
 	# NetClient status messages are useful. We show them.
@@ -92,6 +107,9 @@ func _on_status(t: String) -> void:
 		connect_button.disabled = false
 		_is_logged_in = false
 		claim_button.disabled = true
+
+		if game_world != null:
+			game_world.refresh_selected_plot_ui()
 
 func _on_world_state(world: Dictionary) -> void:
 	if game_world != null:
@@ -105,13 +123,25 @@ func _on_world_patch(patch: Dictionary) -> void:
 	if game_world != null:
 		game_world.apply_world_patch(patch)
 
-func _on_plot_selected(plot_id: String, is_claimable: bool) -> void:
-	selected_plot_id = plot_id
+func _on_plot_selected(plot: Dictionary, is_claimable: bool) -> void:
+	if plot.is_empty():
+		selected_plot_id = ""
+		claim_button.disabled = true
+		plot_info_panel.clear_panel()
+		return
 
-	# Claim is only enabled if:
-	# - you are logged in (identity ready)
-	# - plot is claimable (PLAYER + free)
+	selected_plot_id = str(plot.get("id", ""))
+
+	# Keep the old button state aligned even though it is hidden,
+	# so we still have one source of truth for claimability.
 	claim_button.disabled = not (_is_logged_in and is_claimable)
+
+	plot_info_panel.show_plot(plot, is_claimable, _is_logged_in)
+	
+func _on_plot_info_claim_requested(plot_id: String) -> void:
+	# The popup reuses the same claim flow as the old top-bar button.
+	selected_plot_id = plot_id
+	_on_claim_pressed()
 
 func _on_claim_pressed() -> void:
 	if not _is_logged_in:

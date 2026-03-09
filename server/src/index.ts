@@ -31,6 +31,48 @@ if (norm.changed) {
 
 const conns = new Map<any, ConnState>();
 
+/**
+ * Convert one authoritative server plot into a client-friendly payload shape.
+ *
+ * Why this exists:
+ * - The server stores only claimed_by on the plot itself.
+ * - UI wants a human-readable owner name without having to do client-side joins.
+ * - We keep the server as the single place that prepares presentation-ready plot payloads.
+ */
+function decoratePlotForClient(plot: WorldState["plots"][number]) {
+  const claimedBy = plot.claimed_by;
+  const ownerRec = claimedBy ? world.players[claimedBy] : null;
+
+  return {
+    ...plot,
+    owner_display_name: ownerRec?.display_name ?? "",
+  };
+}
+
+/**
+ * Decorate a list of plots for client payloads.
+ *
+ * Keeping this as a helper avoids repeating the same map logic in world_state
+ * and world_patch responses.
+ */
+function decoratePlotsForClient(plots: WorldState["plots"]) {
+  return plots.map((plot) => decoratePlotForClient(plot));
+}
+
+/**
+ * Build the world snapshot shape that clients should receive.
+ *
+ * Important:
+ * - We do not mutate the authoritative server world here.
+ * - We return a payload copy whose plots are enriched with owner_display_name.
+ */
+function makeWorldForClient() {
+  return {
+    ...world,
+    plots: decoratePlotsForClient(world.plots),
+  };
+}
+
 function broadcast(msg: string) {
   for (const ws of wss.clients) {
     if (ws.readyState === ws.OPEN) ws.send(msg);
@@ -38,7 +80,7 @@ function broadcast(msg: string) {
 }
 
 function sendWorld(ws: any) {
-  ws.send(makeMsg("world_state", { world }));
+  ws.send(makeMsg("world_state", { world: makeWorldForClient() }));
 }
 
 function sendPresenceState(ws: any) {
@@ -172,20 +214,29 @@ wss.on("connection", (ws) => {
       world.version += 1;
       saveWorldAtomic(CONFIG.persistPath, world);
 
-      // Notify everyone (delta + optional full state)
-	  // Include display name in plot_update so clients can show "Owner: Alice"
-      // even if their local players_by_id cache is missing that player.
-      const ownerRec = world.players[st.player_id];
-      const ownerDisplayName = ownerRec?.display_name ?? st.player_id;
+      // Notify everyone using the same enriched plot shape we use everywhere else.
+      // We keep owner_display_name at the top level too for backward safety.
+      const plotForClient = decoratePlotForClient(plot);
+      const ownerDisplayName = plotForClient.owner_display_name;
 
-      broadcast(makeMsg("plot_update", { plot, owner_display_name: ownerDisplayName }));
+      broadcast(
+        makeMsg("plot_update", {
+          plot: plotForClient,
+          owner_display_name: ownerDisplayName,
+        })
+      );
       ws.send(makeMsg("claim_result", { ok: true, plot_id: plotId }, env.req_id));
 
       // Expansion check
       if (countFreePlayerPlots(world) < CONFIG.expandWhenFreePlotsBelow) {
         const { added } = expandWorld(world);
         saveWorldAtomic(CONFIG.persistPath, world);
-        broadcast(makeMsg("world_patch", { added, world_version: world.version }));
+
+        // Keep patch payloads consistent with world_state and plot_update:
+        // added plots are sent in enriched client-ready form.
+        const addedForClient = decoratePlotsForClient(added);
+
+        broadcast(makeMsg("world_patch", { added: addedForClient, world_version: world.version }));
       }
       return;
     }

@@ -33,12 +33,6 @@ M1 Deliverables
 - Clicking a tile selects it.
 - Claiming a free PLAYER tile sends claim_plot and updates on server broadcast.
 
-Not in scope for M1
-- Advanced camera modes and polish
-- Online list / join leave notifications
-- Buildings, interiors, NPC logic
-- World map or minimap rendering
-
 Implementation order
 1) Create the 3D world scene and basic camera rig.
 2) Create PlotTile3D (mesh + collision).
