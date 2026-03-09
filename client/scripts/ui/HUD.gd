@@ -6,18 +6,53 @@ extends Control
 @onready var game_world := get_tree().get_root().get_node_or_null("Main/GameWorld3D")
 @onready var plot_info_panel: PlotInfoPanel = $PlotInfoPanel
 
-@onready var username_line_edit := $TopBar/HBoxContainer/UsernameLineEdit
-@onready var connect_button := $TopBar/HBoxContainer/ConnectButton
+@onready var menu_overlay: Control = $MenuOverlay
+@onready var top_bar: PanelContainer = $TopBar
 
-@onready var claim_button := $TopBar/HBoxContainer/ClaimButton
-@onready var status_label := $TopBar/HBoxContainer/StatusLabel
+@onready var username_line_edit: LineEdit = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/UsernameLineEdit
+@onready var connect_button: Button = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/ConnectButton
+@onready var menu_status_label: Label = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/MenuStatusLabel
 
-@onready var latency_label := $TopBar/HBoxContainer/LatencyLabel
-@onready var online_label := $TopBar/HBoxContainer/OnlineLabel
+@onready var claim_button: Button = $TopBar/HBoxContainer/ClaimButton
+@onready var status_label: Label = $TopBar/HBoxContainer/StatusLabel
+@onready var latency_label: Label = $TopBar/HBoxContainer/LatencyLabel
+@onready var online_label: Label = $TopBar/HBoxContainer/OnlineLabel
+@onready var quit_button: Button = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/QuitButton
+@onready var quit_button_in_game: Button = $TopBar/HBoxContainer/QuitButtonInGame
 
 var net: NetClient
 var selected_plot_id: String = ""
 var _is_logged_in: bool = false
+
+func _show_login_menu() -> void:
+	# Login/menu state:
+	# - menu visible
+	# - top bar hidden
+	# - plot popup hidden
+	# - 3D world disabled so typing does not move the camera
+	menu_overlay.visible = true
+	top_bar.visible = false
+	plot_info_panel.clear_panel()
+
+	if game_world != null:
+		game_world.set_world_enabled(false)
+
+func _enter_world_ui() -> void:
+	# In-game state:
+	# - menu hidden
+	# - top bar visible
+	# - 3D world enabled
+	menu_overlay.visible = false
+	top_bar.visible = true
+
+	if game_world != null:
+		game_world.set_world_enabled(true)
+
+func _set_status_text(text: String) -> void:
+	# Keep both labels updated so whichever UI layer is currently visible
+	# always has the latest connection status.
+	menu_status_label.text = text
+	status_label.text = text
 
 func _ready() -> void:
 	# Initial UI state
@@ -25,9 +60,13 @@ func _ready() -> void:
 	claim_button.visible = false
 	_is_logged_in = false
 	plot_info_panel.clear_panel()
+	_show_login_menu()
+	_set_status_text("Enter username and press Connect.")
 
 	# Hook UI events
 	connect_button.pressed.connect(_on_connect_pressed)
+	quit_button.pressed.connect(_on_quit_pressed)
+	quit_button_in_game.pressed.connect(_on_quit_pressed)
 
 	# Keep the old top-bar claim button hidden for now.
 	# The popup panel is the new interaction path for plot claims.
@@ -59,7 +98,7 @@ func _ready() -> void:
 	net.identity_ready.connect(_on_identity_ready)
 
 	# Friendly starting text (NetClient already emits a default status too)
-	status_label.text = "Enter username and press Connect."
+	_set_status_text("Enter username and press Connect.")
 	
 	net.latency_updated.connect(_on_latency_updated)
 	net.presence_updated.connect(_on_presence_updated)
@@ -70,12 +109,12 @@ func _on_connect_pressed() -> void:
 
 	var username: String = username_line_edit.text.strip_edges()
 	if username == "":
-		status_label.text = "Please enter a username."
+		_set_status_text("Please enter a username.")
 		return
 
-	# Disable connect button so you don't spam-connect
+	# Disable connect button so you don't spam-connect.
 	connect_button.disabled = true
-	status_label.text = "Connecting..."
+	_set_status_text("Connecting...")
 
 	# This triggers the whole profile flow:
 	# - loads user://profiles/<username>.json if it exists
@@ -83,30 +122,36 @@ func _on_connect_pressed() -> void:
 	# - else: sends {display_name: username}
 	net.connect_with_profile(username)
 
+func _on_quit_pressed() -> void:
+	# Close the game application.
+	get_tree().quit()
+
 func _on_identity_ready(player_id: String, display_name: String) -> void:
-	# We are now authenticated as this server-issued player_id
+	# We are now authenticated as this server-issued player_id.
 	_is_logged_in = true
 
 	# Tell the 3D world who the local player is.
 	if game_world != null:
 		game_world.set_my_player_id(player_id)
 
-	# Once logged in, allow claim logic to work for the currently selected plot too.
+	# Re-enable the button for future reconnect attempts, then ent§er the world UI.
 	connect_button.disabled = false
-	status_label.text = "Logged in as %s (%s)" % [display_name, player_id]
+	_set_status_text("Logged in as %s (%s)" % [display_name, player_id])
+	_enter_world_ui()
 
 	if game_world != null:
 		game_world.refresh_selected_plot_ui()
 
 func _on_status(t: String) -> void:
-	# NetClient status messages are useful. We show them.
-	status_label.text = t
+	# NetClient status messages are useful. Mirror them to both menu + top bar.
+	_set_status_text(t)
 
-	# If connection failed / disconnected, allow reconnect
+	# If connection failed / disconnected, return to menu state.
 	if "Disconnected" in t or "failed" in t:
 		connect_button.disabled = false
 		_is_logged_in = false
 		claim_button.disabled = true
+		_show_login_menu()
 
 		if game_world != null:
 			game_world.refresh_selected_plot_ui()

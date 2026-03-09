@@ -137,6 +137,35 @@ func _on_tile_clicked(plot_id: String) -> void:
 		plot_renderer.set_selected_plot(selected_plot_id)
 
 	_emit_selected_plot_state()
+	
+func set_world_enabled(enabled: bool) -> void:
+	# This gates all world interaction during the login/menu phase.
+	# When disabled:
+	# - the 3D world is hidden
+	# - camera movement/zoom/rotation stop
+	# - tile picking stops
+	# - hover/selection are cleared so HUD popup hides cleanly
+	visible = enabled
+
+	if camera_rig != null:
+		camera_rig.set_process(enabled)
+		camera_rig.set_process_unhandled_input(enabled)
+
+	if tile_picker != null:
+		tile_picker.set_process_unhandled_input(enabled)
+
+	if camera_3d != null:
+		camera_3d.current = enabled
+
+	if not enabled:
+		hovered_plot_id = ""
+		selected_plot_id = ""
+
+		if plot_renderer != null:
+			plot_renderer.set_hovered_plot("")
+			plot_renderer.set_selected_plot("")
+
+		_emit_selected_plot_state()
 
 func _rebuild_plot_index() -> void:
 	plots_by_id.clear()
@@ -161,7 +190,6 @@ func _ready() -> void:
 	plot_renderer.setup(tiles_root, my_player_id)
 
 	# Create the picker once and let it emit clean tile interaction events.
-	# This is what turns mouse clicks in 3D into selected plot ids.
 	tile_picker = TilePicker3D.new()
 	tile_picker.name = "TilePicker3D"
 	add_child(tile_picker)
@@ -174,6 +202,6 @@ func _ready() -> void:
 	if not world_state.is_empty():
 		plot_renderer.apply_world(world_state)
 
-	# Keep UI state synchronized on startup.
-	_emit_selected_plot_state()
+	# Start disabled until the login/menu flow enables the world.
+	set_world_enabled(false)
 	

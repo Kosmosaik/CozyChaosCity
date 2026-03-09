@@ -2,12 +2,19 @@
 
 [ext_resource type="Script" uid="uid://mot3gd0r21v3" path="res://scripts/ui/HUD.gd" id="1_37p78"]
 [ext_resource type="Script" uid="uid://6rkiff4usybq" path="res://scripts/ui/PlotInfoPanel.gd" id="2_64ctp"]
+[ext_resource type="Texture2D" uid="uid://xpwk8x8xf6q5" path="res://background2.png" id="3_8sq4i"]
+[ext_resource type="StyleBox" uid="uid://dkmu10h4sqb0h" path="res://new_style_box_flat.tres" id="4_640wx"]
+[ext_resource type="StyleBox" uid="uid://biwp0bjou3rmy" path="res://new_style_box_flat2.tres" id="4_a2258"]
+[ext_resource type="StyleBox" uid="uid://b74p8a7eca2oc" path="res://new_style_box_flat3.tres" id="6_1xsix"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8sq4i"]
+bg_color = Color(0.43137255, 0.32941177, 0.28627452, 0.8862745)
 
 [node name="HUD" type="Control" unique_id=180577428]
 layout_mode = 3
 anchors_preset = 0
-offset_right = 1152.0
-offset_bottom = 648.0
+offset_right = 1600.0
+offset_bottom = 900.0
 mouse_filter = 2
 script = ExtResource("1_37p78")
 
@@ -23,28 +30,6 @@ self_modulate = Color(0.9867516, 0.9867516, 0.9867516, 1)
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="UsernameLineEdit" type="LineEdit" parent="TopBar/HBoxContainer" unique_id=1496561075]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.6
-theme_override_constants/minimum_character_width = 4
-theme_override_font_sizes/font_size = 14
-placeholder_text = "Username"
-
-[node name="VSeparator5" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=772328628]
-layout_mode = 2
-
-[node name="ConnectButton" type="Button" parent="TopBar/HBoxContainer" unique_id=237408957]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.25
-theme_override_colors/font_color = Color(0.8260597, 0.8260602, 0.82605976, 1)
-theme_override_font_sizes/font_size = 14
-text = "Connect"
-
-[node name="VSeparator4" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=1539083814]
-layout_mode = 2
-
 [node name="ClaimButton" type="Button" parent="TopBar/HBoxContainer" unique_id=1394737526]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -59,7 +44,7 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 1
-size_flags_stretch_ratio = 1.1
+size_flags_stretch_ratio = 0.8
 theme_override_constants/line_spacing = 3
 theme_override_font_sizes/font_size = 14
 text = "Not connected"
@@ -87,6 +72,14 @@ size_flags_vertical = 1
 theme_override_font_sizes/font_size = 14
 text = "Online: -"
 vertical_alignment = 1
+
+[node name="VSeparator4" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=640354342]
+layout_mode = 2
+
+[node name="QuitButtonInGame" type="Button" parent="TopBar/HBoxContainer" unique_id=645519793]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Quit"
 
 [node name="PlotInfoPanel" type="PanelContainer" parent="." unique_id=344299378]
 layout_mode = 1
@@ -136,3 +129,106 @@ text = "-"
 visible = false
 layout_mode = 2
 text = "Claim"
+
+[node name="MenuOverlay" type="Control" parent="." unique_id=597708892]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MenuDimmer" type="ColorRect" parent="MenuOverlay" unique_id=534036114]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.27450982)
+
+[node name="BackgroundFrame" type="Control" parent="MenuOverlay" unique_id=453269182]
+clip_contents = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MenuBackground" type="TextureRect" parent="MenuOverlay/BackgroundFrame" unique_id=1468319628]
+layout_mode = 1
+offset_left = -75.0
+offset_top = -3.0
+offset_right = 1656.0
+offset_bottom = 1077.0
+texture = ExtResource("3_8sq4i")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="CenterContainer" type="CenterContainer" parent="MenuOverlay" unique_id=765167724]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MenuPanel" type="PanelContainer" parent="MenuOverlay/CenterContainer" unique_id=577630737]
+custom_minimum_size = Vector2(350, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_8sq4i")
+
+[node name="MarginContainer" type="MarginContainer" parent="MenuOverlay/CenterContainer/MenuPanel" unique_id=1256882755]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer" unique_id=849329944]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TitleLabel" type="Label" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer" unique_id=1571921678]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_font_sizes/font_size = 20
+text = "Welcome to CozyChaosCity"
+horizontal_alignment = 1
+
+[node name="UsernameLineEdit" type="LineEdit" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer" unique_id=145226938]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+text = "Username"
+
+[node name="ConnectButton" type="Button" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer" unique_id=352644765]
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_colors/font_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_focus_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_pressed_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_hover_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_hover_pressed_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_styles/normal = ExtResource("4_a2258")
+theme_override_styles/pressed = ExtResource("4_640wx")
+theme_override_styles/hover = ExtResource("6_1xsix")
+text = "Connect"
+
+[node name="MenuStatusLabel" type="Label" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer" unique_id=163417012]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Enter username and press Connect"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="QuitButton" type="Button" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer" unique_id=2134709947]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_focus_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_pressed_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_hover_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+theme_override_colors/font_hover_pressed_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
+text = "Quit"
