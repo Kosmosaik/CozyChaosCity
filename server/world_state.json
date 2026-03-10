@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "plots": [
+    {
+      "id": "T_0_0",
+      "type": "RESOURCE",
+      "x": 0,
+      "y": 0,
+      "claimed_by": null
+    },
+    {
+      "id": "T_1_0",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 0,
+      "claimed_by": null
+    },
+    {
+      "id": "T_2_0",
+      "type": "RESOURCE",
+      "x": 2,
+      "y": 0,
+      "claimed_by": null
+    },
+    {
+      "id": "T_0_1",
+      "type": "PLAYER",
+      "x": 0,
+      "y": 1,
+      "claimed_by": null
+    },
+    {
+      "id": "T_1_1",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 1,
+      "claimed_by": null
+    },
+    {
+      "id": "T_2_1",
+      "type": "PLAYER",
+      "x": 2,
+      "y": 1,
+      "claimed_by": null
+    },
+    {
+      "id": "T_0_2",
+      "type": "RESOURCE",
+      "x": 0,
+      "y": 2,
+      "claimed_by": null
+    },
+    {
+      "id": "T_1_2",
+      "type": "PLAYER",
+      "x": 1,
+      "y": 2,
+      "claimed_by": null
+    },
+    {
+      "id": "T_2_2",
+      "type": "RESOURCE",
+      "x": 2,
+      "y": 2,
+      "claimed_by": null
+    }
+  ],
+  "players": {
+    "plr_4e86444fc51e": {
+      "id": "plr_4e86444fc51e",
+      "secret": "b4e1fff00bb14f75e6a6c91efc686f44ff262e69bc9519aa",
+      "display_name": "Fert"
+    },
+    "plr_6ac23a0784a3": {
+      "id": "plr_6ac23a0784a3",
+      "secret": "a0aa10e645b6e27ac0ce3776d858f50808e3ed260ce101b3",
+      "display_name": "jj"
+    },
+    "plr_8935a1601316": {
+      "id": "plr_8935a1601316",
+      "secret": "5a75a5aa8a72b9b8c85dd88a40fb53b29c55d2489af5f28f",
+      "display_name": "dew"
+    },
+    "plr_861f5de36062": {
+      "id": "plr_861f5de36062",
+      "secret": "44c18fa3c373058f58f841edf1dbf33fa90fa1c84179bc0d",
+      "display_name": "dwqf"
+    },
+    "plr_4326d98c8513": {
+      "id": "plr_4326d98c8513",
+      "secret": "4fa4164e8e6aefcd573845e608c4ed2a6c7e04a14bfd34a4",
+      "display_name": "weewq"
+    }
+  }
+}

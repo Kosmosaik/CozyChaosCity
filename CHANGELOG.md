@@ -107,3 +107,62 @@ This project is in early development. Version numbers are informal for now.
 - 3D tile selection / picking is not implemented yet.
 - Claim flow is not yet reconnected through 3D tile interaction.
 - Camera feel is improved, but further polish may still be needed later.
+
+---
+
+## [0.0.4] — 2026-03-09 — M1 Complete (Server-Driven 3D World + Tile Interaction + Menu Flow)
+
+### Added
+- Real server-driven 3D world rendering in Godot using individual tile scenes.
+- Dedicated modular 3D plot renderer:
+  - `client/scripts/world/PlotRenderer3D.gd`
+- Dedicated 3D tile picking system:
+  - `client/scripts/world/TilePicker3D.gd`
+- Plot selection flow in 3D:
+  - hover feedback
+  - selected-tile feedback
+  - click-to-select behavior
+- Dedicated plot popup UI:
+  - `client/scripts/ui/PlotInfoPanel.gd`
+  - owner / unclaimed display
+  - claim button inside the popup for valid free `PLAYER` plots
+- Main menu / login overlay with static background image.
+- In-menu and in-game quit buttons.
+
+### Changed
+- `GameWorld3D.gd` now uses real server data instead of a temporary local 3×3 tile test.
+- `world_patch` handling on the client now uses the actual server payload shape:
+  - `added`
+  - `world_version`
+- Plot claiming now flows through 3D tile selection + popup UI instead of depending on the old top-bar claim interaction.
+- Login flow now starts in a menu state instead of spawning the player directly into an interactive world.
+- The 3D world is hidden/disabled until login succeeds, which prevents camera movement while typing a username.
+- Top-bar login controls were moved into the centered main menu.
+
+### Fixed
+- Claimed plots now show the owner's display name consistently across all server plot payloads:
+  - `world_state`
+  - `plot_update`
+  - `world_patch`
+- Restored full tile interaction chain:
+  - mouse click
+  - 3D picker
+  - tile selection
+  - popup update
+- Fixed a HUD regression where Connect stopped working because the connect logic had accidentally ended up inside the quit handler.
+
+### M1 Deliverables now complete
+- Dedicated 3D world scene and controller.
+- Reusable 3D tile scene and tile-local visual state.
+- Server-driven plot rendering from full snapshots and incremental updates.
+- 3D tile picking, selection, and hover feedback.
+- Claim flow reconnected through 3D interaction.
+- City-builder style runtime camera controls.
+- Basic front-end login/menu flow for entering the game cleanly.
+
+### Notes / Known limitations
+- Visuals are still prototype-level:
+  - simple tile materials/colors
+  - no final textures or detailed 3D models yet
+- No buildings, interiors, NPC gameplay, or deeper city simulation yet.
+- No settings/options menu yet for display mode, resolution, or graphics preferences.

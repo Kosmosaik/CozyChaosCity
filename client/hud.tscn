@@ -201,7 +201,8 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(260, 0)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
-text = "Username"
+theme_override_colors/font_placeholder_color = Color(0.74527216, 0.71445906, 0.528864, 0.5647059)
+placeholder_text = "Username"
 
 [node name="ConnectButton" type="Button" parent="MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer" unique_id=352644765]
 layout_mode = 2

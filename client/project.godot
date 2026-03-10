@@ -13,6 +13,7 @@ config_version=5
 config/name="CozyChaosCity"
 run/main_scene="uid://f2l2pk8fet3m"
 config/features=PackedStringArray("4.6", "Forward Plus")
+run/max_fps=140
 config/icon="res://icon.svg"
 
 [display]

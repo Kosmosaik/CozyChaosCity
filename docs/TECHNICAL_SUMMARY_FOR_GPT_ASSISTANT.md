@@ -1,82 +1,78 @@
 # TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
-**Stack:** Godot (client) + Node.js/TypeScript WebSocket server (server)  
-**Last updated:** 2026-03-08  
-**Current milestone:** **M1** (3D rendering in Godot using **individual tile scenes**)
+**Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
+**Last updated:** 2026-03-09  
+**Current milestone:** **M1 complete**  
+**Current state:** friend-testable prototype with server-driven 3D world, 3D tile interaction, popup claim flow, and menu/login overlay.
 
-This document is meant to be the single “handoff” reference for any future GPT assistant.
+This document is the handoff reference for any future GPT assistant.
 
 ---
 
 ## 1) Project at a glance
 
-The project is a multiplayer city-builder foundation:
-- A **dedicated WebSocket server** owns the world state (plots, ownership, players).
-- Multiple Godot clients connect, authenticate (profile-based), receive world snapshots, and can claim plots.
-- World expansion is deterministic and pattern-based.
-- The client has now started its real migration from the old 2D plot view into a modular **3D world scene**.
+CozyChaosCityBuilder is a multiplayer city-builder foundation with a server-authoritative world.
 
-Key concept: plots are on a **grid** with stable coordinates and IDs.
+Core loop currently implemented:
+- player launches client
+- sees a menu/login overlay
+- enters a username
+- authenticates or reconnects with a stored profile
+- enters a 3D world rendered from server state
+- clicks a plot to inspect it
+- claims free `PLAYER` plots
+- receives live updates and expansion patches from the server
+
+Key concept:
+- plots live on a deterministic grid
+- plot IDs are stable: `T_<x>_<y>`
+- server is authoritative for ownership and expansion
 
 ---
 
 ## 2) Milestones
 
-### M0 (completed)
-- Server accepts multiple clients.
-- Claiming a plot is validated server-side and broadcast to all clients.
-- World persists to disk (`server/world_state.json`) and survives restart.
-- Client stores per-profile credentials and reconnects as the same identity.
-
-### M0.5 (completed)
-Goal: implement the intended world layout rule + coordinate-based rendering.
-
+### M0 — completed
 Delivered:
-- Plot coordinates (`x`, `y`) and stable IDs (`T_<x>_<y>`).
-- Pattern rule implemented on the server:
-  - `RESOURCE` if `x` and `y` are both even
+- WebSocket multiplayer foundation
+- server-authoritative plot claiming
+- persistence to `server/world_state.json`
+- profile-based reconnect identity
+
+### M0.5 — completed
+Delivered:
+- coordinate-based plot system
+- deterministic plot typing rule
+  - `RESOURCE` if both `x` and `y` are even
   - otherwise `PLAYER`
-- Initial world is **3×3**: `x=0..2`, `y=0..2`.
-- Expansion adds exactly **one 3×3 module** per expansion (constant-size patch, max 9 plots).
-- Godot 2D PlotView renders by coordinates (not index).
-- Ping/latency shown in HUD (client RTT).
-- Claimed plots display **owner display_name** reliably.
-- Presence snapshots are emitted by the server and shown in the HUD.
+- initial 3×3 world
+- constant-size expansion modules
+- 2D coordinate-based rendering prototype
+- presence snapshots and latency display
 
-### M1 (current)
-Goal: bring the same world into **3D** in Godot using **individual tile scenes**, with a usable city-builder style camera and later 3D plot interaction.
+### M1 — completed
+Delivered:
+- dedicated 3D world scene and controller
+- reusable 3D tile scene and script
+- city-builder style 3D camera rig
+- server-driven 3D tile rendering via dedicated renderer
+- 3D tile hover and selection
+- plot popup UI for owner/unclaimed state
+- claim action inside the popup
+- permanent server-side owner display-name enrichment for plot payloads
+- main menu/login overlay with static background
+- world hidden/disabled before login
+- quit buttons in menu and in-game top bar
 
-#### M1 progress already completed
-- Dedicated 3D world scene is in place.
-- Dedicated 3D world controller script is in place.
-- Main scene now instances the 3D world alongside UI and networking.
-- HUD was refactored to be **UI-only**.
-- Old active 2D PlotView path was removed from the active gameplay flow.
-- Reusable 3D tile scene exists.
-- Reusable 3D tile script exists.
-- Temporary local 3×3 3D test grid exists.
-- Dedicated runtime camera controller exists.
-- Camera now supports:
-  - movement
-  - zoom-scaled movement speed
-  - right-mouse drag yaw
-  - right-mouse drag pitch/tilt
-  - mouse-wheel zoom
-  - zoom toward mouse world position
-
-#### Still remaining for M1
-- Real server-driven 3D tile rendering
-- Dedicated `PlotRenderer3D.gd`
-- 3D tile picking / selection
-- Reconnect claim flow through 3D tile interaction
-- Camera polish / bounds / feel improvements later
-
-#### Out of scope for M1
-- Buildings/interiors/NPC gameplay systems
-- Advanced presence UX
-- Minimap/world map work
-- Major performance optimization systems such as MultiMesh
+### Out of scope for M1
+Still not part of M1:
+- buildings and interiors
+- NPC gameplay systems
+- production/economy simulation
+- minimap/world map
+- major rendering optimization systems such as MultiMesh
+- settings/options menu
 
 ---
 
@@ -87,14 +83,11 @@ cozy-chaos-city/
   README.md
   CHANGELOG.md
   docs/
-    TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md
     GPT_Assistant_Rules.md
-    Vertical_Cozy_City_Living_Document_Combined_v1.md
-    M1_Technical_Summary.md
     M1_Discord_Summary_No_Fluff.md
-    old/
-      M0_5_LAYOUT_PATTERN_IMPLEMENTATION.md
-      PATCH_NOTES_DISCORD.txt
+    M1_Technical_Summary.md
+    TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md
+    Vertical_Cozy_City_Living_Document_Combined_v1.md
 
   server/
     package.json
@@ -105,23 +98,23 @@ cozy-chaos-city/
       index.ts
       core/
         config.ts
-        world.ts
         players.ts
         presence.ts
+        world.ts
       net/
         protocol.ts
       storage/
         persist.ts
-      test_client.ts
-    dist/                # build output, not source of truth
-    node_modules/        # not source of truth
 
   client/
     project.godot
     main.tscn
     hud.tscn
-    PlotView.gd          # old 2D renderer still exists in repo as fallback/reference
-    export_presets.cfg
+    PlotView.gd                # old 2D renderer kept as reference/fallback
+    0.png
+    1.png
+    background.png
+    background2.png
     scenes/
       world/
         GameWorld3D.tscn
@@ -132,187 +125,267 @@ cozy-chaos-city/
         ProfileStore.gd
       ui/
         HUD.gd
+        PlotInfoPanel.gd
       world/
-        GameWorld3D.gd
-        PlotTile3D.gd
         CameraRigBasic.gd
+        GameWorld3D.gd
+        PlotRenderer3D.gd
+        PlotTile3D.gd
+        TilePicker3D.gd
 ```
 
 Notes:
-- The zip may include `.godot/` editor cache and `.tmp` scene files. Ignore them for logic work.
-- `server/src/` is the source of truth on the backend.
-- `client/PlotView.gd` still exists in the repo, but it is no longer the active world-rendering path in `main.tscn`.
+- Ignore `.godot/`, `.tmp`, and exported cache files for logic work.
+- `server/src/` is the backend source of truth.
+- `client/PlotView.gd` still exists but is no longer the active world presentation path.
 
 ---
 
-## 4) Server architecture
+## 4) Current server architecture
 
 ### 4.1 Config
 `server/src/core/config.ts`
-- `port`: **27015**
-- `protocolVersion`: **2**
-- `expandWhenFreePlotsBelow`: **3**
-- `persistPath`: `world_state.json`
-- `pingIntervalMs`: used by websocket keepalive / timeout watchdog
-- `clientTimeoutMs`: used to terminate stale clients
-- `maxMessageBytes`: size guard for incoming messages
+- `port = 27015`
+- `protocolVersion = 2`
+- `expandWhenFreePlotsBelow = 3`
+- persistence path points to `world_state.json`
+- keepalive / timeout settings are configured here
 
-### 4.2 World model (authoritative)
-Defined in `server/src/net/protocol.ts`:
-- `PlotType`: `"PLAYER" | "RESOURCE"`
-- `Plot`: `{ id, type, x, y, claimed_by }`
-- `PlayerRecord`: `{ id, secret, display_name }`
-- `WorldState`: `{ version, plots, players }`
-- `players` is a dictionary: `player_id -> PlayerRecord`
-
-Envelope shape:
-- `v`: protocol version
-- `type`: message type
-- `req_id`: optional request id
-- `payload`: optional object
+### 4.2 World model
+Defined in `server/src/net/protocol.ts`.
+Important concepts:
+- `PlotType = "PLAYER" | "RESOURCE"`
+- `Plot` includes at least:
+  - `id`
+  - `type`
+  - `x`
+  - `y`
+  - `claimed_by`
+- `PlayerRecord` includes:
+  - `id`
+  - `secret`
+  - `display_name`
+- `WorldState` includes:
+  - `version`
+  - `plots`
+  - `players`
 
 ### 4.3 Pattern rule and expansion
 `server/src/core/world.ts`
-- `plotTypeAt(x, y)` implements the deterministic pattern:
-  - `RESOURCE` if `(x % 2 == 0 && y % 2 == 0)`
+- `plotTypeAt(x, y)`:
+  - `RESOURCE` if both coordinates are even
   - otherwise `PLAYER`
-- `newWorld()` creates initial 3×3 at `x=0..2`, `y=0..2`
-- Expansion is module-based:
-  - `MODULE_SIZE = 3`
-  - world grows by adding exactly **one 3×3 module** per expansion
-- `expandWorld()` fills missing tiles in the chosen next module and returns `{ added }`
-- `normalizeWorldForM0_5()` handles older save migration / normalization
+- initial world is 3×3
+- expansions add one 3×3 module at a time
+- expansion returns `{ added }`
 
-### 4.4 Networking / routing
+### 4.4 Networking flow
 `server/src/index.ts`
-- On connect: connection stored in `conns` with `{ player_id: null, lastSeen }`
-- Incoming message flow:
-  - parse JSON
-  - validate envelope with Zod `EnvelopeSchema`
-  - reject protocol version mismatch
-  - enforce message size limit
-- `hello`:
+
+Important message flow:
+- `hello`
   - authenticate via `{ player_id, secret }`
-  - or create a new player via `{ display_name }`
-  - send `welcome { player_id, secret, display_name }`
-  - send `world_state { world }`
-  - send `presence_state { online }`
-  - broadcast updated `presence_state`
-- `request_world`:
-  - sends fresh `world_state`
-- `client_ping`:
-  - replies with `server_pong` echoing the same `req_id`
-- `claim_plot { plot_id }`:
-  - validates plot exists
-  - validates plot is `PLAYER`
-  - validates plot is still free
-  - sets `claimed_by = player_id`
-  - increments `world.version`
-  - persists world
-  - broadcasts `plot_update { plot, owner_display_name }`
-  - sends `claim_result`
-  - checks free-plot threshold and may broadcast `world_patch { added, world_version }`
-- Disconnect / timeout:
-  - connection removed from `conns`
-  - broadcast fresh `presence_state`
+  - or register via `{ display_name }`
+- `welcome`
+  - returns server-issued `player_id`, `secret`, `display_name`
+- `world_state`
+  - now sends `world: makeWorldForClient()`
+  - plots are enriched with `owner_display_name`
+- `plot_update`
+  - sends enriched `plot`
+  - also includes top-level `owner_display_name` for backward safety
+- `world_patch`
+  - sends `{ added, world_version }`
+  - `added` plots are enriched with `owner_display_name`
+- `claim_plot`
+  - validates server-side
+  - updates world + persistence
+  - broadcasts `plot_update`
+  - may trigger `world_patch`
 
-### 4.5 Presence snapshots
+### 4.5 Presence
 `server/src/core/presence.ts`
-- Server keeps presence simple by broadcasting **full online snapshots**.
-- Snapshot shape used by client:
-  - `{ player_id, display_name }`
+- server broadcasts full presence snapshots
+- client shows online player names in the HUD
 
 ---
 
-## 5) Client architecture (Godot)
+## 5) Current client architecture
 
-### 5.1 Entry scenes
-- `client/main.tscn`
-  - `Main`
-    - `GameWorld3D`
-    - `UI` (`CanvasLayer`)
-      - `HUD`
-    - `NetClient`
-- `client/hud.tscn`
-  - top-bar style UI only
+### 5.1 Entry scene
+`client/main.tscn`
 
-### 5.2 NetClient (WebSocket client)
+Current active structure:
+- `Main`
+  - `GameWorld3D`
+  - `UI` (`CanvasLayer`)
+    - `HUD`
+  - `NetClient`
+
+### 5.2 NetClient
 `client/scripts/net/NetClient.gd`
-- Uses `WebSocketPeer`
-- Hardcoded default server URL currently points to a public IP + port:
-  - `ws://90.225.57.62:27015`
-- Optional override file supported:
-  - `user://server_url.txt`
-- Auth flow:
-  - loads profile from `ProfileStore`
-  - sends `hello` with stored credentials or new `display_name`
-  - receives `welcome`
-  - saves server-issued credentials back to disk
-- Emits signals:
-  - `status_changed`
-  - `identity_ready(player_id, display_name)`
-  - `world_state_received(world)`
-  - `plot_updated(plot)`
-  - `world_patch_received(patch)`
-  - `claim_result_received(result)`
-  - `latency_updated(ms)`
-  - `presence_updated(online)`
-- RTT ping:
-  - sends `client_ping` on heartbeat interval
-  - tracks request ids
-  - computes RTT on `server_pong`
 
-### 5.3 ProfileStore
-`client/scripts/net/ProfileStore.gd`
-- Stores per-profile JSON files under:
-  - `user://profiles/<name>.json`
-- Persists:
-  - `player_id`
-  - `secret`
-  - `display_name`
+Responsibilities:
+- connect to server via `WebSocketPeer`
+- load/save profile credentials via `ProfileStore`
+- authenticate with existing credentials or new display name
+- emit signals for:
+  - status
+  - identity
+  - world snapshots
+  - plot updates
+  - world patches
+  - claim results
+  - latency
+  - presence
 
-### 5.4 HUD wiring
+Important notes:
+- default server URL is still hardcoded to the current public IP
+- optional override file: `user://server_url.txt`
+
+### 5.3 HUD
 `client/scripts/ui/HUD.gd`
-- Finds `GameWorld3D` using `/root/Main/GameWorld3D`
-- Finds `NetClient` by group `netclient` or fallback `/root/Main/NetClient`
-- Connect button:
-  - calls `net.connect_with_profile(username)`
-- Claim button:
-  - calls `net.claim_plot(selected_plot_id)`
-- World forwarding:
-  - forwards local player identity to `GameWorld3D.set_my_player_id(...)`
-  - forwards `world_state`, `plot_update`, and `world_patch` to `GameWorld3D`
-- UI responsibilities now include:
-  - username entry
-  - connect button
-  - claim button
-  - status text
-  - ping label
-  - online label
 
-Important:
-- `HUD.gd` still contains `_on_plot_selected(plot_id, is_claimable)` and claim-button logic, but there is currently **no active 3D tile selection system** emitting into it yet.
-- That means the HUD is structurally ready for claim integration, but the 3D selection pipeline is still missing.
+Responsibilities:
+- manage menu/login UI state vs in-world UI state
+- forward world messages into `GameWorld3D`
+- react to plot selection and update `PlotInfoPanel`
+- reuse existing `claim_plot` network flow
+- show status, ping, and online-player list
+- handle quit buttons
 
-### 5.5 PlotView (old 2D renderer)
-`client/PlotView.gd`
-- Still exists in the repo.
-- Still supports:
-  - rendering plots by `x,y`
-  - selection
-  - ownership display
-  - owner name display
-- It is **not** instanced in `main.tscn` anymore.
-- Treat it as fallback/reference/debug material, not the active world renderer.
+Important current UI states:
+- **menu state**
+  - `MenuOverlay` visible
+  - `TopBar` hidden
+  - world disabled
+- **in-world state**
+  - `MenuOverlay` hidden
+  - `TopBar` visible
+  - world enabled
+
+Important note for future assistants:
+- a recent bug occurred when `_on_connect_pressed()` was accidentally emptied and its logic ended up inside `_on_quit_pressed()`.
+- The intended correct state is:
+  - `_on_connect_pressed()` handles username validation + `net.connect_with_profile(username)`
+  - `_on_quit_pressed()` only calls `get_tree().quit()`
+- If a new zip appears to have a dead Connect button, check this function pair first.
+
+### 5.4 PlotInfoPanel
+`client/scripts/ui/PlotInfoPanel.gd`
+
+Responsibilities:
+- show selected plot info
+- show type and owner/unclaimed state
+- show Claim button only when valid
+- emit `claim_requested(plot_id)`
+
+This panel is intentionally small in M1 but is meant to grow later with:
+- population
+- production
+- happiness
+- plot stats
+
+### 5.5 GameWorld3D
+`client/scripts/world/GameWorld3D.gd`
+
+Responsibilities:
+- own client-side world cache
+- receive full world snapshots
+- receive plot updates and world patches
+- track local player id
+- track selected and hovered plot ids
+- emit `plot_selected(plot, is_claimable)`
+- enable/disable the whole world during menu/login flow
+
+Important methods:
+- `set_my_player_id(player_id)`
+- `set_world(world)`
+- `apply_plot_update(plot)`
+- `apply_world_patch(patch)`
+- `refresh_selected_plot_ui()`
+- `set_world_enabled(enabled)`
+
+### 5.6 PlotRenderer3D
+`client/scripts/world/PlotRenderer3D.gd`
+
+Responsibilities:
+- spawn and own all tile instances under `TilesRoot`
+- map `plot_id -> PlotTile3D`
+- rebuild from `world_state`
+- apply incremental plot updates
+- keep selected/hovered tile visuals in sync
+
+This is the main M1 rendering module.
+
+### 5.7 PlotTile3D
+`client/scripts/world/PlotTile3D.gd`
+
+Responsibilities:
+- own tile-local plot fields
+- apply plot data visually
+- render different states for:
+  - `RESOURCE`
+  - free `PLAYER`
+  - taken by me
+  - taken by others
+- render selection and hover effects
+
+Important methods:
+- `apply_plot(plot, my_player_id)`
+- `set_selected(is_selected, my_player_id)`
+- `set_hovered(is_hovered, my_player_id)`
+
+### 5.8 TilePicker3D
+`client/scripts/world/TilePicker3D.gd`
+
+Responsibilities:
+- raycast from the active camera into the 3D world
+- detect `PlotTile3D`
+- emit:
+  - `tile_hovered(plot_id)`
+  - `tile_clicked(plot_id)`
+
+### 5.9 CameraRigBasic
+`client/scripts/world/CameraRigBasic.gd`
+
+Responsibilities:
+- movement
+- zoom
+- yaw
+- pitch/tilt
+- zoom toward mouse world position
+
+This remains independent from networking and HUD logic.
 
 ---
 
-## 6) Current 3D world implementation status
+## 6) Scene/UI structure notes
 
-### 6.1 `GameWorld3D.tscn`
+### 6.1 HUD scene
+`client/hud.tscn`
+
+Current important nodes include:
+- `MenuOverlay`
+  - static background image
+  - centered login panel
+  - username input
+  - connect button
+  - quit button
+  - menu status label
+- `TopBar`
+  - claim button kept hidden for now
+  - status label
+  - latency label
+  - online label
+  - in-game quit button
+- `PlotInfoPanel`
+  - popup shown when a tile is selected
+
+### 6.2 World scene
 `client/scenes/world/GameWorld3D.tscn`
 
-Current 3D world shell includes:
+Current important nodes include:
 - `CameraRig`
   - `YawPivot`
     - `PitchPivot`
@@ -321,233 +394,63 @@ Current 3D world shell includes:
 - `TilesRoot`
 - `Ground`
 
-This is now the active world scene instanced by `main.tscn`.
+---
 
-### 6.2 `GameWorld3D.gd`
-`client/scripts/world/GameWorld3D.gd`
+## 7) M1 status assessment
 
-Current responsibilities:
-- store local player id
-- store latest world snapshot
-- maintain `plots_by_id`
-- receive:
-  - full world snapshots
-  - single plot updates
-  - world patches
-- currently spawn a **temporary local 3×3 test grid** into `TilesRoot`
+### M1 core goals are complete
+Based on the current repo plus latest working chat instructions, M1 is functionally complete.
 
-Important limitation:
-- `GameWorld3D.gd` is currently doing two roles:
-  - world-data ownership
-  - temporary local tile spawning
-- This is acceptable as a temporary test harness, but it should **not** become the permanent renderer owner.
-- The next real renderer step should move tile spawning/update logic into a dedicated `PlotRenderer3D.gd`.
+Completed M1 deliverables:
+- 3D world renders from server snapshots and incremental updates
+- reusable individual tile scene approach is in place
+- camera is functional for city-builder viewing
+- tiles can be hovered and selected in 3D
+- claim flow is reconnected through 3D interaction
+- world patches render correctly in 3D
+- login/menu flow prevents camera movement while typing
 
-### 6.3 `PlotTile3D.tscn`
-`client/scenes/world/PlotTile3D.tscn`
-
-Current structure:
-- `PlotTile3D` (`StaticBody3D`)
-  - `Visual` (`MeshInstance3D`)
-  - `Collider` (`CollisionShape3D`)
-
-This prepares the tile for future:
-- 3D ray picking
-- selection
-- tile-local visuals
-
-### 6.4 `PlotTile3D.gd`
-`client/scripts/world/PlotTile3D.gd`
-
-Current tile-level responsibilities:
-- store tile-local state:
-  - `plot_id`
-  - `grid_x`
-  - `grid_y`
-  - `plot_type`
-  - `claimed_by`
-  - `owner_display_name`
-- support:
-  - `apply_plot(plot, my_player_id)`
-  - `set_selected(...)`
-  - `set_hovered(...)`
-- apply tile-local visual state for:
-  - `RESOURCE`
-  - free `PLAYER`
-  - claimed plot
-  - local-player-owned plot
-
-### 6.5 Temporary local render test
-Current M1 rendering still uses a temporary local test path inside `GameWorld3D.gd`:
-- `_spawn_local_test_grid()`
-- `_spawn_test_tile(...)`
-- grid-to-world placement helper
-
-Purpose:
-- verify tile instancing
-- verify spacing
-- verify basic materials / colors
-- verify the 3D scene is rendering correctly
-
-This should be replaced by real server-driven rendering.
+### Remaining work is polish or future scope
+These are not blockers for calling M1 complete:
+- prettier textures / more detailed tile models
+- camera feel polish
+- settings/options menu
+- richer plot popup content
+- gameplay systems beyond plot claiming
 
 ---
 
-## 7) Current camera implementation status
+## 8) Important pitfalls for future GPT assistants
 
-### `CameraRigBasic.gd`
-`client/scripts/world/CameraRigBasic.gd`
+1. **Always read the latest zip and the docs first.**
+   The project changes quickly and stale assumptions have already caused mistakes.
 
-The dedicated camera controller now exists and is attached to `CameraRig`.
+2. **Follow `docs/GPT_Assistant_Rules.md` strictly.**
+   The user wants exact file paths, exact insertion/replacement anchors, modular code, educational comments, and Godot-editor instructions for static UI.
 
-Current features:
-- movement over the ground plane using Input Map actions:
-  - `camera_left`
-  - `camera_right`
-  - `camera_up`
-  - `camera_down`
-- move speed scales with current zoom distance
-- right mouse drag rotates yaw
-- right mouse drag adjusts pitch/tilt
-- pitch is clamped between exported min/max values
-- mouse wheel zoom adjusts camera distance
-- zoom is anchored toward the mouse world position on the flat ground plane (`y = 0`)
+3. **Do not regress the server/client payload consistency.**
+   Plot payloads sent to clients should already include `owner_display_name`.
 
-Important limitation:
-- Camera feel is “good enough for now” but not final.
-- Pitch/zoom feel may still need polish later.
-- Mouse-target zoom currently uses a flat ground-plane intersection, not physics ray hits.
-  - This is correct for the current flat world.
-  - If terrain/building height becomes important later, this should be upgraded to real ray hits.
+4. **Do not put rendering logic back into `HUD.gd`.**
+   `HUD.gd` is UI coordination only.
+
+5. **Do not remove `PlotRenderer3D` / `TilePicker3D` modular separation.**
+   That separation is intentional and should be preserved.
+
+6. **The world must remain gated behind the login/menu state unless deliberately redesigning that flow.**
+   This was added specifically to avoid camera input while typing and to make the prototype feel more like a real game.
+
+7. **If Connect stops working, check `HUD.gd` first.**
+   There was already one regression where the connect logic ended up inside the quit handler.
 
 ---
 
-## 8) Networking protocol (current)
+## 9) Recommended next milestone direction
 
-All messages use:
-- `v`: protocol version (`2`)
-- `type`: string
-- `req_id`: optional string
-- `payload`: optional dict/object
+Likely next steps after M1:
+- replace placeholder tile visuals with better textures/models
+- begin real plot content / building representation
+- add richer plot popup information
+- add settings/options menu for resolution/window mode/fullscreen
+- continue toward actual city-building gameplay systems
 
-### Client -> Server
-- `hello`
-  - `{ player_id, secret }` for reconnect
-  - or `{ display_name }` for first-time identity creation
-- `request_world`
-- `claim_plot { plot_id }`
-- `client_ping`
-
-### Server -> Client
-- `welcome { player_id, secret, display_name }`
-- `world_state { world }`
-- `plot_update { plot, owner_display_name? }`
-- `world_patch { added, world_version }`
-- `claim_result { ok, plot_id?, reason? }`
-- `server_pong`
-- `presence_state { online: [ { player_id, display_name }, ... ] }`
-- `error { reason }`
-
----
-
-## 9) Local dev and running
-
-### Server
-From `server/`:
-- `npm install`
-- `npm run dev`
-
-Server listens on:
-- `ws://0.0.0.0:27015`
-
-### Client
-Open `client/` in Godot and run.
-
-Current flow:
-- enter username
-- press Connect
-- client authenticates / creates identity
-- HUD shows status + ping + online list
-- active world view is now the 3D scene
-
-Important current limitation:
-- 3D tile claiming is **not yet active**, because there is no 3D tile selection/picking wired into the HUD yet.
-- The old 2D claim path existed through `PlotView`, but the active world scene is now 3D.
-
-Public playtest note:
-- `NetClient.gd` currently defaults to the public IP above.
-- LAN/dev override is still possible with `user://server_url.txt`.
-
----
-
-## 10) GPT Assistant rules (required working style)
-
-See `docs/GPT_Assistant_Rules.md`. Core rules:
-- Never guess file contents. Always read the actual project files first.
-- Give exact edit locations (file paths + line numbers or precise anchors).
-- Keep code modular.
-- New file = provide the whole file.
-- Existing file = provide only the minimal patch with exact placement.
-- Prefer Godot editor instructions for scene/UI structure changes.
-- Explain what + why + how to test after each step.
-
----
-
-## 11) Recommended next implementation order
-
-### Highest-value next step
-1. Create `PlotRenderer3D.gd`
-   - own `plot_id -> tile instance`
-   - spawn/update/remove tiles
-   - consume full `world_state`
-   - consume `plot_update`
-   - consume `world_patch`
-
-### After that
-2. Remove the temporary local 3×3 test-grid path from `GameWorld3D.gd`
-3. Optionally add `PlotGridMath.gd` if coordinate math is about to spread
-4. Create `TilePicker3D.gd`
-5. Implement 3D tile selection
-6. Reconnect claim flow through 3D tile selection and existing HUD / NetClient path
-7. Add hover / selection visuals
-8. Polish camera bounds / feel later
-
-### Important architectural rule
-Do **not** let `GameWorld3D.gd` become a permanent god-object.
-- `GameWorld3D.gd` should coordinate systems.
-- Tile spawning/rendering should move into `PlotRenderer3D.gd`.
-- Picking should move into its own module.
-- Camera should remain in `CameraRigBasic.gd`.
-
----
-
-## 12) Known gotchas / current realities
-
-- `client/PlotView.gd` still exists in the repo, but it is no longer part of the active scene flow.
-- `HUD.gd` is ready to receive selection state, but nothing currently emits 3D tile selections yet.
-- The active 3D world is still rendering only a temporary local test grid, not the live server world.
-- `NetClient.gd` currently points to a public IP by default. That may change if the public IP changes.
-- Presence snapshots are already implemented and shown in the HUD, even though deeper presence UX is not the focus of M1.
-- Camera zoom-to-mouse currently assumes a flat ground plane at `y = 0`.
-
----
-
-## 13) Short handoff summary for the next assistant
-
-The project has already moved significantly into M1.
-
-What is true **right now**:
-- The active client world scene is 3D.
-- The old 2D PlotView is no longer the active renderer.
-- HUD is now UI-only.
-- `GameWorld3D.gd` owns world data and currently runs a temporary local 3×3 tile render test.
-- Reusable 3D tile scene and script exist.
-- Runtime camera controls exist and are good enough to continue.
-- The biggest missing piece is **real server-driven 3D tile rendering**.
-
-So the next assistant should **not** restart from 2D assumptions.
-The next assistant should read the live files first, then continue with:
-- `PlotRenderer3D.gd`
-- real snapshot/patch rendering
-- 3D tile picking
-- claim integration
