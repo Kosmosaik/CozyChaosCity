@@ -13,8 +13,8 @@ bg_color = Color(0.43137255, 0.32941177, 0.28627452, 0.8862745)
 [node name="HUD" type="Control" unique_id=180577428]
 layout_mode = 3
 anchors_preset = 0
-offset_right = 1600.0
-offset_bottom = 900.0
+offset_right = 1366.0
+offset_bottom = 768.0
 mouse_filter = 2
 script = ExtResource("1_37p78")
 
@@ -130,7 +130,13 @@ visible = false
 layout_mode = 2
 text = "Claim"
 
+[node name="DebugClearCellButton" type="Button" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=1624293370]
+visible = false
+layout_mode = 2
+text = "Clear Cell (0,0)"
+
 [node name="MenuOverlay" type="Control" parent="." unique_id=597708892]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -158,10 +164,10 @@ grow_vertical = 2
 
 [node name="MenuBackground" type="TextureRect" parent="MenuOverlay/BackgroundFrame" unique_id=1468319628]
 layout_mode = 1
-offset_left = -75.0
-offset_top = -3.0
-offset_right = 1656.0
-offset_bottom = 1077.0
+offset_left = -49.0
+offset_top = -21.0
+offset_right = 1451.2001
+offset_bottom = 922.0
 texture = ExtResource("3_8sq4i")
 expand_mode = 1
 stretch_mode = 5

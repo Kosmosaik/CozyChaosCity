@@ -2,9 +2,9 @@
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
 **Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
-**Last updated:** 2026-03-09  
-**Current milestone:** **M1 complete**  
-**Current state:** friend-testable prototype with server-driven 3D world, 3D tile interaction, popup claim flow, and menu/login overlay.
+**Last updated:** 2026-03-11  
+**Current milestone:** **M2 foundation in progress**  
+**Current state:** M1 remains fully working; M2 server-side owned plot data foundation and first debug local interaction path are now implemented.
 
 This document is the handoff reference for any future GPT assistant.
 
@@ -24,10 +24,21 @@ Core loop currently implemented:
 - claims free `PLAYER` plots
 - receives live updates and expansion patches from the server
 
+New M2 foundation now implemented:
+- claimed player plots can initialize local owned-plot detail data
+- local plot cells can represent rubble vs usable ground
+- rubble cells can now be marked `clearable`
+- the server can mutate a local cell from rubble to ground
+- the client has a temporary in-game debug button to trigger one local cell clear action
+
 Key concept:
 - plots live on a deterministic grid
 - plot IDs are stable: `T_<x>_<y>`
-- server is authoritative for ownership and expansion
+- server is authoritative for ownership, expansion, and local cell mutation
+- M2 is moving toward:
+  - World Map mode
+  - Player Plot mode
+  - neighborhood/local rendering around the owned plot
 
 ---
 
@@ -65,14 +76,33 @@ Delivered:
 - world hidden/disabled before login
 - quit buttons in menu and in-game top bar
 
-### Out of scope for M1
-Still not part of M1:
-- buildings and interiors
-- NPC gameplay systems
-- production/economy simulation
-- minimap/world map
-- major rendering optimization systems such as MultiMesh
-- settings/options menu
+### M2 — in progress
+Current delivered foundation:
+- plot `shell` data on the server
+- claimed-player-plot `detail` data on the server
+- starter local plot generation on first claim
+- local plot cells with:
+  - `x`
+  - `y`
+  - `blocked`
+  - `clearable`
+  - `terrain`
+- starter shelter + starter NPC marker objects
+- centered starter shelter footprint surrounded by rubble
+- world helper functions for local cell lookup and mutation
+- server debug action for local cell clearing
+- temporary in-game popup debug button for local cell clearing
+
+### Out of scope for current M2 state
+Still not implemented:
+- World Map mode vs Player Plot mode
+- neighborhood-based local plot loading
+- local owned-plot rendering
+- local neighborhood rendering of nearby plots/resource zones
+- full local gameplay loops
+- real exterior/interior split
+- NPC simulation
+- production/economy systems
 
 ---
 
@@ -86,6 +116,7 @@ cozy-chaos-city/
     GPT_Assistant_Rules.md
     M1_Discord_Summary_No_Fluff.md
     M1_Technical_Summary.md
+    M2_implementation_plan.md
     TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md
     Vertical_Cozy_City_Living_Document_Combined_v1.md
 
@@ -138,6 +169,7 @@ Notes:
 - Ignore `.godot/`, `.tmp`, and exported cache files for logic work.
 - `server/src/` is the backend source of truth.
 - `client/PlotView.gd` still exists but is no longer the active world presentation path.
+- M2 work so far is still concentrated in the existing server architecture plus small temporary client debug hooks.
 
 ---
 
@@ -153,14 +185,17 @@ Notes:
 
 ### 4.2 World model
 Defined in `server/src/net/protocol.ts`.
+
 Important concepts:
 - `PlotType = "PLAYER" | "RESOURCE"`
-- `Plot` includes at least:
+- `Plot` now includes:
   - `id`
   - `type`
   - `x`
   - `y`
   - `claimed_by`
+  - optional `shell`
+  - optional `detail`
 - `PlayerRecord` includes:
   - `id`
   - `secret`
@@ -169,6 +204,31 @@ Important concepts:
   - `version`
   - `plots`
   - `players`
+
+New M2 data structures:
+- `PlotShell`
+  - `kind`
+  - `variant`
+  - `stage`
+- `PlotDetail`
+  - `width`
+  - `height`
+  - `cells`
+  - `starter_objects`
+- `PlotDetailCell`
+  - `x`
+  - `y`
+  - `blocked`
+  - `clearable`
+  - `terrain`
+- `PlotDetailStarterObjectKind`
+  - `SHACK`
+  - `NPC_MARKER`
+
+Important design direction:
+- generic rubble lives in the **cell layer**
+- distinct placed things live in the **starter object layer**
+- current shell data is still a lightweight public-facing summary, not the final long-term truth model for exterior structure
 
 ### 4.3 Pattern rule and expansion
 `server/src/core/world.ts`
@@ -179,17 +239,42 @@ Important concepts:
 - expansions add one 3×3 module at a time
 - expansion returns `{ added }`
 
-### 4.4 Networking flow
+### 4.4 M2 local plot foundation
+`server/src/core/world.ts`
+
+Important new helpers:
+- `makeDefaultShell(plotType)`
+  - creates default shell data for generated plots
+- `makeStarterPlotDetail()`
+  - creates starter owned-plot detail
+- `ensureClaimedPlayerPlotInitialized(plot)`
+  - initializes local detail when a `PLAYER` plot is first claimed
+  - also updates the shell from `EMPTY` to `RUINED`
+- `getPlotDetailCell(plot, x, y)`
+  - returns a local cell or `null`
+- `isPlotDetailCellClearable(plot, x, y)`
+  - checks whether a local cell is clearable
+- `clearPlotDetailCell(plot, x, y)`
+  - mutates a clearable local cell from rubble to ground
+
+Current starter local plot design:
+- local grid currently uses `STARTER_DETAIL_SIZE = 8`
+- shelter footprint is centered
+- most of the surrounding plot starts as rubble
+- rubble cells are blocked and clearable
+- shelter cells are ground, unblocked, and not clearable
+
+### 4.5 Networking flow
 `server/src/index.ts`
 
-Important message flow:
+Important message flow still in use:
 - `hello`
   - authenticate via `{ player_id, secret }`
   - or register via `{ display_name }`
 - `welcome`
   - returns server-issued `player_id`, `secret`, `display_name`
 - `world_state`
-  - now sends `world: makeWorldForClient()`
+  - sends `world: makeWorldForClient()`
   - plots are enriched with `owner_display_name`
 - `plot_update`
   - sends enriched `plot`
@@ -202,8 +287,22 @@ Important message flow:
   - updates world + persistence
   - broadcasts `plot_update`
   - may trigger `world_patch`
+  - now also initializes owned local plot detail when a player plot is claimed for the first time
 
-### 4.5 Presence
+New temporary debug message flow:
+- `debug_clear_plot_cell`
+  - validates:
+    - payload
+    - plot existence
+    - plot type
+    - ownership
+    - local cell clearability
+  - mutates the targeted local cell
+  - saves world state
+  - broadcasts `plot_update`
+  - returns `debug_clear_plot_cell_result`
+
+### 4.6 Presence
 `server/src/core/presence.ts`
 - server broadcasts full presence snapshots
 - client shows online player names in the HUD
@@ -239,6 +338,12 @@ Responsibilities:
   - latency
   - presence
 
+New temporary M2 debug support:
+- public send method for:
+  - `debug_clear_plot_cell(plot_id, x, y)`
+- result signal for:
+  - `debug_clear_plot_cell_result`
+
 Important notes:
 - default server URL is still hardcoded to the current public IP
 - optional override file: `user://server_url.txt`
@@ -253,6 +358,12 @@ Responsibilities:
 - reuse existing `claim_plot` network flow
 - show status, ping, and online-player list
 - handle quit buttons
+
+New temporary M2 debug responsibilities:
+- determine whether the selected plot is owned by the local player
+- show temporary debug action only on the local player's own claimed plot
+- send `debug_clear_plot_cell` through `NetClient`
+- handle `debug_clear_plot_cell_result`
 
 Important current UI states:
 - **menu state**
@@ -280,11 +391,16 @@ Responsibilities:
 - show Claim button only when valid
 - emit `claim_requested(plot_id)`
 
-This panel is intentionally small in M1 but is meant to grow later with:
-- population
-- production
-- happiness
-- plot stats
+New temporary M2 debug support:
+- contains a static UI button:
+  - `DebugClearCellButton`
+- emits:
+  - `debug_clear_requested(plot_id)`
+
+Current temporary rule:
+- the debug clear button is only shown for the local player's own claimed plot
+
+This panel is intentionally still small, but it has now started to carry one temporary M2 debug action in addition to the M1 claim action.
 
 ### 5.5 GameWorld3D
 `client/scripts/world/GameWorld3D.gd`
@@ -306,6 +422,10 @@ Important methods:
 - `refresh_selected_plot_ui()`
 - `set_world_enabled(enabled)`
 
+Important M2 status note:
+- this is still an M1-style world controller
+- Player Plot mode and local neighborhood rendering are not implemented yet
+
 ### 5.6 PlotRenderer3D
 `client/scripts/world/PlotRenderer3D.gd`
 
@@ -316,7 +436,7 @@ Responsibilities:
 - apply incremental plot updates
 - keep selected/hovered tile visuals in sync
 
-This is the main M1 rendering module.
+This is still the main M1 rendering module.
 
 ### 5.7 PlotTile3D
 `client/scripts/world/PlotTile3D.gd`
@@ -335,6 +455,10 @@ Important methods:
 - `apply_plot(plot, my_player_id)`
 - `set_selected(is_selected, my_player_id)`
 - `set_hovered(is_hovered, my_player_id)`
+
+Important M2 status note:
+- shell-based reduced-detail rendering is not implemented yet
+- local owned-plot rendering is not implemented yet
 
 ### 5.8 TilePicker3D
 `client/scripts/world/TilePicker3D.gd`
@@ -381,6 +505,9 @@ Current important nodes include:
   - in-game quit button
 - `PlotInfoPanel`
   - popup shown when a tile is selected
+  - contains:
+    - `ClaimButton`
+    - temporary `DebugClearCellButton`
 
 ### 6.2 World scene
 `client/scenes/world/GameWorld3D.tscn`
@@ -396,27 +523,36 @@ Current important nodes include:
 
 ---
 
-## 7) M1 status assessment
+## 7) M2 status assessment
 
-### M1 core goals are complete
-Based on the current repo plus latest working chat instructions, M1 is functionally complete.
+### M1 still works
+The original M1 prototype loop remains intact:
+- connect/login
+- enter world
+- inspect plot
+- claim plot
+- receive updates
 
-Completed M1 deliverables:
-- 3D world renders from server snapshots and incremental updates
-- reusable individual tile scene approach is in place
-- camera is functional for city-builder viewing
-- tiles can be hovered and selected in 3D
-- claim flow is reconnected through 3D interaction
-- world patches render correctly in 3D
-- login/menu flow prevents camera movement while typing
+### M2 foundation is now meaningfully started
+Completed so far:
+- plot shell data exists
+- claimed owned-plot detail exists
+- starter local plot generation exists
+- local cell lookup/clear helpers exist
+- the server can mutate a local rubble cell
+- the client can trigger that mutation through a temporary in-game debug button
 
-### Remaining work is polish or future scope
-These are not blockers for calling M1 complete:
-- prettier textures / more detailed tile models
-- camera feel polish
-- settings/options menu
-- richer plot popup content
-- gameplay systems beyond plot claiming
+### What is still missing for real M2 progression
+Not done yet:
+- World Map mode vs Player Plot mode
+- neighborhood loading protocol
+- local neighborhood snapshots
+- local owned-plot rendering
+- nearby shell/public rendering of surrounding plots
+- local cell click interaction
+- proper local UI/state instead of the temporary debug path
+
+So the project is currently at a strong **M2 foundation checkpoint**, not yet at full M2 implementation.
 
 ---
 
@@ -437,20 +573,66 @@ These are not blockers for calling M1 complete:
 5. **Do not remove `PlotRenderer3D` / `TilePicker3D` modular separation.**
    That separation is intentional and should be preserved.
 
-6. **The world must remain gated behind the login/menu state unless deliberately redesigning that flow.**
+6. **Do not confuse generic rubble with distinct placed objects.**
+   Current design direction is:
+   - rubble = local cell state
+   - shelter / npc marker = placed objects
+   This should be preserved unless the user explicitly redesigns it.
+
+7. **Current local cell clearing is a temporary debug path, not the final gameplay flow.**
+   Do not build too much permanent gameplay/UI around `DebugClearCellButton`.
+
+8. **The world must remain gated behind the login/menu state unless deliberately redesigning that flow.**
    This was added specifically to avoid camera input while typing and to make the prototype feel more like a real game.
 
-7. **If Connect stops working, check `HUD.gd` first.**
+9. **If Connect stops working, check `HUD.gd` first.**
    There was already one regression where the connect logic ended up inside the quit handler.
 
 ---
 
 ## 9) Recommended next milestone direction
 
-Likely next steps after M1:
-- replace placeholder tile visuals with better textures/models
-- begin real plot content / building representation
-- add richer plot popup information
-- add settings/options menu for resolution/window mode/fullscreen
-- continue toward actual city-building gameplay systems
+The next major step should be the real M2 structural move:
 
+### Recommended next focus
+- protocol support for entering Player Plot mode
+- neighborhood/local plot snapshot loading
+- client-side mode switching:
+  - World Map mode
+  - Player Plot mode
+- initial local owned-plot rendering
+- reduced-detail rendering of nearby surrounding plots/resource zones
+
+### Recommended order
+1. add protocol for local/neighborhood view
+2. add client mode switch plumbing
+3. add local neighborhood data handling
+4. add owned-plot rendering
+5. add nearby shell/public neighbor rendering
+
+### Do not get distracted yet by
+- full NPC systems
+- production chains
+- interiors
+- polish-heavy graphics work
+- premature optimization
+
+The current project has reached a very good commit/handoff point before that larger M2 shift.
+
+---
+
+## 10) Summary for a new GPT assistant
+
+The repo is no longer just “M1 complete.”
+It is now:
+
+- **M1 complete and still working**
+- **M2 foundation started and partially implemented**
+
+Most important current truths:
+- the shared world map still works
+- claimed player plots now have local detail data
+- rubble is represented in local cells, not fake rubble objects
+- local cells can be cleared server-side
+- a temporary in-game debug button proves the end-to-end local interaction path
+- the next real milestone work is neighborhood loading + Player Plot mode + local rendering

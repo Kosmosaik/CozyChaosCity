@@ -1,1003 +1,494 @@
-# CozyChaosCityBuilder — Technical Milestones Roadmap (Post-M1)
+# Milestones
 
-Current state: **M1 complete**.
+This document tracks the current milestone plan for Cozy Chaos City and clarifies the intended direction of the project as it evolves from a multiplayer prototype into a shared-world city-building/simulation game.
 
-This roadmap is **developer-facing**. It is intentionally technical and breaks the project into implementation milestones, dependencies, data-model changes, rendering work, server/client work, and explicit “done” criteria.
-
-The order below is based on the current early-game vision:
-- start on a world map with claimable player zones and resource zones
-- transition into a ruined starting plot
-- begin with one existing NPC and one existing shack
-- survive by scavenging and clearing rubble
-- unlock movement and buildable space tile by tile
-- only later build the first true residential block and attract a second NPC
-- only after that reach outward into resource zones and larger city-building systems
-
-This is more aligned with the current vision than a generic “place buildings immediately” roadmap.
+The roadmap is meant to preserve the long-term vision while keeping implementation modular and milestone-driven.
 
 ---
 
-# Global architecture rules for all milestones
+## Core Direction
 
-## Server authority
-The server remains authoritative for:
-- world zones / claimed zones
-- plot state
-- structure state
-- NPC state
-- jobs/tasks
-- save persistence
+Cozy Chaos City is a **shared-world multiplayer city-building and social simulation game**.
 
-Clients may cache and predict visuals, but not own truth.
+The project is not aiming for isolated player instances or purely abstract city markers. The world should feel continuous, social, and readable from both a macro and local scale.
 
-## Vertical slices over broad placeholders
-Each milestone should end in something playable and observable, not only schema preparation.
+This means the game should support:
 
-## Keep the early game readable
-Early systems should be physically small and low in count:
-- one claimed plot
-- one shack
-- one NPC
-- small rubble field
-- tiny resource list
-- very few actions
+- a **shared world map**
+- visible neighboring player cities
+- resource zones and streets as public/shared spaces
+- richer local detail when focusing on your own city
+- privacy where it makes sense, such as interiors
+- public visibility where it makes sense, such as exteriors and outside NPCs
 
-## Avoid future spaghetti now
-As the project expands, keep responsibilities separated:
-- world-map logic
-- plot logic
-- plot terrain/rubble logic
-- structure rendering
-- NPC rendering + movement
-- task/job system
-- popup/UI inspection
-- save/schema migration
+The long-term rendering and simulation model should distinguish between:
+
+- **Shell data**  
+  High-level city/plot exterior shape visible at long range
+
+- **Exterior public detail**  
+  Publicly visible outside structures and objects
+
+- **Interior/private detail**  
+  Private interior rooms, furniture, and inside-only actors
+
+- **Public actor visibility**  
+  NPCs or actors physically outside and therefore potentially visible to nearby players
+
+- **Private actor visibility**  
+  NPCs or actors inside buildings/interiors and not visible to outsiders
+
+This distinction is important and should guide future architecture, rendering, networking, and gameplay.
 
 ---
 
-# M2 — World Map Ownership Rules, Plot Scale Redesign, and Plot Entry Flow
+## Completed Milestones
 
-## Purpose
-Replace the current prototype-sized player plot with a real starting plot concept and formalize the transition to the player plot when player claims a plot.
+### M0 - Multiplayer Foundation
 
-## Why this must happen first
-The current 0.95m x 0.2m x 0.95m plot tile setup is only enough for claim/testing. It is not a believable player plot for a ruined-start survival loop. Before rubble, scavenging, pathing, or building can feel right, the project needs a real answer to:
-- what a world-map “zone” actually contains
-- how large a player plot is in gameplay terms
-- how many internal tiles/cells it contains
-- how the player enters that plot after claiming it
+**Goal**  
+Create the first playable networked prototype with a dedicated authoritative server.
 
-We also need to make sure the rendering/tile generation adapts when we change plot size. Right now it seems we have hard coded spacing that might not work with larger plots.
+**Completed**
+- Node.js/TypeScript WebSocket server
+- Godot client connection flow
+- authoritative world state
+- plot claiming
+- persistent storage
+- reconnect support using server-issued identity/profile data
+- basic multiplayer synchronization
 
-Recommended structure:
-- World map = A zoomed out view of the whole world that the server has generated. Later, this will be where you can see the other players' zones. (stats, population etc)
-- Player plot = one playable local area that the camera will zoom in on when claiming a plot. In this view, the player will only be able to see the immediate area around them (maximum 7x7 or less depending on how much the server has generated).
-  The rest of the world stops rendering when the player claims/enters the plot.
-- Local plot grid = many smaller gameplay cells inside the plot
-
-That lets the world map stay readable while the in-plot gameplay has enough room for rubble, navigation, structures, and later vertical development.
-
-## M2.1 — Define the 2-layer world model
-
-### Deliverables
-- finalize terminology:
-  - `world_map`
-  - `player_plot`
-  - `resource_zone`
-  - `local_tile` or `plot_cell`
-
-### Recommended answer
-For now:
-- one world_map (generated by server)
-- one playable `player_plot` after it is claimed
-- local grid inside that plot
-- resource zones stay outside the plot and are not directly part of the starting local grid
-
-### Technical work
-**Server**
-- add explicit world-map vs plot identity separation if not already formalized
-- zone payload should identify whether a zone is:
-  - claimable player zone
-  - already owned player zone
-  - resource zone
-- ensure player profile tracks active claimed zone
-
-**Client**
-- world map must know whether clicking a zone means:
-  - claim zone
-  - enter owned plot
-  - inspect unavailable zone
-
-### Done when
-- the project has a locked vocabulary and data ownership model for zone vs plot vs local tile
-- there is no longer any ambiguity that the current M1 tile size is the actual player plot size
-
-## M2.2 — Redesign the playable plot footprint
-
-### Deliverables
-Design the real starting playable plot dimensions.
-
-### Recommendation
-Do **not** think in terms of one M1 tile = one full player plot anymore.
-Think in terms of:
-- a local grid size such as `12x12`, `16x16`, or `20x20`
-- each local tile representing a walkable/buildable gameplay cell
-- one shack occupying one or more local cells
-- rubble distributed across many cells
-
-### Technical details to decide
-- tile footprint in Godot units
-- number of local tiles in a starting plot
-- whether all tiles are same elevation at first
-- whether later verticality uses floors/layers or stacked scenes
-
-### Recommended first implementation
-- local grid: `12x12` or `16x16`
-- one cell = 1m x 1m-ish visual footprint in 3D
-- keep all early cells flat in height
-- introduce vertical layering later, not now
-
-### Technical work
-**Shared/data**
-- define `plot_width`, `plot_height`
-- define local tile coordinates relative to plot origin
-- define tile categories:
-  - blocked rubble
-  - partially cleared rubble
-  - flat cleared ground
-  - occupied by shack
-  - edge/exit tile
-
-**Client**
-- update `PlotRenderer3D` or replace it with a local-cell renderer for the plot scene
-- current claim-world rendering may remain for the world map, but local plot rendering needs a new scale
-
-### Done when
-- there is a concrete local plot grid spec
-- the team knows exactly how big the first playable ruined plot is
-- the current M1 placeholder scale is no longer treated as final
-
-## M2.3 — Split world-map scene from plot scene
-
-### Deliverables
-Separate the current M1 world view from the actual playable plot scene.
-
-### Recommended scene split
-- `WorldMap3D` or equivalent = zone claiming / owned-zone selection
-- `PlayerPlot3D` or equivalent = actual gameplay area after entering a claimed zone
-
-### Technical work
-**Client scenes/scripts**
-- introduce dedicated plot scene
-- keep current M1 selection/claim flow in world map scene
-- add transition controller:
-  - claim zone
-  - enter plot
-  - return to map later
-
-### Done when
-- the player can be in either world-map mode or plot mode
-- entering a claimed zone loads the plot scene instead of just staying on the claim map
-
-## M2.4 — Ownership restrictions and relocation rules
-
-### Deliverables
-Implement the rule:
-- player can only actively play on one claimed zone
-- must resign current active zone before claiming a different one
-
-### Technical work
-**Server**
-- claim validation should reject claiming a second active player zone
-- add a future-safe `resign_zone` action
-- persist active-zone assignment in player profile/world data
-
-**Client**
-- world-map popup should adapt by context:
-  - free zone -> Claim
-  - owned zone -> Enter
-  - already has active zone elsewhere -> disabled or explanatory text
-
-### Done when
-- multi-zone hopping is blocked by server authority
-- UI clearly explains why another zone cannot be claimed
-
-## M2.5 — Plot intro sequence / camera staging
-
-### Deliverables
-When entering a newly claimed plot:
-- a short intro/cutscene or scripted camera move plays
-- lore/objective text is shown
-- camera lands on first NPC + shack in rubble
-
-### Technical work
-**Client**
-- add plot-entry sequence state machine
-- disable player input during intro
-- scripted camera path or tween
-- subtitle/panel overlay for intro text
-
-**Content hooks**
-- intro text should be data-driven, not hardcoded into multiple places
-
-### Done when
-- plot entry feels intentional and staged, not like spawning into a debug test area
-
-## M2.6 — Save/schema versioning before local plot complexity grows
-
-### Deliverables
-Now that the save format will expand, add migration/versioning before piling on rubble, NPCs, and structure states.
-
-### Technical work
-- explicit world schema version
-- migration helper on server load
-- migration-safe defaults for missing fields
-
-### Done when
-- older saves can be upgraded without manual editing
-
-## M2 exit criteria
-- world map and playable plot are formally separate
-- player can claim one zone and enter its plot
-- plot has a real local grid design
-- ownership/relocation rules are enforced
-- intro transition exists in at least a basic version
-- save/schema path is prepared for future milestones
+**Result**  
+The project established a working client/server base and a shared persistent world.
 
 ---
 
-# M3 — Ruined Starting Plot, Rubble Tiles, Scavenging, Clearing, and First NPC Task Execution
+### M0.5 - Coordinate World and Expansion Rules
 
-## Purpose
-Create the actual first 10–30 minutes of gameplay:
-- one shack
-- one NPC
-- rubble everywhere
-- scavenging for survival materials
-- clearing tiles to create access and buildable space
+**Goal**  
+Move from a rough prototype into a deterministic coordinate-based world model.
 
-## Why this comes before “real building systems”
-The early fantasy is not “place buildings immediately.” It is:
-- survive
-- scavenge
-- clear
-- reclaim space
-- open the plot edge
+**Completed**
+- stable coordinate-based plot IDs
+- deterministic plot typing rules
+- 3x3 starter world
+- 3x3 module expansion
+- world update broadcasting
+- presence snapshots
+- latency support
+- clearer separation between world data and client rendering
 
-That means rubble and first-task execution come before normal city-builder placement.
-
-## M3.1 — First NPC data model and persistence
-
-### Deliverables
-Add the first real NPC to the plot from the start.
-
-### Minimum data fields
-- `npc_id`
-- `display_name`
-- `home_structure_id` or `home_tile_id`
-- `current_task`
-- `position`
-- `facing`
-- `needs`
-- `traits` (placeholder-compatible)
-- `state`
-
-### Technical work
-**Server**
-- NPC persistence in world/profile data
-- NPC snapshot in plot payload
-
-**Client**
-- NPC instancing/rendering in plot scene
-- selected NPC or inspected NPC support later
-
-### Done when
-- the first NPC exists from plot start and survives reconnect/reload
-
-## M3.2 — NPC movement foundation
-
-### Deliverables
-The first NPC must be able to move through the plot according to accessible cells.
-
-### Technical details
-Need answers for:
-- grid-based movement or free navigation over a grid
-- pathfinding representation
-- blocked rubble behavior
-- movement speed and interruption rules
-
-### Recommendation
-Start with:
-- grid-based pathfinding on local plot cells
-- one NPC only
-- deterministic movement
-- no crowding system yet
-
-### Technical work
-Recommended early approach:
-- server authoritative tasks/state
-- client animates/interpolates movement
-- path may be computed server-side or client-side with stricter validation later
-
-**Needed systems**
-- accessible cell graph
-- blocked cell graph from rubble/structures
-- movement request/goal system
-- path recalculation when tiles are cleared
-
-### Done when
-- the NPC can walk from shack-adjacent cells to reachable rubble/targets
-- uncleared rubble blocks pathing
-
-## M3.3 — Animation integration pipeline
-
-### Deliverables
-Set up the technical path for NPC animations, even if the first pass uses placeholders.
-
-### Likely source
-A friend will likely make animations in Blockbench.
-
-### Technical prep needed now
-- choose import pipeline into Godot
-- decide skeleton/rig standards
-- define required animation names
-- define fallback placeholder animation set
-
-### Recommended first animation set
-- `idle`
-- `walk`
-- `scavenge`
-- `clear_rubble`
-- `carry`
-- `build` (placeholder for later)
-
-### Technical work
-**Client**
-- NPC scene with animation controller/state machine
-- movement state drives walk/idle
-- task state drives action loops
-
-### Done when
-- the first NPC visually idles and walks correctly
-- task execution can trigger a placeholder action animation
-
-## M3.4 — Rubble tile data model
-
-### Deliverables
-Formalize rubble as gameplay, not decoration.
-
-### Required per-tile fields
-- `tile_type`
-- `blocked_for_pathing`
-- `clear_progress`
-- `scavenge_progress`
-- `loot_table_id` or `rubble_category`
-- `buildable`
-- `flattened`
-- `visual_variant`
-
-### Recommended rubble categories
-- mixed debris
-- wood-heavy debris
-- metal-heavy debris
-- cloth/junk debris
-- food scrap debris
-
-### Done when
-- rubble tiles can differ in loot flavor and gameplay state
-
-## M3.5 — Scavenge action
-
-### Deliverables
-The player can request that the NPC scavenges a rubble tile.
-
-### Flow
-1. player selects rubble tile
-2. popup shows available action(s)
-3. choose `Scavenge`
-4. task goes to NPC
-5. NPC moves there if reachable
-6. action animation/time plays
-7. loot is produced
-8. tile scavenge state updates
-
-### Technical work
-**Server**
-- action validation
-- loot roll
-- task completion state
-
-**Client**
-- action request UI
-- action progress display
-- loot feedback popup/log
-
-### Recommended first loot pool
-- wood
-- stone
-- cloth
-- scrap metal/sheet metal
-- tiny food finds
-
-### Done when
-- at least one rubble tile can be scavenged and generate useful output
-
-## M3.6 — Clear action
-
-### Deliverables
-The player can request rubble clearing separately from scavenging.
-
-### Important design rule
-Scavenge and clear should be related but not identical.
-
-Recommended behavior:
-- scavenging extracts useful value
-- clearing removes obstruction and levels the tile
-- some tiles may still block movement after scavenging until clearing is done
-
-### Technical work
-- clear progress value
-- movement graph update on completion
-- tile state transition:
-  - rubble -> partially cleared -> flat ground
-
-### Done when
-- clearing a tile can open new movement routes
-- the player feels they are physically reclaiming space
-
-## M3.7 — First player → NPC task request loop
-
-### Deliverables
-The NPC should “listen” to player requests in the intended way.
-
-### Important framing
-The player should not directly puppet the NPC.
-The player issues tasks or priorities.
-
-### Recommended first task categories
-- scavenge tile
-- clear tile
-- return to shack
-- maybe rest later
-
-### Technical work
-Need a minimal job/task system now, even if it is tiny.
-
-**Suggested structure**
-- `task_id`
-- `task_type`
-- `target_tile`
-- `assigned_npc_id`
-- `status`
-- `priority`
-
-### Done when
-- selecting a rubble tile and choosing an action reliably results in NPC execution if reachable
-
-## M3.8 — Starting plot layout authoring
-
-### Deliverables
-Create the first authored starting plot layout.
-
-### Needs
-- shack footprint
-- NPC spawn point
-- initial accessible cells near shack
-- blocked rubble field layout
-- edge of plot and first reachable corridor target
-
-### Recommendation
-Do not randomize this heavily at first.
-Use one authored layout first so pacing can be tuned.
-
-### Done when
-- the first plot feels intentionally designed rather than procedurally messy
-
-## M3.9 — UI and readability for early tasks
-
-### Deliverables
-The player must be able to understand:
-- which tiles are blocked
-- which tiles are scavengable
-- which tiles are cleared/buildable
-- what the NPC is currently doing
-- what loot was found
-
-### UI needs
-- tile popup upgrades
-- task/status label for NPC
-- event/log feedback
-- maybe debug overlays in developer mode
-
-### Done when
-- the early loop is readable without watching raw debug output
-
-## M3 exit criteria
-- plot starts with one NPC and one shack
-- rubble tiles have real state
-- NPC moves through reachable cells only
-- player can issue scavenge and clear requests
-- clearing changes pathing/buildability
-- first task execution loop exists with at least basic animation support
+**Result**  
+The world became more scalable and predictable, making it suitable for the next rendering milestone.
 
 ---
 
-# M4 — Survival Loop, Shack Upgrades, Basic Crafting, and First Domestic Utility Objects
+### M1 - 3D Shared World Rendering
 
-## Purpose
-Turn the scavenging/clearing loop into an actual survival-driven opening.
+**Goal**  
+Render the server world in 3D in Godot and support direct plot interaction.
 
-## Why this is next
-Scavenging only becomes meaningful if it feeds a real need:
-- warmth
-- food stability
-- rest
-- maybe light as a modifier
+**Completed**
+- dedicated 3D world scene
+- server-driven tile spawning and updates
+- modular 3D plot/tile rendering
+- hover and selection in 3D
+- click-to-inspect plot flow
+- claim flow from in-game popup
+- main menu/login overlay
+- world disabled until login
+- in-game quit/menu controls
+- live updates reflected in the 3D world
 
-## M4.1 — Minimal early needs model
-
-### Deliverables
-Add the first needs that drive urgency.
-
-### Recommended first set
-- hunger / food access
-- warmth
-- rest
-- optional: light as a productivity/safety modifier rather than a hard need at first
-
-### Technical work
-**Server**
-- needs decay/update loop
-- thresholds for bad states
-- modifiers from shelter/upgrades
-
-**Client**
-- visible needs UI for the first NPC
-- warnings without turning into alarm spam
-
-### Done when
-- the player feels time pressure to improve conditions, not just clear rubble forever
-
-## M4.2 — Basic inventory and item ownership
-
-### Deliverables
-The scavenged materials must exist in some usable inventory model.
-
-### Recommended first scope
-- one tiny player/settlement stockpile attached to shack
-- first NPC can gather into it automatically
-- no complex hauling network yet
-
-### First item list
-- wood
-- stone
-- cloth
-- scrap metal
-- food scraps or basic food
-- fuel scraps if needed
-
-### Done when
-- scavenged materials can be stored and consumed by crafting/upgrades
-
-## M4.3 — Basic crafting requests
-
-### Deliverables
-The player can request simple crafted improvements.
-
-### Recommended first recipes
-- campfire / barrel fire / fire pit
-- crude bed improvement
-- simple storage crate
-- maybe lantern or candle holder later
-
-### Technical work
-Need a tiny recipe system:
-- required inputs
-- required work time
-- output object
-- required location/context if any
-
-### Done when
-- scavenged materials can be turned into one or two meaningful survival objects
-
-## M4.4 — Shack upgrade / domestic object placement
-
-### Deliverables
-The shack should become meaningfully improvable before the first true new building is constructed.
-
-### First domestic upgrades
-- heat source
-- better sleeping arrangement
-- storage
-- maybe light source
-
-### Technical work
-- define shack interior/exterior attachment points or a simplified object placement model
-- object state and rendering
-- effect application to NPC needs
-
-### Done when
-- the player can materially improve the first NPC’s living condition without yet building a new residential block
-
-## M4.5 — Basic action scheduling conflicts
-
-### Deliverables
-The first NPC should not do everything instantly.
-
-### Needed behavior
-- if scavenging, they are busy
-- if crafting, they are busy
-- if sleeping/resting, they are unavailable
-
-### Done when
-- the player experiences simple tradeoffs instead of perfect throughput
-
-## M4.6 — First domestic feedback loop
-
-### Deliverables
-When the player builds a heat source or bed improvement, they should feel the effect.
-
-### Examples
-- warmth decays slower
-- rest quality improves
-- NPC recovers faster
-- night productivity improves with light later
-
-### Done when
-- the first 3–5 upgrades matter and are not cosmetic only
-
-## M4 exit criteria
-- NPC has a small survival loop with real needs
-- scavenged materials are stored and used
-- player can craft/place a few domestic upgrades
-- shack can be improved before normal expansion begins
-- one-NPC life feels fragile but manageable
+**Result**  
+The project is now a working multiplayer 3D prototype with login, inspection, claiming, persistence, and shared world rendering.
 
 ---
 
-# M5 — Buildable Ground, First New Residential Structure, and Second NPC Arrival
+## Current Milestone
 
-## Purpose
-Transform reclaimed space into deliberate growth.
+## M2 - Multi-Scale Shared World Foundation
 
-## Why now
-Only after the player has:
-- survived
-- scavenged enough
-- cleared enough
-- stabilized the first NPC’s basic condition
+### Summary
 
-should the game unlock the first major player-built expansion.
+M2 should establish the first proper version of the game's **two-scale shared world**.
 
-## M5.1 — Buildability rules for local tiles
+This milestone should not treat the player plot as a completely isolated pocket dimension.  
+Instead, it should introduce **two viewing/detail modes over the same shared world context**:
 
-### Deliverables
-Building cannot happen on raw rubble.
+- **World Map mode**
+- **Player Plot mode**
 
-### Required tile conditions for building
-- cleared
-- flattened
-- reachable
-- not occupied
-- maybe adjacency rules for larger footprints
+The difference between these modes is not that they are separate worlds.  
+The difference is:
 
-### Technical work
-- tile buildability evaluation
-- build-preview overlay
-- footprint validation
+- how much of the world is rendered
+- what detail level is rendered
+- what the player is allowed to interact with
 
-### Done when
-- the player can see exactly why a tile is or is not buildable
-
-## M5.2 — First buildable structure definition
-
-### Deliverables
-Implement the first true new buildable structure.
-
-### Recommendation
-Call it something like:
-- `Small Residential Block`
-- `Starter Housing Unit`
-- `Worker Shelter Block`
-
-Avoid implying huge dense urban blocks too early unless that is your formal terminology.
-
-### Technical work
-Need structure definitions that support:
-- footprint
-- materials needed
-- construction state
-- usable capacity
-- occupancy state
-
-### Done when
-- one authored first-residential structure can be placed only on valid cleared tiles
-
-## M5.3 — Construction lifecycle for the first new building
-
-### Deliverables
-The structure should not appear fully formed.
-
-### Minimum states
-- planned
-- under_construction
-- complete_usable
-
-### Technical work
-- construction task generation
-- material reservation/consumption
-- work progress
-- rendering stages / placeholder visuals
-
-### Done when
-- the first new residential structure goes through visible construction stages
-
-## M5.4 — NPC-assisted construction behavior
-
-### Deliverables
-The first NPC should be able to participate in building the new residential unit.
-
-### Technical work
-- use same task foundation from M3/M4
-- add build task type
-- action animation placeholder
-
-### Done when
-- the first NPC can help transform reclaimed ground into a completed new home
-
-## M5.5 — Housing capacity and reassignment logic
-
-### Deliverables
-Once the first new residential building is completed:
-- either the first NPC may move there
-- or it becomes available for a second incoming NPC
-
-### Need to decide
-Recommended early behavior:
-- better housing attracts occupation priority
-- original shack remains low-tier housing
-- second NPC arrival can use the shack if first NPC upgrades into the new unit
-
-### Technical work
-- occupancy system
-- housing quality rating (simple version)
-- reassignment rule
-
-### Done when
-- the first new home changes actual living arrangements
-
-## M5.6 — Second NPC arrival trigger
-
-### Deliverables
-The second NPC should not spawn arbitrarily.
-It should arrive because usable housing capacity now exists.
-
-### Technical work
-- trigger based on completed residential capacity and maybe minimum stability conditions
-- arrival event / simple onboarding sequence
-
-### Done when
-- population growth is tied to housing and recovery, not a timer alone
-
-## M5 exit criteria
-- cleared land can become buildable
-- first new residential structure can be built
-- it goes through visible construction
-- housing capacity matters
-- a second NPC can arrive or be reallocated through housing logic
+This preserves the feeling of a real shared world while allowing the player's own city to become richer and more detailed.
 
 ---
 
-# M6 — Reaching the Plot Edge and Unlocking External Resource Access
+### M2 Design Intent
 
-## Purpose
-Connect the reclaimed local plot to the wider world.
+The world should remain continuous and social.
 
-## Why now
-The player should lack practical access to outside resource zones until they have cleared a route to the plot edge. This is a strong spatial progression gate and should be honored.
+The intended player experience is:
 
-## M6.1 — Plot edge access rules
+1. See the shared world at a macro scale
+2. Recognize neighboring cities by their visible shells/exteriors
+3. Enter a more local view centered on your own plot
+4. Continue seeing nearby surrounding plots/resource zones
+5. Interact fully only with your own plot
+6. Later see public outside NPC activity in nearby areas while interiors remain private
 
-### Deliverables
-Define what counts as “reaching the outside.”
-
-### Recommended first rule
-When the player clears at least one valid path from shack/core area to a designated edge-exit tile, external resource actions become available.
-
-### Technical work
-- edge-exit tiles in local plot data
-- path connectivity check from active settlement area to exit
-
-### Done when
-- external access is unlocked by spatial reclaiming, not arbitrary tech unlock
-
-## M6.2 — External resource interaction model
-
-### Deliverables
-Decide how resource zones work in the first implementation.
-
-### Recommended first implementation
-Keep it simple:
-- resource zones are not fully free-roam maps yet
-- unlocking edge access enables first expedition/gather requests to nearby resource zones
-
-### Done when
-- the player can access at least one new source of materials because they opened the plot edge
-
-## M6.3 — Outbound/inbound task extension
-
-### Deliverables
-NPCs can leave the local plot to perform a simple gather/scavenge trip and return.
-
-### Technical work
-- off-plot task state
-- travel timer or travel scene abstraction
-- result payload when returning
-
-### Done when
-- outside access materially expands the early economy
-
-## M6 exit criteria
-- reaching the edge matters
-- external resource access unlocks as a consequence of cleanup
-- the game now expands beyond the initial ruined plot in a natural way
+This means M2 is not just about adding a larger playable area.  
+It is about establishing a **multi-scale rendering and data model** that supports both macro and local play.
 
 ---
 
-# M7 — Foundations for Later Signature Systems (Do not rush these into M2–M4)
+### World Map Mode
 
-## Purpose
-Prepare the systems that define the larger identity of the game without prematurely bloating the earliest loop.
+**Purpose**
+- macro overview
+- navigation
+- claiming
+- seeing city shapes and neighboring development
+- understanding the broader structure of the shared world
 
-## M7.1 — Richer NPC individuality
-Add later:
-- deeper traits
-- preferences
-- relationships
-- grudges
-- lies/manipulation
-- faction pressure
+**Should render**
+- plot bases
+- ownership/state
+- city shells / exterior building silhouettes
+- resource zone shells/public exterior structure
+- broad roads/terrain markers later
 
-Only placeholders and extension points are required in the earliest survival slice.
+**Should not render**
+- interiors
+- interior objects
+- fine local clutter
+- deep simulation details
+- most NPC detail
 
-## M7.2 — Workforce/tool/machine gating
-Early use:
-- crude tools
-- one primitive worker
-- one or two simple recipes
-
-Later use:
-- resource gate
-- tool gate
-- production gate
-- workforce gate
-- fuel/power gate
-- maintenance gate
-- service/interior gate
-
-## M7.3 — Company/task execution model
-The long-term signature loop should become:
-player intent -> NPC/company execution -> blockers -> interventions -> consequences
-
-But do **not** over-engineer companies in the first 1-NPC ruined-start slice.
-Use a tiny task system first, then expand toward:
-- managers
-- firms
-- inter-company dependencies
-- blocker popups
-- staffing gaps
-- service activation problems
-
-## M7.4 — Shell vs operation separation
-Early use:
-- shack exists but is low quality
-- first residential structure becomes usable only when built
-
-Later use:
-- shell complete but blocked by furniture, utilities, staff, permits, etc.
+World Map mode should prioritize readability and scale over detail.
 
 ---
 
-# Milestone dependencies summary
+### Player Plot Mode
 
-## M2 depends on
-- M1 complete
+**Purpose**
+- local city management
+- building
+- inspection
+- future scavenging and early survival tasks
+- future exterior/interior switching for the owned plot
 
-## M3 depends on
-- local plot grid and plot scene from M2
-- authored plot layout from M2
+When entering Player Plot mode, the client should not render the entire world in high detail.  
+Instead, it should render a **local neighborhood window** centered on the player's owned plot.
 
-## M4 depends on
-- scavenging/task loop from M3
-- first NPC persistence/movement from M3
+Recommended first implementation target:
+- **up to 7x7 plots centered on the owned plot**
+- smaller if the world does not contain a full 7x7 around that location yet
 
-## M5 depends on
-- clearing/buildability from M3
-- item storage/crafting from M4
-- basic survival stability from M4
+**In this mode:**
 
-## M6 depends on
-- local plot edge/path rules from M3/M5
-- outbound task model from M3/M4 foundations
+#### Owned plot
+Render:
+- full exterior detail
+- local objects
+- rubble/debris
+- shack/starter structure
+- interactables
+- owned NPCs
+- later interior entry/switching
 
----
+#### Nearby other player plots
+Render:
+- shell/exterior only
+- public outside structure
+- no interior details
+- no interior objects
+- no inside-only NPCs
 
-# Recommended immediate implementation order after M1
+#### Nearby resource zones
+Render:
+- public exterior/resource content
+- world objects visible from outside
+- later public/shared activity
 
-## Step bundle A — M2 foundation
-1. Separate world map scene and plot scene
-2. Lock local plot dimensions
-3. Implement plot-entry transition/cutscene
-4. Add active-zone ownership/resign rules
-5. Add save/schema versioning
-
-## Step bundle B — M3 playable reclaim slice
-1. Add first NPC persistence/rendering
-2. Add movement/pathing on local grid
-3. Add rubble tile states
-4. Add scavenge action
-5. Add clear action
-6. Add first task execution loop
-7. Add placeholder idle/walk/action animation support
-
-## Step bundle C — M4 survival slice
-1. Add basic needs
-2. Add simple shack inventory/storage
-3. Add first crafting recipes
-4. Add heat source / bed / storage upgrades
-5. Make those upgrades visibly affect the NPC
-
-## Step bundle D — M5 growth trigger
-1. Add buildable-tile rules
-2. Add first residential structure
-3. Add construction lifecycle
-4. Add housing capacity logic
-5. Add second NPC arrival
-
-## Step bundle E — M6 outside unlock
-1. Add edge-access unlocking
-2. Add first external resource action/trip
-3. Expand material availability
+This keeps the local view socially connected while preserving privacy and performance.
 
 ---
 
-# What should be locked before starting M2 implementation
+### Public vs Private Visibility Rule
 
-## 1. Local plot size
-Must be decided before rendering and authored layout work.
+This should become a foundational rule for future milestones.
 
-## 2. First NPC control philosophy
-Recommended answer:
-- player issues tasks/priorities
-- NPC executes autonomously within rules
-- no direct puppeteering
+**Public / visible to nearby players**
+- plot shell / exterior silhouette
+- outside structures
+- outside props intended to be visible
+- NPCs physically outside in public/shared space
+- NPCs outside cities, on streets, or in resource zones
 
-## 3. Rubble action model
-Recommended answer:
-- scavenging and clearing are separate but related actions
+**Private / not visible to outsiders**
+- interiors
+- interior furniture/objects
+- interior-only simulation details
+- NPCs located inside player buildings/interiors
 
-## 4. First survival pressure set
-Recommended answer:
-- warmth
-- food
-- rest
-- light later as a modifier
+For the owner, more detail is visible on their own plot.  
+For other players, only public/exterior-facing information should be shown.
 
-## 5. First residential structure naming
-Need consistent terminology so “block” means something clear in UI/docs.
-
-## 6. First art/animation pipeline agreement
-Need a minimal agreement now for how Blockbench assets/animations will be delivered and named.
+This rule should influence:
+- data modeling
+- rendering
+- protocol design
+- culling/interest management later
+- gameplay expectations
 
 ---
 
-# Final recommendation
+### M2 Technical Goals
 
-The best next major target is not “generic buildings” or “larger economy.”
+M2 should introduce the first structure for:
 
-It is:
+1. **plot shell / summary data**
+2. **detailed owned-plot data**
+3. **neighborhood-based loading/rendering**
+4. **mode switching between World Map and Player Plot**
+5. **starter ruined owned plot state**
+6. **future outside/public actor visibility**
 
-**Claim zone -> enter ruined plot -> meet first NPC -> scavenge -> clear -> survive -> improve shack -> reclaim buildable land -> build first residential structure -> attract second NPC.**
+This should be built in a way that supports later systems without requiring a rewrite.
 
-That is the first true gameplay arc that expresses the project’s identity.
+---
 
+### M2 Deliverables
+
+**World / Data**
+- preserve the shared world as the main world model
+- introduce shell/exterior summary data for plots
+- introduce richer detailed data for owned/local plot content
+- support neighborhood-based data centered on a chosen plot
+- keep persistence compatible with future expansion
+
+**Client / Rendering**
+- World Map mode
+- Player Plot mode
+- local neighborhood rendering around owned plot
+- own plot rendered in higher detail
+- neighboring plots/resource zones rendered in reduced public detail
+- clear enter/exit flow between modes
+
+**Starter Local Experience**
+- ruined starter owned plot
+- blocked/unblocked space
+- rubble/debris placeholders
+- starter shack placeholder
+- starter NPC placeholder or marker
+- inspectable local elements
+
+**Architecture**
+- maintain modular client/server responsibilities
+- avoid turning the owned plot into a separate disconnected world
+- support future interiors without forcing them into M2
+- establish render/detail layers instead of one monolithic world renderer
+
+---
+
+### Recommended First M2 Scope
+
+M2 should focus on structure, not content volume.
+
+Good first-scope priorities:
+- define the two-scale world model
+- add shell vs detailed plot data separation
+- add World Map vs Player Plot mode switching
+- add a local neighborhood render window
+- make the owned plot feel like a real place with a ruined starter state
+- keep neighboring plots visible in reduced detail
+
+This creates the correct container for future gameplay.
+
+---
+
+### M2 Out of Scope
+
+Unless extremely cheap to add, M2 should avoid full implementation of:
+
+- full NPC AI/simulation
+- advanced pathfinding
+- production chains
+- full interiors
+- interior furniture systems
+- advanced build placement systems
+- detailed scavenging loops
+- resource extraction depth
+- animation-heavy systems
+- large-scale optimization work
+
+These can and should come later once the shared-world local-detail structure is in place.
+
+---
+
+### Why M2 Matters
+
+If M2 is done correctly, it becomes the foundation for:
+
+- scavenging and early survival gameplay
+- NPC work and outside/public life
+- local city management
+- exterior vs interior mode switching
+- public visibility of neighboring city activity
+- future social and logistical systems
+- later streets, resource zones, and travel layers
+
+If this is skipped or simplified into isolated instances, the game risks losing the shared-world social identity that makes the concept strong.
+
+---
+
+## Future Milestones
+
+The milestones below remain intentionally broader and may evolve as M2 clarifies architecture.
+
+---
+
+## M3 - Early Plot Gameplay
+
+**Goal**  
+Turn the owned plot into the first real playable city space.
+
+**Likely focus**
+- clearing rubble
+- reclaiming usable building space
+- first basic orders/actions
+- first starter NPC workflow
+- first public-vs-private visibility rules in practice
+- first real local object interactions
+
+**Notes**
+- should build directly on M2 neighborhood/local detail work
+- should not break the shared-world continuity established in M2
+
+---
+
+## M4 - Exterior Building and City Skeleton
+
+**Goal**  
+Allow the owned plot to develop visible structure and begin to read like a real city.
+
+**Likely focus**
+- roads / pathways
+- exterior building placement
+- city shell growth visible to neighbors
+- public exterior props
+- improved shell rendering at map scale
+- stronger city identity from outside
+
+**Notes**
+- shell/exterior readability should remain important for both World Map and nearby local views
+
+---
+
+## M5 - NPC Life and Work
+
+**Goal**  
+Introduce the first meaningful social/simulation layer.
+
+**Likely focus**
+- NPC roles
+- task assignment / work systems
+- movement in outside/public areas
+- visible public NPC activity
+- gradual support for NPCs existing both outside and inside structures
+
+**Notes**
+- outside vs inside visibility should remain a core rule
+- other players should not need full private NPC simulation from your interiors
+
+---
+
+## M6 - Interiors and Private Spaces
+
+**Goal**  
+Make player buildings feel inhabited and meaningful beyond shell/exterior structure.
+
+**Likely focus**
+- interior mode for owned buildings
+- rooms
+- interior furniture and interactables
+- inside-only NPC behavior
+- privacy rules for interior state
+
+**Notes**
+- this should apply primarily to the owner's plot/buildings
+- other players should still only see shell/public-facing information unless special rules are added later
+
+---
+
+## M7 - Resource Zones and Shared Outside Activity
+
+**Goal**  
+Expand public/shared world life beyond city plots.
+
+**Likely focus**
+- resource zones as shared/public spaces
+- outside NPC activity beyond city borders
+- travel and public work/extraction
+- visibility of friends/NPCs in the outside world
+- stronger connection between cities and surrounding land
+
+**Notes**
+- this milestone becomes much stronger if M2 already established neighborhood continuity and public actor visibility rules
+
+---
+
+## M8 - Systems Depth and Emergent City Life
+
+**Goal**  
+Move from foundational mechanics into richer city simulation.
+
+**Likely focus**
+- logistics
+- indirect control
+- bureaucracy/coordination friction
+- production chains
+- social outcomes
+- more emergent city behavior
+
+**Notes**
+- this is where the long-term identity of the game should become clearer
+- systems should grow from the modular architecture set earlier, not from shortcuts
+
+---
+
+## Ongoing Rules for All Milestones
+
+These principles should apply throughout the project:
+
+- keep server authority clear
+- keep client/server responsibilities modular
+- preserve shared-world continuity
+- distinguish shell, exterior, interior, public, and private data
+- avoid spaghetti architecture
+- prefer clear data ownership and protocol boundaries
+- build foundations before scale/content explosions
+- optimize later unless performance becomes a blocker
+- preserve the social readability of the world
+
+---
+
+## Current Priority
+
+The current priority is **M2 preparation and implementation planning**.
+
+That means:
+- finalizing the exact M2 scope
+- turning M2 into server/client tasks
+- defining data layers and protocol additions
+- deciding file-level architecture changes
+- implementing the two-scale shared-world foundation cleanly
+
+Once that is in place, future gameplay systems will have a proper home.

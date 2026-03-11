@@ -166,3 +166,60 @@ This project is in early development. Version numbers are informal for now.
   - no final textures or detailed 3D models yet
 - No buildings, interiors, NPC gameplay, or deeper city simulation yet.
 - No settings/options menu yet for display mode, resolution, or graphics preferences.
+
+---
+
+## [0.0.5] — 2026-03-11 — M2 Foundation Progress (Owned Plot Detail + Clearable Rubble + Debug Local Interaction)
+
+### Added
+- Server-side plot shell data:
+  - every generated plot now has public-facing `shell` data for future World Map / reduced-detail rendering.
+- Server-side owned plot detail data:
+  - claimed `PLAYER` plots now initialize local `detail` data on first claim.
+- Starter local plot generation:
+  - claimed player plots now generate a centered shelter footprint with rubble surrounding it out toward the plot edges.
+- Local plot cell model:
+  - `x`
+  - `y`
+  - `blocked`
+  - `clearable`
+  - `terrain`
+- Starter object model for owned plots:
+  - `SHACK`
+  - `NPC_MARKER`
+- World helper functions for local plot logic:
+  - `ensureClaimedPlayerPlotInitialized(...)`
+  - `getPlotDetailCell(...)`
+  - `isPlotDetailCellClearable(...)`
+  - `clearPlotDetailCell(...)`
+- Temporary server debug action:
+  - `debug_clear_plot_cell`
+- Temporary in-game debug UI path:
+  - plot popup button for clearing local cell `(0,0)` on the player's own claimed plot.
+- Network client support for the debug local clear action:
+  - request send path
+  - result signal handling
+
+### Changed
+- Claimed player plots now update their public shell from `EMPTY` to `RUINED` when local starter detail is initialized.
+- Generic rubble is now modeled in the **cell layer** instead of as separate fake rubble objects.
+- Local plot starter data now follows the intended design direction more closely:
+  - shelter in the center
+  - rubble surrounding the shelter
+  - future expansion expected to happen outward from the center
+- Plot popup UI can now expose a temporary debug action for the local player's own plot only.
+
+### Removed
+- Removed `RUBBLE_PILE` from the starter object model.
+- Removed the mixed prototype approach where some rubble existed as separate objects while the rest only existed as terrain data.
+
+### Notes / Known limitations
+- This is still M2 foundation work, not the full Player Plot implementation.
+- World Map mode vs Player Plot mode is not implemented yet.
+- Local neighborhood loading is not implemented yet.
+- Local plot rendering is not implemented yet.
+- The current local cell clearing flow is a temporary debug/testing path only.
+- The next major M2 step is expected to focus on:
+  - neighborhood/local plot protocol flow
+  - mode switching
+  - local owned-plot rendering

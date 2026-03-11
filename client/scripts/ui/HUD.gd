@@ -72,6 +72,7 @@ func _ready() -> void:
 	# The popup panel is the new interaction path for plot claims.
 	claim_button.pressed.connect(_on_claim_pressed)
 	plot_info_panel.claim_requested.connect(_on_plot_info_claim_requested)
+	plot_info_panel.debug_clear_requested.connect(_on_plot_info_debug_clear_requested)
 
 	# Find NetClient (you already used this pattern)
 	net = get_tree().get_first_node_in_group("netclient") as NetClient
@@ -93,6 +94,7 @@ func _ready() -> void:
 	net.plot_updated.connect(_on_plot_update)
 	net.world_patch_received.connect(_on_world_patch)
 	net.claim_result_received.connect(_on_claim_result)
+	net.debug_clear_plot_cell_result_received.connect(_on_debug_clear_plot_cell_result)
 
 	# IMPORTANT: identity_ready signature is now (player_id, display_name)
 	net.identity_ready.connect(_on_identity_ready)
@@ -177,16 +179,42 @@ func _on_plot_selected(plot: Dictionary, is_claimable: bool) -> void:
 
 	selected_plot_id = str(plot.get("id", ""))
 
+	var raw_claimed_by = plot.get("claimed_by", null)
+	var claimed_by := "" if raw_claimed_by == null else str(raw_claimed_by)
+
+	var is_owned_by_me := (
+		_is_logged_in
+		and net != null
+		and claimed_by != ""
+		and claimed_by == net.player_id
+	)
+
 	# Keep the old button state aligned even though it is hidden,
 	# so we still have one source of truth for claimability.
 	claim_button.disabled = not (_is_logged_in and is_claimable)
 
-	plot_info_panel.show_plot(plot, is_claimable, _is_logged_in)
+	plot_info_panel.show_plot(plot, is_claimable, _is_logged_in, is_owned_by_me)
 	
 func _on_plot_info_claim_requested(plot_id: String) -> void:
 	# The popup reuses the same claim flow as the old top-bar button.
 	selected_plot_id = plot_id
 	_on_claim_pressed()
+	
+func _on_plot_info_debug_clear_requested(plot_id: String) -> void:
+	if not _is_logged_in:
+		_set_status_text("Not logged in. Connect first.")
+		return
+
+	if net == null:
+		_set_status_text("NetClient not found.")
+		return
+
+	selected_plot_id = plot_id
+
+	# Temporary M2 debug action:
+	# clear the top-left local rubble cell on the owned plot.
+	net.debug_clear_plot_cell(selected_plot_id, 0, 0)
+	_set_status_text("Debug clear requested for %s cell (0,0)..." % selected_plot_id)
 
 func _on_claim_pressed() -> void:
 	if not _is_logged_in:
@@ -205,6 +233,20 @@ func _on_claim_result(result: Dictionary) -> void:
 	else:
 		status_label.text = "Claim failed: %s" % result.get("reason", "unknown")
 		# PlotView updates will arrive via plot_update/world_state and re-enable button if appropriate
+
+func _on_debug_clear_plot_cell_result(result: Dictionary) -> void:
+	if result.get("ok", false):
+		_set_status_text(
+			"Debug clear succeeded: %s (%d,%d)" % [
+				str(result.get("plot_id", "")),
+				int(result.get("x", -1)),
+				int(result.get("y", -1)),
+			]
+		)
+	else:
+		_set_status_text(
+			"Debug clear failed: %s" % str(result.get("reason", "unknown"))
+		)
 		
 func _on_latency_updated(ms: int) -> void:
 	latency_label.text = "Ping: %d ms" % ms

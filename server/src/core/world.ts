@@ -1,4 +1,12 @@
-import { Plot, PlotType, WorldState } from "../net/protocol";
+import {
+  Plot,
+  PlotDetail,
+  PlotDetailCell,
+  PlotDetailStarterObject,
+  PlotShell,
+  PlotType,
+  WorldState,
+} from "../net/protocol";
 
 /**
  * M0.5 Pattern Rule
@@ -21,14 +29,164 @@ export function plotIdFor(x: number, y: number): string {
   return `T_${x}_${y}`;
 }
 
+function makeStarterPlotDetail(): PlotDetail {
+  const cells: PlotDetailCell[] = [];
+  const starterObjects: PlotDetailStarterObject[] = [];
+
+  // Shelter footprint in the center of the local plot.
+  // Everything outside this area starts as blocked rubble.
+  const shelterMinX = 3;
+  const shelterMaxX = 4;
+  const shelterMinY = 3;
+  const shelterMaxY = 4;
+
+  for (let y = 0; y < STARTER_DETAIL_SIZE; y++) {
+    for (let x = 0; x < STARTER_DETAIL_SIZE; x++) {
+      const insideShelterFootprint =
+        x >= shelterMinX &&
+        x <= shelterMaxX &&
+        y >= shelterMinY &&
+        y <= shelterMaxY;
+
+      cells.push({
+        x,
+        y,
+        blocked: !insideShelterFootprint,
+        clearable: !insideShelterFootprint,
+        terrain: insideShelterFootprint ? "GROUND" : "RUBBLE",
+      });
+    }
+  }
+
+  starterObjects.push(
+    {
+      id: "starter_shack",
+      kind: "SHACK",
+      x: 3,
+      y: 3,
+    },
+    {
+      id: "starter_npc",
+      kind: "NPC_MARKER",
+      x: 4,
+      y: 4,
+    }
+  );
+
+  return {
+    width: STARTER_DETAIL_SIZE,
+    height: STARTER_DETAIL_SIZE,
+    cells,
+    starter_objects: starterObjects,
+  };
+}
+
+function makeDefaultShell(plotType: PlotType): PlotShell {
+  if (plotType === "PLAYER") {
+    return {
+      // Public shell summary for player plots in World Map mode / reduced-detail views later.
+      kind: "EMPTY",
+      variant: "player_plot_default",
+      stage: 0,
+    };
+  }
+
+  return {
+    // Public shell summary for resource plots.
+    // Later this can branch into forest/quarry/ruin/etc variants.
+    kind: "EMPTY",
+    variant: "resource_plot_default",
+    stage: 0,
+  };
+}
+
 function makePlot(x: number, y: number): Plot {
+  const type = plotTypeAt(x, y);
+
   return {
     id: plotIdFor(x, y),
-    type: plotTypeAt(x, y),
+    type,
     x,
     y,
     claimed_by: null,
+
+    // Public-facing macro shell data for M2.
+    shell: makeDefaultShell(type),
+
+    // Owned/local detailed plot data is generated later when needed.
+    detail: undefined,
   };
+}
+
+export function ensureClaimedPlayerPlotInitialized(plot: Plot): boolean {
+  // Only PLAYER plots should ever receive owned/local starter detail.
+  if (plot.type !== "PLAYER") {
+    return false;
+  }
+
+  // If detail already exists, do not overwrite it.
+  if (plot.detail) {
+    return false;
+  }
+
+  plot.detail = makeStarterPlotDetail();
+
+  // Once a player plot becomes initialized for owned local play,
+  // its public shell should no longer read as completely empty.
+  plot.shell = {
+    kind: "RUINED",
+    variant: "player_plot_ruined",
+    stage: 0,
+  };
+
+  return true;
+}
+
+export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailCell | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  // Reject coordinates outside the local plot bounds early.
+  if (x < 0 || y < 0 || x >= detail.width || y >= detail.height) {
+    return null;
+  }
+
+  // Cells are currently stored as a flat array, so we do a simple search.
+  // This is perfectly fine for M2-scale starter data and keeps persistence simple.
+  const cell = detail.cells.find(c => c.x === x && c.y === y);
+  return cell ?? null;
+}
+
+export function isPlotDetailCellClearable(plot: Plot, x: number, y: number): boolean {
+  const cell = getPlotDetailCell(plot, x, y);
+  if (!cell) {
+    return false;
+  }
+
+  // For the current M2 starter model, a cell is only clearable if the cell
+  // explicitly says so. This keeps future gameplay checks simple and centralized.
+  return cell.clearable;
+}
+
+export function clearPlotDetailCell(plot: Plot, x: number, y: number): boolean {
+  const cell = getPlotDetailCell(plot, x, y);
+  if (!cell) {
+    return false;
+  }
+
+  // Only allow mutation through the explicit clearable flag.
+  // This keeps the gameplay rule centralized and easy to evolve later.
+  if (!cell.clearable) {
+    return false;
+  }
+
+  cell.terrain = "GROUND";
+  cell.blocked = false;
+  cell.clearable = false;
+
+  return true;
 }
 
 /**
@@ -108,6 +266,7 @@ export function fillRectMissing(world: WorldState, rect: { minX: number; maxX: n
 
 // --- Module expansion helpers (constant-size expansions) ---
 const MODULE_SIZE = 3;
+const STARTER_DETAIL_SIZE = 8;
 
 function moduleKey(mx: number, my: number): string {
   return `M_${mx}_${my}`;

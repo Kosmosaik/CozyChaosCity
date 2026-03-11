@@ -15,6 +15,7 @@ signal world_state_received(world: Dictionary)
 signal plot_updated(plot: Dictionary)
 signal world_patch_received(patch: Dictionary)
 signal claim_result_received(result: Dictionary)
+signal debug_clear_plot_cell_result_received(result: Dictionary)
 
 signal latency_updated(ms: int)
 signal presence_updated(online: Array) # array of {player_id, display_name}
@@ -103,6 +104,19 @@ func request_world() -> void:
 
 func claim_plot(plot_id: String) -> void:
 	_send("claim_plot", { "plot_id": plot_id }, _next_req_id())
+
+func debug_clear_plot_cell(plot_id: String, x: int, y: int) -> void:
+	# Temporary M2 debug action:
+	# ask the server to clear one specific local cell on the owned plot.
+	_send(
+		"debug_clear_plot_cell",
+		{
+			"plot_id": plot_id,
+			"x": x,
+			"y": y,
+		},
+		_next_req_id()
+	)
 
 func _resolve_server_url() -> String:
 	# Local override for you (LAN testing) without typing in-game.
@@ -213,6 +227,9 @@ func _handle_message(txt: String) -> void:
 
 		"claim_result":
 			emit_signal("claim_result_received", payload)
+
+		"debug_clear_plot_cell_result":
+			emit_signal("debug_clear_plot_cell_result_received", payload)
 
 		"error":
 			_emit_status("Server error: %s" % str(payload))
