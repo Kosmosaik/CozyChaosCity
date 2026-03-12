@@ -16,6 +16,7 @@ signal plot_updated(plot: Dictionary)
 signal world_patch_received(patch: Dictionary)
 signal claim_result_received(result: Dictionary)
 signal debug_clear_plot_cell_result_received(result: Dictionary)
+signal clear_plot_object_result_received(result: Dictionary)
 
 signal latency_updated(ms: int)
 signal presence_updated(online: Array) # array of {player_id, display_name}
@@ -114,6 +115,18 @@ func debug_clear_plot_cell(plot_id: String, x: int, y: int) -> void:
 			"plot_id": plot_id,
 			"x": x,
 			"y": y,
+		},
+		_next_req_id()
+	)
+	
+func clear_plot_object(plot_id: String, object_id: String) -> void:
+	# Real M2 local interaction:
+	# ask the server to clear one specific starter object on the owned plot.
+	_send(
+		"clear_plot_object",
+		{
+			"plot_id": plot_id,
+			"object_id": object_id,
 		},
 		_next_req_id()
 	)
@@ -326,6 +339,9 @@ func _handle_message(txt: String) -> void:
 
 		"debug_clear_plot_cell_result":
 			emit_signal("debug_clear_plot_cell_result_received", payload)
+
+		"clear_plot_object_result":
+			emit_signal("clear_plot_object_result_received", payload)
 
 		"error":
 			_emit_status("Server error: %s" % str(payload))

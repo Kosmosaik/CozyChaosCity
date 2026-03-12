@@ -482,13 +482,31 @@ These principles should apply throughout the project:
 
 ## Current Priority
 
-The current priority is **M2 preparation and implementation planning**.
+The current priority is still **M2 implementation progression**, but the immediate next steps have changed.
 
-That means:
-- finalizing the exact M2 scope
-- turning M2 into server/client tasks
-- defining data layers and protocol additions
-- deciding file-level architecture changes
-- implementing the two-scale shared-world foundation cleanly
+The next implementation order should now be:
 
-Once that is in place, future gameplay systems will have a proper home.
+1. **Player Plot camera parity**
+   - carry the current world-view camera feel into Player Plot mode
+   - let the player move around the owned plot more freely after entering
+   - keep the enter/exit transition, but stop treating local mode as a mostly fixed overview
+
+2. **Real rubble interaction**
+   - replace the temporary debug clear flow with real local interaction
+   - click rubble object
+   - clear it through the normal interaction path
+   - remove the rubble object
+   - free its occupied hidden cells
+
+3. **Neighborhood rendering after that**
+   - only after local camera feel and real rubble interaction are working
+   - then add nearby surrounding plots/resource zones in reduced public detail
+   - then continue building outward from the owned plot into a true local neighborhood window
+
+The project now has:
+- working M1 world flow
+- first owned-plot enter/exit mode
+- first real local object foundation
+- hidden-grid local plot logic under the player-facing scene
+
+So the next milestone work should focus on making the owned plot itself feel playable before expanding into neighborhood rendering.

@@ -2,9 +2,9 @@
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
 **Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
-**Last updated:** 2026-03-11  
-**Current milestone:** **M2 foundation in progress**  
-**Current state:** M1 remains fully working; M2 server-side owned plot data foundation and first debug local interaction path are now implemented.
+**Last updated:** 2026-03-12  
+**Current milestone:** **M2 implementation in progress**  
+**Current state:** M1 remains fully working; M2 now includes the first Player Plot mode, real local owned-plot rendering, object-based starter rubble, and a working enter/exit local-view loop.
 
 This document is the handoff reference for any future GPT assistant.
 
@@ -24,12 +24,22 @@ Core loop currently implemented:
 - claims free `PLAYER` plots
 - receives live updates and expansion patches from the server
 
-New M2 foundation now implemented:
+New M2 work now implemented:
 - claimed player plots can initialize local owned-plot detail data
-- local plot cells can represent rubble vs usable ground
-- rubble cells can now be marked `clearable`
-- the server can mutate a local cell from rubble to ground
-- the client has a temporary in-game debug button to trigger one local cell clear action
+- the client now supports a first **Player Plot mode**
+- the player can enter and leave their owned plot from the existing world flow
+- local owned-plot rendering now exists in Godot
+- local plot rendering now uses:
+  - one plot-wide ground surface
+  - placed local objects on top
+- starter rubble now exists as real local `4x4` objects
+- the hidden cell grid still remains authoritative for:
+  - blocking
+  - clearability
+  - future snapping / placement
+- clearing a rubble cell now removes the owning rubble object footprint and frees those cells
+- local owned-plot detail is now sent only to the owning player and uses a compact wire representation for stability
+- the client still has a temporary in-game debug button to trigger the current clear action
 
 Key concept:
 - plots live on a deterministic grid
@@ -77,7 +87,7 @@ Delivered:
 - quit buttons in menu and in-game top bar
 
 ### M2 — in progress
-Current delivered foundation:
+Current delivered implementation:
 - plot `shell` data on the server
 - claimed-player-plot `detail` data on the server
 - starter local plot generation on first claim
@@ -87,18 +97,23 @@ Current delivered foundation:
   - `blocked`
   - `clearable`
   - `terrain`
-- starter shelter + starter NPC marker objects
-- centered starter shelter footprint surrounded by rubble
+- starter local objects:
+  - `SHACK`
+  - `RUBBLE_4X4`
+  - `NPC_MARKER`
+- first client-side **Player Plot mode**
+- owned-plot enter/exit flow from the existing world interaction path
+- local owned-plot rendering in Godot
+- real local object wrapper scenes for shack and rubble
 - world helper functions for local cell lookup and mutation
 - server debug action for local cell clearing
 - temporary in-game popup debug button for local cell clearing
 
 ### Out of scope for current M2 state
 Still not implemented:
-- World Map mode vs Player Plot mode
 - neighborhood-based local plot loading
-- local owned-plot rendering
-- local neighborhood rendering of nearby plots/resource zones
+- reduced-detail local rendering of nearby plots/resource zones
+- proper local neighborhood window centered on the owned plot
 - full local gameplay loops
 - real exterior/interior split
 - NPC simulation
@@ -223,11 +238,13 @@ New M2 data structures:
   - `terrain`
 - `PlotDetailStarterObjectKind`
   - `SHACK`
+  - `RUBBLE_4X4`
   - `NPC_MARKER`
 
 Important design direction:
-- generic rubble lives in the **cell layer**
-- distinct placed things live in the **starter object layer**
+- the hidden cell grid remains the authoritative logic layer
+- authored local things now live in the **starter/local object layer**
+- rubble has now been moved onto the local-object path as a real `4x4` placed object
 - current shell data is still a lightweight public-facing summary, not the final long-term truth model for exterior structure
 
 ### 4.3 Pattern rule and expansion
@@ -258,11 +275,12 @@ Important new helpers:
   - mutates a clearable local cell from rubble to ground
 
 Current starter local plot design:
-- local grid currently uses `STARTER_DETAIL_SIZE = 8`
-- shelter footprint is centered
-- most of the surrounding plot starts as rubble
-- rubble cells are blocked and clearable
-- shelter cells are ground, unblocked, and not clearable
+- local grid currently uses `STARTER_DETAIL_SIZE = 40`
+- `1 cell = 1 meter`
+- the starter shelter uses a centered `4x4` footprint
+- the surrounding blocked area is represented by placed `RUBBLE_4X4` objects
+- the hidden cells underneath still remain blocked and clearable until rubble is removed
+- clearing inside a rubble object frees its full occupied footprint
 
 ### 4.5 Networking flow
 `server/src/index.ts`
@@ -502,11 +520,13 @@ Current important nodes include:
   - status label
   - latency label
   - online label
+  - `ExitPlotButton`
   - in-game quit button
 - `PlotInfoPanel`
   - popup shown when a tile is selected
   - contains:
     - `ClaimButton`
+    - `EnterPlotButton`
     - temporary `DebugClearCellButton`
 
 ### 6.2 World scene
@@ -520,6 +540,8 @@ Current important nodes include:
 - `SunLight`
 - `TilesRoot`
 - `Ground`
+- `OwnedPlotRoot`
+- `TransitionAudioPlayer`
 
 ---
 
@@ -533,26 +555,29 @@ The original M1 prototype loop remains intact:
 - claim plot
 - receive updates
 
-### M2 foundation is now meaningfully started
+### M2 has moved beyond foundation-only work
 Completed so far:
 - plot shell data exists
 - claimed owned-plot detail exists
 - starter local plot generation exists
-- local cell lookup/clear helpers exist
-- the server can mutate a local rubble cell
-- the client can trigger that mutation through a temporary in-game debug button
+- first Player Plot mode exists on the client
+- owned-plot enter/exit flow exists
+- camera tween + transition audio hook exist
+- local owned-plot rendering exists
+- starter rubble now exists as real `4x4` local objects
+- the server can mutate local rubble state
+- the client can trigger that mutation through the temporary debug clear path
 
 ### What is still missing for real M2 progression
 Not done yet:
-- World Map mode vs Player Plot mode
 - neighborhood loading protocol
 - local neighborhood snapshots
-- local owned-plot rendering
-- nearby shell/public rendering of surrounding plots
-- local cell click interaction
-- proper local UI/state instead of the temporary debug path
+- reduced-detail rendering of nearby surrounding plots/resource zones
+- local click/interaction flow beyond the current debug path
+- proper local gameplay UI and interactions
+- shell/public rendering for nearby local surroundings
 
-So the project is currently at a strong **M2 foundation checkpoint**, not yet at full M2 implementation.
+So the project is currently at an important **first Player Plot checkpoint** inside M2, not yet at the neighborhood-complete M2 target.
 
 ---
 
@@ -573,11 +598,11 @@ So the project is currently at a strong **M2 foundation checkpoint**, not yet at
 5. **Do not remove `PlotRenderer3D` / `TilePicker3D` modular separation.**
    That separation is intentional and should be preserved.
 
-6. **Do not confuse generic rubble with distinct placed objects.**
+6. **Do not regress rubble back into a fake coverage hack.**
    Current design direction is:
-   - rubble = local cell state
-   - shelter / npc marker = placed objects
-   This should be preserved unless the user explicitly redesigns it.
+   - hidden cells = logic / occupancy / clearability
+   - shack / rubble / npc marker = local placed objects
+   This should be preserved unless the user explicitly redesigns it again.
 
 7. **Current local cell clearing is a temporary debug path, not the final gameplay flow.**
    Do not build too much permanent gameplay/UI around `DebugClearCellButton`.
@@ -632,7 +657,8 @@ It is now:
 Most important current truths:
 - the shared world map still works
 - claimed player plots now have local detail data
-- rubble is represented in local cells, not fake rubble objects
-- local cells can be cleared server-side
-- a temporary in-game debug button proves the end-to-end local interaction path
-- the next real milestone work is neighborhood loading + Player Plot mode + local rendering
+- the client now has a first Player Plot mode
+- owned plots can be entered and exited with a working camera transition
+- rubble is now represented as real local `4x4` objects while the hidden cells remain authoritative underneath
+- local rubble can still be cleared server-side through the current debug path
+- the next real milestone work is neighborhood loading + nearby reduced-detail rendering + stronger local interactions

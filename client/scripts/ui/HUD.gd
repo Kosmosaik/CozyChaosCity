@@ -92,6 +92,7 @@ func _ready() -> void:
 	if game_world != null:
 		game_world.plot_selected.connect(_on_plot_selected)
 		game_world.view_mode_changed.connect(_on_view_mode_changed)
+		game_world.local_rubble_clear_requested.connect(_on_local_rubble_clear_requested)
 
 	# Hook NetClient signals
 	net.status_changed.connect(_on_status)
@@ -100,6 +101,7 @@ func _ready() -> void:
 	net.world_patch_received.connect(_on_world_patch)
 	net.claim_result_received.connect(_on_claim_result)
 	net.debug_clear_plot_cell_result_received.connect(_on_debug_clear_plot_cell_result)
+	net.clear_plot_object_result_received.connect(_on_clear_plot_object_result)
 
 	# IMPORTANT: identity_ready signature is now (player_id, display_name)
 	net.identity_ready.connect(_on_identity_ready)
@@ -230,6 +232,22 @@ func _on_exit_plot_pressed() -> void:
 
 	_set_status_text("Returning to world view...")
 	
+func _on_local_rubble_clear_requested(plot_id: String, object_id: String) -> void:
+	if not _is_logged_in:
+		_set_status_text("Not logged in. Connect first.")
+		return
+
+	if net == null:
+		_set_status_text("NetClient not found.")
+		return
+
+	if plot_id == "" or object_id == "":
+		_set_status_text("Invalid rubble clear request.")
+		return
+
+	net.clear_plot_object(plot_id, object_id)
+	_set_status_text("Clearing rubble %s..." % object_id)
+	
 func _on_plot_info_debug_clear_requested(plot_id: String) -> void:
 	if not _is_logged_in:
 		_set_status_text("Not logged in. Connect first.")
@@ -288,6 +306,16 @@ func _on_debug_clear_plot_cell_result(result: Dictionary) -> void:
 	else:
 		_set_status_text(
 			"Debug clear failed: %s" % str(result.get("reason", "unknown"))
+		)
+
+func _on_clear_plot_object_result(result: Dictionary) -> void:
+	if result.get("ok", false):
+		_set_status_text(
+			"Rubble cleared: %s" % str(result.get("object_id", ""))
+		)
+	else:
+		_set_status_text(
+			"Clear rubble failed: %s" % str(result.get("reason", "unknown"))
 		)
 		
 func _on_latency_updated(ms: int) -> void:

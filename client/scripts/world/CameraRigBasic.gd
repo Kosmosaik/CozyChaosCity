@@ -27,7 +27,7 @@ class_name CameraRigBasic
 
 @export var min_zoom_distance: float = 4.0
 @export var max_zoom_distance: float = 80.0
-@export var zoom_step: float = 1.5
+@export var zoom_step: float = 1.6
 @export var initial_zoom_distance: float = 14.0
 
 @export var min_pitch_degrees: float = -90.0
@@ -44,6 +44,12 @@ var _is_rotating_with_mouse: bool = false
 var _controls_locked: bool = false
 var _active_tween: Tween = null
 
+# Optional movement bounds used by local plot mode.
+# World mode leaves these disabled so macro camera behavior stays unchanged.
+var _move_bounds_enabled: bool = false
+var _move_bounds_min: Vector2 = Vector2.ZERO
+var _move_bounds_max: Vector2 = Vector2.ZERO
+
 func set_controls_locked(locked: bool) -> void:
 	# Used by mode transitions so the player cannot pan/rotate/zoom
 	# while the camera is tweening between world and local-plot views.
@@ -57,6 +63,37 @@ func get_zoom_distance() -> float:
 
 func get_pitch_degrees() -> float:
 	return _pitch_degrees
+	
+func get_yaw_degrees() -> float:
+	if yaw_pivot == null:
+		return 0.0
+
+	return yaw_pivot.rotation_degrees.y
+
+func set_yaw_degrees(yaw_degrees: float) -> void:
+	if yaw_pivot == null:
+		return
+
+	yaw_pivot.rotation_degrees.y = yaw_degrees
+
+func set_move_bounds(min_x: float, max_x: float, min_z: float, max_z: float) -> void:
+	# Local plot mode can constrain the rig to a bounded area while
+	# reusing the same movement/zoom/rotation logic as world mode.
+	_move_bounds_enabled = true
+	_move_bounds_min = Vector2(minf(min_x, max_x), minf(min_z, max_z))
+	_move_bounds_max = Vector2(maxf(min_x, max_x), maxf(min_z, max_z))
+	_clamp_global_position_to_bounds()
+
+func clear_move_bounds() -> void:
+	# World mode should remain unbounded.
+	_move_bounds_enabled = false
+
+func _clamp_global_position_to_bounds() -> void:
+	if not _move_bounds_enabled:
+		return
+
+	global_position.x = clamp(global_position.x, _move_bounds_min.x, _move_bounds_max.x)
+	global_position.z = clamp(global_position.z, _move_bounds_min.y, _move_bounds_max.y)
 
 func tween_to_state(
 	target_position: Vector3,
@@ -184,6 +221,7 @@ func _handle_movement(delta: float) -> void:
 
 	var move_vector := (right * input_dir.x) + (forward * input_dir.y)
 	global_position += move_vector * move_speed * delta
+	_clamp_global_position_to_bounds()
 
 func _zoom_toward_mouse(delta_zoom: float, mouse_screen_pos: Vector2) -> void:
 	# Find the ground point currently under the mouse before zooming.
@@ -199,6 +237,8 @@ func _zoom_toward_mouse(delta_zoom: float, mouse_screen_pos: Vector2) -> void:
 	# stays under the cursor. This creates "zoom toward mouse position".
 	if before_point != null and after_point != null:
 		global_position += before_point - after_point
+
+	_clamp_global_position_to_bounds()
 
 func _get_mouse_world_on_ground(mouse_screen_pos: Vector2):
 	# Project the mouse position into a 3D ray from the active camera.

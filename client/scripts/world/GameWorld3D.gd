@@ -7,6 +7,7 @@ class_name GameWorld3D
 
 signal plot_selected(plot: Dictionary, is_claimable: bool)
 signal view_mode_changed(mode_name: String, active_plot_id: String)
+signal local_rubble_clear_requested(plot_id: String, object_id: String)
 
 @onready var camera_rig: CameraRigBasic = $CameraRig
 @onready var camera_3d: Camera3D = $CameraRig/YawPivot/PitchPivot/Camera3D
@@ -21,6 +22,7 @@ var world_state: Dictionary = {}
 var plots_by_id: Dictionary = {}
 var plot_renderer: PlotRenderer3D = null
 var tile_picker: TilePicker3D = null
+var local_plot_interactor: LocalPlotInteractor3D = null
 
 var owned_plot_renderer: OwnedPlotDetailRenderer3D = null
 
@@ -31,6 +33,7 @@ var _is_view_transition_running: bool = false
 var _saved_world_camera_position: Vector3 = Vector3.ZERO
 var _saved_world_zoom_distance: float = 14.0
 var _saved_world_pitch_degrees: float = -45.0
+var _saved_world_yaw_degrees: float = 0.0
 
 var selected_plot_id: String = ""
 var hovered_plot_id: String = ""
@@ -89,6 +92,14 @@ func apply_plot_update(plot: Dictionary) -> void:
 	# Update or spawn the corresponding 3D tile.
 	if plot_renderer != null:
 		plot_renderer.apply_plot_update(plot_copy)
+	# If the player is currently inside this owned plot, refresh the local
+	# detail renderer too so authoritative plot updates can animate local changes.
+	if (
+		current_view_mode == "PLAYER_PLOT"
+		and active_player_plot_id == plot_id
+		and owned_plot_renderer != null
+	):
+		owned_plot_renderer.refresh_plot_detail(plot_copy)
 		
 	# If the selected plot changed on the server, refresh the popup/HUD state.
 	if selected_plot_id == plot_id:
@@ -184,6 +195,7 @@ func enter_player_plot_mode(plot_id: String) -> bool:
 	_saved_world_camera_position = camera_rig.global_position
 	_saved_world_zoom_distance = camera_rig.get_zoom_distance()
 	_saved_world_pitch_degrees = camera_rig.get_pitch_degrees()
+	_saved_world_yaw_degrees = camera_rig.get_yaw_degrees()
 
 	current_view_mode = "PLAYER_PLOT"
 	active_player_plot_id = plot_id
@@ -192,6 +204,9 @@ func enter_player_plot_mode(plot_id: String) -> bool:
 	# Stop normal world interaction while entering local mode.
 	camera_rig.set_controls_locked(true)
 	tile_picker.set_process_unhandled_input(false)
+
+	if local_plot_interactor != null:
+		local_plot_interactor.set_enabled(false)
 
 	hovered_plot_id = ""
 	if plot_renderer != null:
@@ -212,6 +227,7 @@ func enter_player_plot_mode(plot_id: String) -> bool:
 	var detail_width := int(detail.get("width", 0))
 	var detail_height := int(detail.get("height", 0))
 	var local_plot_span := float(max(detail_width, detail_height))
+	_apply_player_plot_camera_bounds(detail)
 
 	# Fit the camera to the actual local plot size instead of the old mini test board.
 	# This keeps Player Plot mode usable as we move to real meter-based lots.
@@ -236,6 +252,12 @@ func exit_player_plot_mode() -> bool:
 		return false
 
 	_is_view_transition_running = true
+	camera_rig.set_controls_locked(true)
+	camera_rig.clear_move_bounds()
+	camera_rig.set_yaw_degrees(_saved_world_yaw_degrees)
+
+	if local_plot_interactor != null:
+		local_plot_interactor.set_enabled(false)
 
 	# Swap back to macro rendering before the reverse tween so it feels like
 	# we are pulling back out into the existing shared world.
@@ -256,12 +278,53 @@ func exit_player_plot_mode() -> bool:
 
 func get_view_mode() -> String:
 	return current_view_mode
+	
+func _on_local_rubble_clicked(object_id: String) -> void:
+	# Forward the click upward without coupling GameWorld3D directly to networking.
+	if current_view_mode != "PLAYER_PLOT":
+		return
+
+	if active_player_plot_id == "":
+		return
+
+	if object_id == "":
+		return
+
+	local_rubble_clear_requested.emit(active_player_plot_id, object_id)
+	
+func _apply_player_plot_camera_bounds(detail: Dictionary) -> void:
+	# Player Plot mode reuses the same camera rig as world mode, but constrains
+	# panning to the owned plot footprint so the player can move freely without
+	# drifting outside the local play area.
+	if camera_rig == null:
+		return
+
+	var detail_width := int(detail.get("width", 0))
+	var detail_height := int(detail.get("height", 0))
+	if detail_width <= 0 or detail_height <= 0:
+		return
+
+	var half_width := (float(detail_width) * OwnedPlotDetailRenderer3D.CELL_SIZE_METERS) * 0.5
+	var half_height := (float(detail_height) * OwnedPlotDetailRenderer3D.CELL_SIZE_METERS) * 0.5
+	var padding := 20.0
+
+	var center := owned_plot_root.global_position
+	camera_rig.set_move_bounds(
+		center.x - half_width - padding,
+		center.x + half_width + padding,
+		center.z - half_height - padding,
+		center.z + half_height + padding
+	)
 
 func _on_enter_player_plot_mode_finished() -> void:
+	# The enter tween is finished, so local plot mode can now use the same
+	# free camera controls as world mode. Tile picking remains disabled because
+	# we are not interacting with macro world tiles while inside the plot.
 	_is_view_transition_running = false
-	# Remain input-locked for the world map while in local mode.
-	# We only unlock those controls again when returning to world mode.
-	pass
+	camera_rig.set_controls_locked(false)
+
+	if local_plot_interactor != null:
+		local_plot_interactor.set_enabled(true)
 
 func _on_exit_player_plot_mode_finished() -> void:
 	current_view_mode = "WORLD"
@@ -302,6 +365,12 @@ func set_world_enabled(enabled: bool) -> void:
 	# - hover/selection are cleared so HUD popup hides cleanly
 	visible = enabled
 	if not enabled:
+		if camera_rig != null:
+			camera_rig.clear_move_bounds()
+
+		if local_plot_interactor != null:
+			local_plot_interactor.set_enabled(false)
+
 		current_view_mode = "WORLD"
 		active_player_plot_id = ""
 		_is_view_transition_running = false
@@ -366,6 +435,12 @@ func _ready() -> void:
 	tile_picker.setup(camera_3d)
 	tile_picker.tile_hovered.connect(_on_tile_hovered)
 	tile_picker.tile_clicked.connect(_on_tile_clicked)
+	local_plot_interactor = LocalPlotInteractor3D.new()
+	local_plot_interactor.name = "LocalPlotInteractor3D"
+	local_plot_interactor.setup(camera_3d)
+	local_plot_interactor.set_enabled(false)
+	add_child(local_plot_interactor)
+	local_plot_interactor.rubble_clicked.connect(_on_local_rubble_clicked)
 
 	# If HUD/NetClient already delivered world data before _ready finished,
 	# render that cached snapshot now.

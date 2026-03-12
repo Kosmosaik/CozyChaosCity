@@ -216,6 +216,55 @@ function getRubbleObjectAtCell(plot: Plot, x: number, y: number): PlotDetailStar
   return null;
 }
 
+function getRubbleObjectById(plot: Plot, objectId: string): PlotDetailStarterObject | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  for (const obj of detail.starter_objects) {
+    if (obj.kind !== "RUBBLE_4X4") {
+      continue;
+    }
+
+    if (obj.id === objectId) {
+      return obj;
+    }
+  }
+
+  return null;
+}
+
+function clearRubbleObjectFootprint(
+  plot: Plot,
+  rubbleObject: PlotDetailStarterObject
+): boolean {
+  const detail = plot.detail;
+  if (!detail) {
+    return false;
+  }
+
+  detail.starter_objects = detail.starter_objects.filter((obj) => obj.id !== rubbleObject.id);
+
+  const footprintW = rubbleObject.footprint_w ?? 1;
+  const footprintH = rubbleObject.footprint_h ?? 1;
+
+  for (let cy = rubbleObject.y; cy < rubbleObject.y + footprintH; cy++) {
+    for (let cx = rubbleObject.x; cx < rubbleObject.x + footprintW; cx++) {
+      const cell = getPlotDetailCell(plot, cx, cy);
+      if (!cell) {
+        continue;
+      }
+
+      cell.terrain = "GROUND";
+      cell.blocked = false;
+      cell.clearable = false;
+    }
+  }
+
+  return true;
+}
+
 function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
   // Backward-safe migration helper:
   // if an older claimed plot has rubble cells but no rubble objects yet,
@@ -281,6 +330,15 @@ export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailC
   return cell ?? null;
 }
 
+export function clearPlotDetailObject(plot: Plot, objectId: string): boolean {
+  const rubbleObject = getRubbleObjectById(plot, objectId);
+  if (!rubbleObject) {
+    return false;
+  }
+
+  return clearRubbleObjectFootprint(plot, rubbleObject);
+}
+
 export function isPlotDetailCellClearable(plot: Plot, x: number, y: number): boolean {
   const cell = getPlotDetailCell(plot, x, y);
   if (!cell) {
@@ -303,25 +361,7 @@ export function clearPlotDetailCell(plot: Plot, x: number, y: number): boolean {
   // and free the whole occupied footprint.
   const rubbleObject = getRubbleObjectAtCell(plot, x, y);
   if (rubbleObject) {
-    detail.starter_objects = detail.starter_objects.filter((obj) => obj.id !== rubbleObject.id);
-
-    const footprintW = rubbleObject.footprint_w ?? 1;
-    const footprintH = rubbleObject.footprint_h ?? 1;
-
-    for (let cy = rubbleObject.y; cy < rubbleObject.y + footprintH; cy++) {
-      for (let cx = rubbleObject.x; cx < rubbleObject.x + footprintW; cx++) {
-        const cell = getPlotDetailCell(plot, cx, cy);
-        if (!cell) {
-          continue;
-        }
-
-        cell.terrain = "GROUND";
-        cell.blocked = false;
-        cell.clearable = false;
-      }
-    }
-
-    return true;
+    return clearRubbleObjectFootprint(plot, rubbleObject);
   }
 
   // Backward-safe fallback:

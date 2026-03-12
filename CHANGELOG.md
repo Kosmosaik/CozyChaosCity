@@ -223,3 +223,58 @@ This project is in early development. Version numbers are informal for now.
   - neighborhood/local plot protocol flow
   - mode switching
   - local owned-plot rendering
+
+  ---
+
+## [0.0.6] — 2026-03-12 — M2 Progress (Player Plot Mode + Local Object Foundation)
+
+### Added
+- First playable **Player Plot mode** on the client:
+  - select your own claimed `PLAYER` plot
+  - press **Enter Plot**
+  - switch into local owned-plot view
+  - press **Leave Plot** to return to the world
+- Dedicated owned-plot renderer:
+  - `client/scripts/world/OwnedPlotDetailRenderer3D.gd`
+- Dedicated local object wrapper scenes:
+  - `client/scenes/local_objects/StarterShack.tscn`
+  - `client/scenes/local_objects/Rubble4x4.tscn`
+- Local-view camera transition flow:
+  - zoom-in tween when entering plot mode
+  - zoom-out tween when leaving plot mode
+- Transition audio hook in the 3D world scene.
+- Real authored local object assets integrated into the local plot view:
+  - shed / shack model
+  - rubble model
+- New local-view scene nodes:
+  - `OwnedPlotRoot`
+  - `TransitionAudioPlayer`
+- New popup/UI controls:
+  - `EnterPlotButton`
+  - `ExitPlotButton`
+
+### Changed
+- Owned plot detail is now rendered at real local scale:
+  - `1 cell = 1 meter`
+  - starter owned plot expanded to a larger local playable area
+- Player-facing local rendering no longer exposes the hidden cell grid directly.
+- Local plot presentation now uses:
+  - one full plot ground surface
+  - placed local objects on top
+- Rubble was refactored from “pure cell-layer presentation” into real local `4x4` placed objects while the hidden cell grid still remains authoritative for logic.
+- Starter rubble layout now generates as placed `RUBBLE_4X4` local objects.
+- Clearing a rubble cell now removes the owning `4x4` rubble object and frees its occupied cells.
+- Claimed plot detail payloads are now owner-only and compacted for safer network/runtime behavior.
+
+### Fixed
+- Fixed connect-time instability caused by oversized local plot detail leaking into shared world payloads.
+- Fixed claim-time instability by compacting owner-local detail on the wire and normalizing it client-side.
+- Fixed several temporary local-renderer regressions during the shift from visible-cell rendering to object-based rendering.
+
+### Notes / Known limitations
+- This is still not full neighborhood rendering yet.
+- Player Plot mode currently focuses on the owned plot only.
+- Nearby surrounding plots/resource zones are not yet rendered as a local neighborhood window.
+- The debug clear button is still a temporary developer/testing interaction path.
+- NPC still uses a temporary placeholder marker in local view.
+- Ground/rubble visuals are now on the correct architectural path, but more polish and final art setup are still expected later.

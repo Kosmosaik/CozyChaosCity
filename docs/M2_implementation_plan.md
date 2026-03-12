@@ -32,12 +32,13 @@ Instead:
 
 ## M2 Technical Strategy
 
-Build M2 in 4 steps:
+Build M2 in practical vertical slices:
 
 1. **Server data foundation**
-2. **Protocol support**
-3. **Client mode switching + neighborhood loading**
-4. **Local detail rendering**
+2. **Client mode switching + first local owned-plot rendering**
+3. **Player Plot camera parity**
+4. **Real local interaction with rubble**
+5. **Neighborhood loading/rendering after the owned plot feels playable**
 
 ---
 
@@ -188,108 +189,115 @@ Keep one high-level world controller, but split responsibilities by renderer and
 ### Keep
 - `GameWorld3D.gd` as the high-level world coordinator
 
-### Add
-Potential new responsibilities/scripts:
+### Add / preserve
+Potential responsibilities/scripts:
 
-- `WorldMapRenderer3D.gd`
-- `NeighborhoodRenderer3D.gd`
+- `PlotRenderer3D.gd`
 - `OwnedPlotDetailRenderer3D.gd`
 
-You may rename these, but the idea is:
+Later, when neighborhood rendering is ready, a separate neighborhood renderer may still be added, but it should not be forced in before the owned plot itself feels good to play in.
 
-### WorldMapRenderer3D
+### PlotRenderer3D
 Responsible for:
 - macro map shells
 - simplified plot visuals
 - resource zone shell visuals
 
-### NeighborhoodRenderer3D
-Responsible for:
-- rendering the local 7x7 neighborhood window
-- handling reduced-detail nearby plots
-- handling nearby resource zones
-
 ### OwnedPlotDetailRenderer3D
 Responsible for:
-- full-detail rendering of the owned plot
-- rubble
-- shack
+- owned-plot local ground
+- local rubble objects
+- starter shack
 - interactables
 - owned NPC placeholders
+- later local building/clear interactions
 
-This is cleaner than overloading `PlotRenderer3D.gd` with every detail tier.
+This is cleaner than overloading one renderer with every detail tier.
 
 ---
 
 ## Client tasks
 
-- [ ] Add render/view mode state
-- [ ] Add World Map mode behavior
-- [ ] Add Player Plot mode behavior
-- [ ] Add enter/exit flow
-- [ ] Keep camera handling clean between modes
-- [ ] Keep selection/interactions mode-aware
+- [x] Add render/view mode state
+- [x] Add World Map mode behavior
+- [x] Add Player Plot mode behavior
+- [x] Add enter/exit flow
+- [x] Keep selection/interactions mode-aware
+- [ ] Carry world-style camera movement into Player Plot mode after entering
+- [ ] Keep local camera control feeling natural and playable
+- [ ] Keep camera handling clean between modes without turning local mode into a locked showcase view
 
 ---
 
-# M2.4 - Neighborhood Rendering
+# M2.4 - Local Camera and Neighborhood Progression
 
 ## Goal
-Render local surroundings while preserving privacy and shared-world continuity.
+Do not jump into neighborhood work too early.
 
-## Recommended first target
+Before adding nearby surrounding plots, make the owned plot itself feel properly playable.
+
+---
+
+## Immediate next goal: Player Plot camera parity
+
+After entering Player Plot mode, the player should be able to move around the owned plot more freely using the same general camera feel as world view.
+
+This means:
+- preserve the existing enter/exit transition
+- preserve the current camera rig philosophy
+- allow freer local camera movement after entering
+- avoid making Player Plot mode feel like a mostly fixed overview shot
+
+---
+
+## After camera parity: real rubble interaction
+
+Once local camera control feels right, replace the temporary debug clear path with a real interaction flow:
+
+- click rubble object
+- validate interaction
+- send clear action
+- remove rubble object
+- free its occupied hidden cells
+- refresh the local plot view
+
+This becomes the first real local gameplay loop.
+
+---
+
+## Neighborhood comes after that
+
+Only once:
+- local camera feels good
+- rubble interaction feels real
+- the owned plot itself feels playable
+
+then proceed with:
+
+- nearby surrounding plots in reduced public detail
+- nearby resource zone surroundings
+- local neighborhood window centered on the owned plot
+
+---
+
+## Future neighborhood target
+
+Recommended first target later:
 - up to **7x7 plots**
 - centered on the owned plot
 - smaller near world edges if needed
 
----
-
-## Rendering rules
-
-### In World Map mode
-Render:
-- plot bases
-- ownership
-- shell/public exterior structure
-- simplified city silhouette
-
-Do not render:
-- interiors
-- local clutter
-- private detail
-- deep NPC state
-
-### In Player Plot mode
-
-#### Owned plot
-Render:
-- full exterior detail
-- blocked/unblocked cells
-- rubble/debris
-- starter shack
-- interactables
-- owned NPC placeholder
-
-#### Neighboring player plots
-Render:
-- shell only
-- public exterior only
-- no interiors
-- no inside-only NPCs
-
-#### Nearby resource zones
-Render:
-- public/shared exterior features
-- visible resource/world objects
+But this should now be treated as a **later M2 sub-step**, not the immediate next implementation target.
 
 ---
 
-## Rendering tasks
+## Tasks
 
-- [ ] Render owned plot in high detail
-- [ ] Render nearby player plots in reduced public detail
-- [ ] Render nearby resource zones in reduced public detail
-- [ ] Ensure local neighborhood does not require whole-world high-detail rendering
+- [ ] Carry world-style camera behavior into Player Plot mode
+- [ ] Support freer camera movement inside the owned plot
+- [ ] Replace debug clear with real rubble click interaction
+- [ ] Add proper local clear/remove feedback
+- [ ] Only after that, add neighborhood loading/rendering
 
 ---
 
@@ -298,26 +306,41 @@ Render:
 ## Goal
 Make the owned plot feel like the beginning of a real game, not just a tech test.
 
+## Current implemented checkpoint
+The project now has an early but real starter-state implementation:
+- larger owned local plot area
+- centered starter shack
+- rubble represented as real placed `4x4` local objects
+- hidden grid/cells retained underneath for:
+  - blocking
+  - clearability
+  - future snapping / structure placement
+- temporary NPC marker
+- temporary debug clear path for removing rubble
+
 ## First starter state should include
 - ruined/blocked sections
 - some open usable space
-- starter shack placeholder
-- rubble/debris placeholders
+- starter shack
+- rubble objects
 - starter NPC placeholder/marker
-- inspectable elements
+- inspectable local elements later
 
-This should be visually simple for now, but structurally correct.
+This should remain visually simple for now, but structurally correct.
 
 ---
 
 ## Starter-state tasks
 
-- [ ] Generate ruined starter layout on first claim
-- [ ] Add blocked/unblocked space data
-- [ ] Add rubble/debris placeholder data
-- [ ] Add shack placeholder data
-- [ ] Add NPC placeholder data
+- [x] Generate ruined starter layout on first claim
+- [x] Add blocked/unblocked space data
+- [x] Add starter shack data
+- [x] Add starter NPC placeholder data
+- [x] Add starter rubble object data
+- [x] Add temporary debug clear path
 - [ ] Make local elements inspectable in Player Plot mode
+- [ ] Replace temporary NPC marker with a real NPC scene
+- [ ] Improve final ground / rubble art polish
 
 ---
 
@@ -358,33 +381,41 @@ For M2:
 
 ## Phase 1
 Server model first
-- add shell data
-- add detail data
-- add starter plot generation
-- add persistence changes
+- [x] add shell data
+- [x] add detail data
+- [x] add starter plot generation
+- [x] add persistence changes
 
 ## Phase 2
-Protocol
-- add enter plot view request
-- add neighborhood state response
-- add exit plot view request
+Client mode support
+- [x] add first Player Plot mode
+- [x] add enter/exit switching flow
+- [x] add owned-plot local rendering foundation
 
 ## Phase 3
-Client mode support
-- add World Map mode
-- add Player Plot mode
-- add switching flow
+Protocol / data safety
+- [x] keep owned-plot detail privileged to owner view
+- [x] compact large local detail payloads for safer runtime behavior
 
 ## Phase 4
-Rendering
-- map shell rendering
-- neighborhood rendering
-- owned-plot detail rendering
+Owned-plot playability
+- [ ] carry world-style camera behavior into Player Plot mode
+- [ ] make local camera movement feel natural after entering
+- [ ] keep local mode readable without locking the player into a static overview
 
 ## Phase 5
 Starter interactions
-- inspect local objects
-- inspect rubble/shack/NPC placeholders
+- [ ] inspect local objects
+- [ ] replace temporary debug clear flow with proper rubble interaction
+- [ ] click rubble -> clear -> remove object -> free cells
+- [ ] add stronger local build/clear interaction rules
+
+## Phase 6
+Neighborhood work
+- [ ] add protocol for local/neighborhood view
+- [ ] add local neighborhood data handling
+- [ ] render nearby shell/public neighbor plots
+- [ ] render nearby public resource-zone surroundings
 
 ---
 
@@ -410,10 +441,10 @@ M2 is done when a player can:
 2. see the world in **World Map mode**
 3. claim a player plot
 4. enter **Player Plot mode**
-5. see a local neighborhood centered on their plot
+5. move around their owned plot with a proper local camera
 6. see their own plot in high detail
-7. still see nearby other plots/resource zones in reduced public detail
-8. inspect the ruined starter state of their owned plot
-9. exit back to World Map mode
+7. interact with rubble through a real click/clear/remove flow
+8. exit back to World Map mode
+9. see nearby other plots/resource zones in reduced public detail once neighborhood rendering is added
 
-At that point, the project will have the correct structural base for future gameplay.
+This keeps M2 grounded in a proper owned-plot gameplay loop first, then expands outward into the shared local neighborhood.

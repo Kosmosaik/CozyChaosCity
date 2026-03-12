@@ -1,0 +1,37 @@
+This is an end-of-session wrap-up task.
+
+Your job:
+1. Read the repo and summarize the current implemented state from the actual files.
+2. Identify what changed in this session and what is now true in the repo.
+3. Prepare end-of-session wrap-up materials:
+   - recommended git add / commit / push commands
+   - recommended commit message
+   - recommended next branch name
+   - updated CHANGELOG entry in the same formatting as current CHANGELOG.md
+   - updates for any docs under /docs/ that should now be changed
+   - a concise technical handoff summary for the next GPT assistant
+   - discord-friendly patch notes in markdown, max 2000 characters
+4. Clearly separate:
+   - what is already implemented
+   - what is next
+   - what is still temporary / known limitations
+
+Important repo-state guidance:
+- The current session may have changed gameplay, rendering, networking, docs, or workflow priorities.
+- Reflect the current real implementation, not old plans.
+- If priorities changed during development, update the docs to match the new actual priority order.
+- If neighborhood is no longer next, do not write docs as if it is next.
+- If debug systems are still temporary, say so clearly.
+
+Output format I want:
+1. Current repo summary
+2. Git commands
+3. Commit message
+4. New branch suggestion
+5. CHANGELOG entry
+6. Docs updates
+7. Technical handoff summary
+8. Discord patch notes
+
+Do not skip the repo-reading step.
+Base everything on the uploaded zip.

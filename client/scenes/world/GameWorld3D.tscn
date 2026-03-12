@@ -2,17 +2,7 @@
 
 [ext_resource type="Script" uid="uid://ckd2fi2y6ev4m" path="res://scripts/world/GameWorld3D.gd" id="1_cepi3"]
 [ext_resource type="Script" uid="uid://c6fus6plfw6uv" path="res://scripts/world/CameraRigBasic.gd" id="2_lhvpt"]
-[ext_resource type="Texture2D" uid="uid://cj2upy5kbtcgc" path="res://1.png" id="2_yqp0r"]
 [ext_resource type="AudioStream" uid="uid://blmhpfntk3u5" path="res://sound/transition.ogg" id="4_7o2jj"]
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pnubo"]
-albedo_color = Color(0.9384497, 0.9384497, 0.9384497, 1)
-albedo_texture = ExtResource("2_yqp0r")
-point_size = 85.3
-
-[sub_resource type="PlaneMesh" id="PlaneMesh_vfhkl"]
-lightmap_size_hint = Vector2i(1402, 1402)
-size = Vector2(100, 100)
 
 [node name="GameWorld3D" type="Node3D" unique_id=1513630665]
 script = ExtResource("1_cepi3")
@@ -20,8 +10,8 @@ script = ExtResource("1_cepi3")
 [node name="CameraRig" type="Node3D" parent="." unique_id=632905009]
 script = ExtResource("2_lhvpt")
 base_move_speed = 15.0
-min_zoom_distance = 2.0
-max_zoom_distance = 50.0
+min_zoom_distance = 8.0
+max_zoom_distance = 100.0
 
 [node name="YawPivot" type="Node3D" parent="CameraRig" unique_id=1201314344]
 
@@ -39,10 +29,6 @@ light_angular_distance = 0.45
 shadow_enabled = true
 
 [node name="TilesRoot" type="Node3D" parent="." unique_id=320533590]
-
-[node name="Ground" type="MeshInstance3D" parent="." unique_id=1290572098]
-material_override = SubResource("StandardMaterial3D_pnubo")
-mesh = SubResource("PlaneMesh_vfhkl")
 
 [node name="OwnedPlotRoot" type="Node3D" parent="." unique_id=1690829213]
 

@@ -64,7 +64,7 @@ func _refresh_visual(my_player_id: String = "") -> void:
 	#
 	# Selection and hover add simple roughness/emission tweaks for visibility.
 	if plot_type == "RESOURCE":
-		material.albedo_color = Color(0.771, 0.68, 0.195, 1.0)
+		material.albedo_color = Color(0.89, 0.79, 0.222, 1.0)
 	elif claimed_by == "":
 		material.albedo_color = Color(0.886, 0.7, 0.803, 1.0)
 	elif claimed_by == my_player_id:

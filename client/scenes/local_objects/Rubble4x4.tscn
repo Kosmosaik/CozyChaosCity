@@ -1,7 +1,15 @@
 [gd_scene format=3 uid="uid://cp0bvfbqngahh"]
 
-[ext_resource type="PackedScene" uid="uid://djtsqtvqpbsqy" path="res://assets/Rubble.glb" id="1_rubble"]
+[ext_resource type="PackedScene" uid="uid://gfgnon2xb5rp" path="res://assets/Rubble_A.glb" id="1_rubble"]
+[ext_resource type="Script" uid="uid://cc157gvywtgua" path="res://scripts/world/local_objects/Rubble4x4.gd" id="2_rubble_script"]
 
-[node name="Rubble4x4" type="Node3D" unique_id=1663297871]
+[sub_resource type="BoxShape3D" id="BoxShape3D_hitbox"]
+size = Vector3(3.6400757, 0.7217102, 4)
+
+[node name="Rubble4x4" type="StaticBody3D" unique_id=1663297871]
+script = ExtResource("2_rubble_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1440823101]
+shape = SubResource("BoxShape3D_hitbox")
 
 [node name="Model" parent="." unique_id=2010153492 instance=ExtResource("1_rubble")]
