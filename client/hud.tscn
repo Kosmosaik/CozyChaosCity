@@ -76,6 +76,13 @@ vertical_alignment = 1
 [node name="VSeparator4" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=640354342]
 layout_mode = 2
 
+[node name="ExitPlotButton" type="Button" parent="TopBar/HBoxContainer" unique_id=1234856782]
+layout_mode = 2
+text = "Leave Plot"
+
+[node name="VSeparator5" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=63028310]
+layout_mode = 2
+
 [node name="QuitButtonInGame" type="Button" parent="TopBar/HBoxContainer" unique_id=645519793]
 custom_minimum_size = Vector2(70, 0)
 layout_mode = 2
@@ -134,6 +141,11 @@ text = "Claim"
 visible = false
 layout_mode = 2
 text = "Clear Cell (0,0)"
+
+[node name="EnterPlotButton" type="Button" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=796627816]
+visible = false
+layout_mode = 2
+text = "Enter Plot"
 
 [node name="MenuOverlay" type="Control" parent="." unique_id=597708892]
 visible = false

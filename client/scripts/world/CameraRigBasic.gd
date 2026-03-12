@@ -26,12 +26,12 @@ class_name CameraRigBasic
 @export var mouse_pitch_sensitivity: float = 0.20
 
 @export var min_zoom_distance: float = 4.0
-@export var max_zoom_distance: float = 30.0
+@export var max_zoom_distance: float = 80.0
 @export var zoom_step: float = 1.5
 @export var initial_zoom_distance: float = 14.0
 
-@export var min_pitch_degrees: float = -80.0
-@export var max_pitch_degrees: float = -25.0
+@export var min_pitch_degrees: float = -90.0
+@export var max_pitch_degrees: float = -15.0
 @export var initial_pitch_degrees: float = -45.0
 
 @onready var yaw_pivot: Node3D = $YawPivot
@@ -41,6 +41,63 @@ class_name CameraRigBasic
 var _zoom_distance: float = 14.0
 var _pitch_degrees: float = -45.0
 var _is_rotating_with_mouse: bool = false
+var _controls_locked: bool = false
+var _active_tween: Tween = null
+
+func set_controls_locked(locked: bool) -> void:
+	# Used by mode transitions so the player cannot pan/rotate/zoom
+	# while the camera is tweening between world and local-plot views.
+	_controls_locked = locked
+
+	if locked:
+		_is_rotating_with_mouse = false
+
+func get_zoom_distance() -> float:
+	return _zoom_distance
+
+func get_pitch_degrees() -> float:
+	return _pitch_degrees
+
+func tween_to_state(
+	target_position: Vector3,
+	target_zoom_distance: float,
+	target_pitch_degrees: float,
+	duration: float = 0.35
+) -> Tween:
+	# Kill any previous transition so only one camera tween is active at a time.
+	if _active_tween != null and is_instance_valid(_active_tween):
+		_active_tween.kill()
+
+	var clamped_zoom = clamp(target_zoom_distance, min_zoom_distance, max_zoom_distance)
+	var clamped_pitch = clamp(target_pitch_degrees, min_pitch_degrees, max_pitch_degrees)
+
+	_active_tween = create_tween()
+	_active_tween.set_trans(Tween.TRANS_SINE)
+	_active_tween.set_ease(Tween.EASE_IN_OUT)
+
+	_active_tween.parallel().tween_property(self, "global_position", target_position, duration)
+	_active_tween.parallel().tween_method(
+		Callable(self, "_set_zoom_distance_from_tween"),
+		_zoom_distance,
+		clamped_zoom,
+		duration
+	)
+	_active_tween.parallel().tween_method(
+		Callable(self, "_set_pitch_degrees_from_tween"),
+		_pitch_degrees,
+		clamped_pitch,
+		duration
+	)
+
+	return _active_tween
+
+func _set_zoom_distance_from_tween(value: float) -> void:
+	_zoom_distance = value
+	_apply_zoom()
+
+func _set_pitch_degrees_from_tween(value: float) -> void:
+	_pitch_degrees = value
+	_apply_pitch()
 
 func _ready() -> void:
 	# Validate the expected scene structure early so setup mistakes fail clearly.
@@ -68,6 +125,9 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	# Use _unhandled_input so UI gets first chance to consume input.
 	# Camera controls only react to input that the UI did not already handle.
+	
+	if _controls_locked:
+		return
 
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_RIGHT:
@@ -101,6 +161,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _handle_movement(delta: float) -> void:
+	if _controls_locked:
+		return
 	var input_dir := Input.get_vector("camera_left", "camera_right", "camera_down", "camera_up")
 	if input_dir == Vector2.ZERO:
 		return

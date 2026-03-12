@@ -19,6 +19,7 @@ extends Control
 @onready var online_label: Label = $TopBar/HBoxContainer/OnlineLabel
 @onready var quit_button: Button = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/QuitButton
 @onready var quit_button_in_game: Button = $TopBar/HBoxContainer/QuitButtonInGame
+@onready var exit_plot_button: Button = $TopBar/HBoxContainer/ExitPlotButton
 
 var net: NetClient
 var selected_plot_id: String = ""
@@ -60,6 +61,7 @@ func _ready() -> void:
 	claim_button.visible = false
 	_is_logged_in = false
 	plot_info_panel.clear_panel()
+	exit_plot_button.visible = false
 	_show_login_menu()
 	_set_status_text("Enter username and press Connect.")
 
@@ -67,12 +69,14 @@ func _ready() -> void:
 	connect_button.pressed.connect(_on_connect_pressed)
 	quit_button.pressed.connect(_on_quit_pressed)
 	quit_button_in_game.pressed.connect(_on_quit_pressed)
+	exit_plot_button.pressed.connect(_on_exit_plot_pressed)
 
 	# Keep the old top-bar claim button hidden for now.
 	# The popup panel is the new interaction path for plot claims.
 	claim_button.pressed.connect(_on_claim_pressed)
 	plot_info_panel.claim_requested.connect(_on_plot_info_claim_requested)
 	plot_info_panel.debug_clear_requested.connect(_on_plot_info_debug_clear_requested)
+	plot_info_panel.enter_plot_requested.connect(_on_plot_info_enter_plot_requested)
 
 	# Find NetClient (you already used this pattern)
 	net = get_tree().get_first_node_in_group("netclient") as NetClient
@@ -87,6 +91,7 @@ func _ready() -> void:
 	# the currently selected plot.
 	if game_world != null:
 		game_world.plot_selected.connect(_on_plot_selected)
+		game_world.view_mode_changed.connect(_on_view_mode_changed)
 
 	# Hook NetClient signals
 	net.status_changed.connect(_on_status)
@@ -193,12 +198,37 @@ func _on_plot_selected(plot: Dictionary, is_claimable: bool) -> void:
 	# so we still have one source of truth for claimability.
 	claim_button.disabled = not (_is_logged_in and is_claimable)
 
-	plot_info_panel.show_plot(plot, is_claimable, _is_logged_in, is_owned_by_me)
+	var can_enter_plot := is_owned_by_me and str(plot.get("type", "")) == "PLAYER"
+	plot_info_panel.show_plot(plot, is_claimable, _is_logged_in, is_owned_by_me, can_enter_plot)
 	
 func _on_plot_info_claim_requested(plot_id: String) -> void:
 	# The popup reuses the same claim flow as the old top-bar button.
 	selected_plot_id = plot_id
 	_on_claim_pressed()
+
+func _on_plot_info_enter_plot_requested(plot_id: String) -> void:
+	if game_world == null:
+		_set_status_text("GameWorld3D not found.")
+		return
+
+	var ok = game_world.enter_player_plot_mode(plot_id)
+	if not ok:
+		_set_status_text("Could not enter plot mode for %s." % plot_id)
+		return
+
+	_set_status_text("Entering plot %s..." % plot_id)
+
+func _on_exit_plot_pressed() -> void:
+	if game_world == null:
+		_set_status_text("GameWorld3D not found.")
+		return
+
+	var ok = game_world.exit_player_plot_mode()
+	if not ok:
+		_set_status_text("Could not exit plot mode.")
+		return
+
+	_set_status_text("Returning to world view...")
 	
 func _on_plot_info_debug_clear_requested(plot_id: String) -> void:
 	if not _is_logged_in:
@@ -215,6 +245,18 @@ func _on_plot_info_debug_clear_requested(plot_id: String) -> void:
 	# clear the top-left local rubble cell on the owned plot.
 	net.debug_clear_plot_cell(selected_plot_id, 0, 0)
 	_set_status_text("Debug clear requested for %s cell (0,0)..." % selected_plot_id)
+
+func _on_view_mode_changed(mode_name: String, active_plot_id: String) -> void:
+	if mode_name == "PLAYER_PLOT":
+		exit_plot_button.visible = true
+		plot_info_panel.clear_panel()
+	else:
+		exit_plot_button.visible = false
+
+		# Refresh the selected-plot popup when we return to world view
+		# so the player can continue using the normal M1 selection flow.
+		if game_world != null:
+			game_world.refresh_selected_plot_ui()
 
 func _on_claim_pressed() -> void:
 	if not _is_logged_in:

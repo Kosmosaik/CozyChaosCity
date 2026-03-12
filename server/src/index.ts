@@ -38,6 +38,53 @@ if (norm.changed) {
 
 const conns = new Map<any, ConnState>();
 
+function encodePlotDetailForClient(detail: NonNullable<WorldState["plots"][number]["detail"]>) {
+  /**
+   * Compact wire format for local plot detail.
+   *
+   * Why:
+   * - A full 40x40 detail grid as an array of cell objects is very large.
+   * - Claiming a plot sends that detail immediately to the owner.
+   * - Compact row strings keep the server authoritative model unchanged,
+   *   while making network payloads much smaller and safer.
+   *
+   * Current encoding:
+   * - "R" = RUBBLE, blocked=true, clearable=true
+   * - "G" = GROUND, blocked=false, clearable=false
+   *
+   * This matches the current M2 starter-state rules exactly.
+   */
+  const cellByKey = new Map<string, typeof detail.cells[number]>();
+  for (const cell of detail.cells) {
+    cellByKey.set(`${cell.x},${cell.y}`, cell);
+  }
+
+  const cell_rows: string[] = [];
+
+  for (let y = 0; y < detail.height; y++) {
+    let row = "";
+
+    for (let x = 0; x < detail.width; x++) {
+      const cell = cellByKey.get(`${x},${y}`);
+      if (!cell) {
+        row += "G";
+        continue;
+      }
+
+      row += cell.terrain === "RUBBLE" ? "R" : "G";
+    }
+
+    cell_rows.push(row);
+  }
+
+  return {
+    width: detail.width,
+    height: detail.height,
+    cell_rows,
+    starter_objects: detail.starter_objects,
+  };
+}
+
 /**
  * Convert one authoritative server plot into a client-friendly payload shape.
  *
@@ -46,12 +93,25 @@ const conns = new Map<any, ConnState>();
  * - UI wants a human-readable owner name without having to do client-side joins.
  * - We keep the server as the single place that prepares presentation-ready plot payloads.
  */
-function decoratePlotForClient(plot: WorldState["plots"][number]) {
+function decoratePlotForClient(
+  plot: WorldState["plots"][number],
+  viewerPlayerId: string | null
+) {
   const claimedBy = plot.claimed_by;
   const ownerRec = claimedBy ? world.players[claimedBy] : null;
 
+  // World Map snapshots must NOT leak full local detail for every claimed plot.
+  // Only the owning player should receive their own plot.detail in this early M2 phase.
+  const includeDetail = viewerPlayerId !== null && claimedBy === viewerPlayerId;
+
   return {
-    ...plot,
+    id: plot.id,
+    type: plot.type,
+    x: plot.x,
+    y: plot.y,
+    claimed_by: plot.claimed_by,
+    shell: plot.shell,
+    detail: includeDetail && plot.detail ? encodePlotDetailForClient(plot.detail) : undefined,
     owner_display_name: ownerRec?.display_name ?? "",
   };
 }
@@ -62,8 +122,11 @@ function decoratePlotForClient(plot: WorldState["plots"][number]) {
  * Keeping this as a helper avoids repeating the same map logic in world_state
  * and world_patch responses.
  */
-function decoratePlotsForClient(plots: WorldState["plots"]) {
-  return plots.map((plot) => decoratePlotForClient(plot));
+function decoratePlotsForClient(
+  plots: WorldState["plots"],
+  viewerPlayerId: string | null
+) {
+  return plots.map((plot) => decoratePlotForClient(plot, viewerPlayerId));
 }
 
 /**
@@ -73,10 +136,10 @@ function decoratePlotsForClient(plots: WorldState["plots"]) {
  * - We do not mutate the authoritative server world here.
  * - We return a payload copy whose plots are enriched with owner_display_name.
  */
-function makeWorldForClient() {
+function makeWorldForClient(viewerPlayerId: string | null) {
   return {
     ...world,
-    plots: decoratePlotsForClient(world.plots),
+    plots: decoratePlotsForClient(world.plots, viewerPlayerId),
   };
 }
 
@@ -87,7 +150,9 @@ function broadcast(msg: string) {
 }
 
 function sendWorld(ws: any) {
-  ws.send(makeMsg("world_state", { world: makeWorldForClient() }));
+  const st = conns.get(ws);
+  const viewerPlayerId = st?.player_id ?? null;
+  ws.send(makeMsg("world_state", { world: makeWorldForClient(viewerPlayerId) }));
 }
 
 function sendPresenceState(ws: any) {
@@ -260,13 +325,19 @@ wss.on("connection", (ws) => {
       world.version += 1;
       saveWorldAtomic(CONFIG.persistPath, world);
 
-      const plotForClient = decoratePlotForClient(plot);
-      broadcast(
-        makeMsg("plot_update", {
-          plot: plotForClient,
-          owner_display_name: plotForClient.owner_display_name,
-        })
-      );
+      for (const client of wss.clients) {
+        if (client.readyState !== client.OPEN) continue;
+
+        const clientState = conns.get(client);
+        const plotForClient = decoratePlotForClient(plot, clientState?.player_id ?? null);
+
+        client.send(
+          makeMsg("plot_update", {
+            plot: plotForClient,
+            owner_display_name: plotForClient.owner_display_name,
+          })
+        );
+      }
 
       ws.send(
         makeMsg(
@@ -311,15 +382,20 @@ wss.on("connection", (ws) => {
 
       // Notify everyone using the same enriched plot shape we use everywhere else.
       // We keep owner_display_name at the top level too for backward safety.
-      const plotForClient = decoratePlotForClient(plot);
-      const ownerDisplayName = plotForClient.owner_display_name;
+      for (const client of wss.clients) {
+        if (client.readyState !== client.OPEN) continue;
 
-      broadcast(
-        makeMsg("plot_update", {
-          plot: plotForClient,
-          owner_display_name: ownerDisplayName,
-        })
-      );
+        const clientState = conns.get(client);
+        const plotForClient = decoratePlotForClient(plot, clientState?.player_id ?? null);
+        const ownerDisplayName = plotForClient.owner_display_name;
+
+        client.send(
+          makeMsg("plot_update", {
+            plot: plotForClient,
+            owner_display_name: ownerDisplayName,
+          })
+        );
+      }
       ws.send(makeMsg("claim_result", { ok: true, plot_id: plotId }, env.req_id));
 
       // Expansion check
@@ -329,7 +405,7 @@ wss.on("connection", (ws) => {
 
         // Keep patch payloads consistent with world_state and plot_update:
         // added plots are sent in enriched client-ready form.
-        const addedForClient = decoratePlotsForClient(added);
+        const addedForClient = decoratePlotsForClient(added, null);
 
         broadcast(makeMsg("world_patch", { added: addedForClient, world_version: world.version }));
       }

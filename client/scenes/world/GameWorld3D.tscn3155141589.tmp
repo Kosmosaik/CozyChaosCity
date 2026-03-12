@@ -12,7 +12,7 @@ point_size = 85.3
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_vfhkl"]
 lightmap_size_hint = Vector2i(1402, 1402)
-size = Vector2(100, 100)
+size = Vector2(280, 280)
 
 [node name="GameWorld3D" type="Node3D" unique_id=1513630665]
 script = ExtResource("1_cepi3")

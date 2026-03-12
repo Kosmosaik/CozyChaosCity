@@ -60,7 +60,7 @@ export type PlotDetailCell = {
   terrain: PlotDetailTerrain;
 };
 
-export type PlotDetailStarterObjectKind = "SHACK" | "NPC_MARKER";
+export type PlotDetailStarterObjectKind = "SHACK" | "NPC_MARKER" | "RUBBLE_4X4";
 
 export type PlotDetailStarterObject = {
   /**
@@ -74,10 +74,26 @@ export type PlotDetailStarterObject = {
   kind: PlotDetailStarterObjectKind;
 
   /**
-   * Local coordinate inside the detail grid.
+   * Local top-left coordinate inside the detail grid.
+   *
+   * Important:
+   * - x/y are no longer treated as "center of one cell"
+   * - x/y define the top-left anchor of the object's footprint
    */
   x: number;
   y: number;
+
+  /**
+   * Optional footprint size in local cells/meters.
+   * Defaults to 1x1 when omitted.
+   *
+   * This lets us represent:
+   * - a 4x4 shack
+   * - later larger buildings
+   * - while keeping NPC markers or tiny props at 1x1
+   */
+  footprint_w?: number;
+  footprint_h?: number;
 };
 
 export type PlotDetail = {

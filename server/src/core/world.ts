@@ -33,27 +33,62 @@ function makeStarterPlotDetail(): PlotDetail {
   const cells: PlotDetailCell[] = [];
   const starterObjects: PlotDetailStarterObject[] = [];
 
-  // Shelter footprint in the center of the local plot.
-  // Everything outside this area starts as blocked rubble.
-  const shelterMinX = 3;
-  const shelterMaxX = 4;
-  const shelterMinY = 3;
-  const shelterMaxY = 4;
+  /**
+   * Starter layout rules:
+   * - local plot is 40x40 cells/meters
+   * - center contains a clear starter area
+   * - shack is a 4x4 placed object
+   * - rubble is now represented as real 4x4 local objects
+   * - the hidden cell grid still carries blocked/clearable terrain logic underneath
+   */
+
+  const clearAreaMinX = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
+  const clearAreaMinY = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
+  const clearAreaMaxX = clearAreaMinX + STARTER_CLEAR_AREA_SIZE - 1;
+  const clearAreaMaxY = clearAreaMinY + STARTER_CLEAR_AREA_SIZE - 1;
+
+  const shackX = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
+  const shackY = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
 
   for (let y = 0; y < STARTER_DETAIL_SIZE; y++) {
     for (let x = 0; x < STARTER_DETAIL_SIZE; x++) {
-      const insideShelterFootprint =
-        x >= shelterMinX &&
-        x <= shelterMaxX &&
-        y >= shelterMinY &&
-        y <= shelterMaxY;
+      const insideStarterClearArea =
+        x >= clearAreaMinX &&
+        x <= clearAreaMaxX &&
+        y >= clearAreaMinY &&
+        y <= clearAreaMaxY;
 
       cells.push({
         x,
         y,
-        blocked: !insideShelterFootprint,
-        clearable: !insideShelterFootprint,
-        terrain: insideShelterFootprint ? "GROUND" : "RUBBLE",
+        blocked: !insideStarterClearArea,
+        clearable: !insideStarterClearArea,
+        terrain: insideStarterClearArea ? "GROUND" : "RUBBLE",
+      });
+    }
+  }
+
+  // Add 4x4 rubble objects everywhere outside the central clear area.
+  // Because the layout sizes are divisible by 4, this produces a clean object grid.
+  for (let y = 0; y < STARTER_DETAIL_SIZE; y += STARTER_RUBBLE_SIZE) {
+    for (let x = 0; x < STARTER_DETAIL_SIZE; x += STARTER_RUBBLE_SIZE) {
+      const chunkInsideClearArea =
+        x >= clearAreaMinX &&
+        (x + STARTER_RUBBLE_SIZE - 1) <= clearAreaMaxX &&
+        y >= clearAreaMinY &&
+        (y + STARTER_RUBBLE_SIZE - 1) <= clearAreaMaxY;
+
+      if (chunkInsideClearArea) {
+        continue;
+      }
+
+      starterObjects.push({
+        id: `starter_rubble_${x}_${y}`,
+        kind: "RUBBLE_4X4",
+        x,
+        y,
+        footprint_w: STARTER_RUBBLE_SIZE,
+        footprint_h: STARTER_RUBBLE_SIZE,
       });
     }
   }
@@ -62,14 +97,18 @@ function makeStarterPlotDetail(): PlotDetail {
     {
       id: "starter_shack",
       kind: "SHACK",
-      x: 3,
-      y: 3,
+      x: shackX,
+      y: shackY,
+      footprint_w: STARTER_SHACK_SIZE,
+      footprint_h: STARTER_SHACK_SIZE,
     },
     {
       id: "starter_npc",
       kind: "NPC_MARKER",
-      x: 4,
-      y: 4,
+      x: shackX + STARTER_SHACK_SIZE + 1,
+      y: shackY + STARTER_SHACK_SIZE - 1,
+      footprint_w: 1,
+      footprint_h: 1,
     }
   );
 
@@ -142,6 +181,89 @@ export function ensureClaimedPlayerPlotInitialized(plot: Plot): boolean {
   return true;
 }
 
+function objectOccupiesCell(
+  obj: PlotDetailStarterObject,
+  x: number,
+  y: number
+): boolean {
+  const footprintW = obj.footprint_w ?? 1;
+  const footprintH = obj.footprint_h ?? 1;
+
+  return (
+    x >= obj.x &&
+    x < obj.x + footprintW &&
+    y >= obj.y &&
+    y < obj.y + footprintH
+  );
+}
+
+function getRubbleObjectAtCell(plot: Plot, x: number, y: number): PlotDetailStarterObject | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  for (const obj of detail.starter_objects) {
+    if (obj.kind !== "RUBBLE_4X4") {
+      continue;
+    }
+
+    if (objectOccupiesCell(obj, x, y)) {
+      return obj;
+    }
+  }
+
+  return null;
+}
+
+function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
+  // Backward-safe migration helper:
+  // if an older claimed plot has rubble cells but no rubble objects yet,
+  // reconstruct the starter rubble object layout from the current cell data.
+  const hasRubbleObjects = detail.starter_objects.some((obj) => obj.kind === "RUBBLE_4X4");
+  if (hasRubbleObjects) {
+    return false;
+  }
+
+  let changed = false;
+
+  for (let y = 0; y < detail.height; y += STARTER_RUBBLE_SIZE) {
+    for (let x = 0; x < detail.width; x += STARTER_RUBBLE_SIZE) {
+      let fullRubbleChunk = true;
+
+      for (let cy = y; cy < y + STARTER_RUBBLE_SIZE; cy++) {
+        for (let cx = x; cx < x + STARTER_RUBBLE_SIZE; cx++) {
+          const cell = detail.cells.find((c) => c.x === cx && c.y === cy);
+          if (!cell || cell.terrain !== "RUBBLE") {
+            fullRubbleChunk = false;
+            break;
+          }
+        }
+
+        if (!fullRubbleChunk) {
+          break;
+        }
+      }
+
+      if (!fullRubbleChunk) {
+        continue;
+      }
+
+      detail.starter_objects.push({
+        id: `starter_rubble_${x}_${y}`,
+        kind: "RUBBLE_4X4",
+        x,
+        y,
+        footprint_w: STARTER_RUBBLE_SIZE,
+        footprint_h: STARTER_RUBBLE_SIZE,
+      });
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailCell | null {
   const detail = plot.detail;
   if (!detail) {
@@ -171,13 +293,44 @@ export function isPlotDetailCellClearable(plot: Plot, x: number, y: number): boo
 }
 
 export function clearPlotDetailCell(plot: Plot, x: number, y: number): boolean {
+  const detail = plot.detail;
+  if (!detail) {
+    return false;
+  }
+
+  // Preferred path:
+  // if this cell belongs to a placed 4x4 rubble object, remove that object
+  // and free the whole occupied footprint.
+  const rubbleObject = getRubbleObjectAtCell(plot, x, y);
+  if (rubbleObject) {
+    detail.starter_objects = detail.starter_objects.filter((obj) => obj.id !== rubbleObject.id);
+
+    const footprintW = rubbleObject.footprint_w ?? 1;
+    const footprintH = rubbleObject.footprint_h ?? 1;
+
+    for (let cy = rubbleObject.y; cy < rubbleObject.y + footprintH; cy++) {
+      for (let cx = rubbleObject.x; cx < rubbleObject.x + footprintW; cx++) {
+        const cell = getPlotDetailCell(plot, cx, cy);
+        if (!cell) {
+          continue;
+        }
+
+        cell.terrain = "GROUND";
+        cell.blocked = false;
+        cell.clearable = false;
+      }
+    }
+
+    return true;
+  }
+
+  // Backward-safe fallback:
+  // if no rubble object exists yet, fall back to the older per-cell clear behavior.
   const cell = getPlotDetailCell(plot, x, y);
   if (!cell) {
     return false;
   }
 
-  // Only allow mutation through the explicit clearable flag.
-  // This keeps the gameplay rule centralized and easy to evolve later.
   if (!cell.clearable) {
     return false;
   }
@@ -266,7 +419,10 @@ export function fillRectMissing(world: WorldState, rect: { minX: number; maxX: n
 
 // --- Module expansion helpers (constant-size expansions) ---
 const MODULE_SIZE = 3;
-const STARTER_DETAIL_SIZE = 8;
+const STARTER_DETAIL_SIZE = 40;
+const STARTER_CLEAR_AREA_SIZE = 8;
+const STARTER_SHACK_SIZE = 4;
+const STARTER_RUBBLE_SIZE = 4;
 
 function moduleKey(mx: number, my: number): string {
   return `M_${mx}_${my}`;
@@ -392,6 +548,29 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
   if (added.length > 0) {
     world.version += 1;
     changed = true;
+  }
+
+  let migratedRubbleObjects = 0;
+
+  for (const plot of world.plots) {
+    if (!plot.detail) {
+      continue;
+    }
+
+    if (ensureStarterRubbleObjects(plot.detail)) {
+      migratedRubbleObjects += 1;
+      changed = true;
+    }
+  }
+
+  if (migratedRubbleObjects > 0) {
+    return {
+      changed,
+      reason: `Migrated rubble local objects for ${migratedRubbleObjects} claimed plot(s).`,
+    };
+  }
+
+  if (added.length > 0) {
     return { changed, reason: `Filled ${added.length} missing tiles inside existing bounds.` };
   }
 

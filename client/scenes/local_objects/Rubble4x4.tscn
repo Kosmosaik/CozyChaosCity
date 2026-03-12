@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://cp0bvfbqngahh"]
+
+[ext_resource type="PackedScene" uid="uid://djtsqtvqpbsqy" path="res://assets/Rubble.glb" id="1_rubble"]
+
+[node name="Rubble4x4" type="Node3D" unique_id=1663297871]
+
+[node name="Model" parent="." unique_id=2010153492 instance=ExtResource("1_rubble")]

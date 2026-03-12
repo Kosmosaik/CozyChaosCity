@@ -3,6 +3,7 @@ class_name PlotInfoPanel
 
 signal claim_requested(plot_id: String)
 signal debug_clear_requested(plot_id: String)
+signal enter_plot_requested(plot_id: String)
 
 # PlotInfoPanel owns the selected-plot popup UI.
 # It displays lightweight plot information and exposes a Claim button
@@ -15,6 +16,7 @@ signal debug_clear_requested(plot_id: String)
 @onready var type_value_label: Label = $MarginContainer/VBoxContainer/InfoGrid/TypeValueLabel
 @onready var owner_value_label: Label = $MarginContainer/VBoxContainer/InfoGrid/OwnerValueLabel
 @onready var claim_button: Button = $MarginContainer/VBoxContainer/ClaimButton
+@onready var enter_plot_button: Button = $MarginContainer/VBoxContainer/EnterPlotButton
 @onready var debug_clear_cell_button: Button = $MarginContainer/VBoxContainer/DebugClearCellButton
 
 var _selected_plot_id: String = ""
@@ -23,6 +25,7 @@ func _ready() -> void:
 	# Start hidden until the player selects a tile.
 	hide()
 	claim_button.pressed.connect(_on_claim_pressed)
+	enter_plot_button.pressed.connect(_on_enter_plot_pressed)
 	debug_clear_cell_button.pressed.connect(_on_debug_clear_pressed)
 
 func clear_panel() -> void:
@@ -33,11 +36,19 @@ func clear_panel() -> void:
 	owner_value_label.text = "-"
 	claim_button.visible = false
 	claim_button.disabled = true
+	enter_plot_button.visible = false
+	enter_plot_button.disabled = true
 	debug_clear_cell_button.visible = false
 	debug_clear_cell_button.disabled = true
 	hide()
 
-func show_plot(plot: Dictionary, is_claimable: bool, is_logged_in: bool, is_owned_by_me: bool) -> void:
+func show_plot(
+	plot: Dictionary,
+	is_claimable: bool,
+	is_logged_in: bool,
+	is_owned_by_me: bool,
+	can_enter_plot: bool
+) -> void:
 	# Display the currently selected plot.
 	_selected_plot_id = str(plot.get("id", ""))
 
@@ -60,6 +71,9 @@ func show_plot(plot: Dictionary, is_claimable: bool, is_logged_in: bool, is_owne
 	# The claim button is only shown for free claimable plots.
 	claim_button.visible = is_claimable
 	claim_button.disabled = not (is_claimable and is_logged_in)
+	# Player Plot mode entry is only allowed for the local player's own claimed plot.
+	enter_plot_button.visible = can_enter_plot
+	enter_plot_button.disabled = not (can_enter_plot and is_logged_in)
 
 	# Temporary M2 debug button:
 	# only show it for the local player's own claimed plot.
@@ -73,6 +87,12 @@ func _on_claim_pressed() -> void:
 		return
 
 	claim_requested.emit(_selected_plot_id)
+
+func _on_enter_plot_pressed() -> void:
+	if _selected_plot_id == "":
+		return
+
+	enter_plot_requested.emit(_selected_plot_id)
 	
 func _on_debug_clear_pressed() -> void:
 	if _selected_plot_id == "":

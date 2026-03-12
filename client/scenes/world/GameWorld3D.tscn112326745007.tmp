@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://ckd2fi2y6ev4m" path="res://scripts/world/GameWorld3D.gd" id="1_cepi3"]
 [ext_resource type="Script" uid="uid://c6fus6plfw6uv" path="res://scripts/world/CameraRigBasic.gd" id="2_lhvpt"]
 [ext_resource type="Texture2D" uid="uid://cj2upy5kbtcgc" path="res://1.png" id="2_yqp0r"]
-[ext_resource type="AudioStream" uid="uid://blmhpfntk3u5" path="res://sound/transition.ogg" id="4_7o2jj"]
+[ext_resource type="AudioStream" uid="uid://debux33niqlvu" path="res://sound/view_transition.mp3" id="4_7o2jj"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pnubo"]
 albedo_color = Color(0.9384497, 0.9384497, 0.9384497, 1)
@@ -12,7 +12,7 @@ point_size = 85.3
 
 [sub_resource type="PlaneMesh" id="PlaneMesh_vfhkl"]
 lightmap_size_hint = Vector2i(1402, 1402)
-size = Vector2(100, 100)
+size = Vector2(280, 280)
 
 [node name="GameWorld3D" type="Node3D" unique_id=1513630665]
 script = ExtResource("1_cepi3")
@@ -33,10 +33,7 @@ current = true
 fov = 65.0
 
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=605205620]
-transform = Transform3D(0.98419553, 0.13201228, 0.118032664, -5.827011e-08, -0.66653246, 0.74547595, 0.17708458, -0.73369426, -0.6559983, 0, 0, 0)
-light_color = Color(0.94380873, 1, 0.855497, 1)
-light_angular_distance = 0.45
-shadow_enabled = true
+transform = Transform3D(0.70710677, -0.61237246, 0.35355335, 0, 0.49999997, 0.86602545, -0.70710677, -0.61237246, 0.35355335, 0, 0, 0)
 
 [node name="TilesRoot" type="Node3D" parent="." unique_id=320533590]
 
@@ -45,6 +42,7 @@ material_override = SubResource("StandardMaterial3D_pnubo")
 mesh = SubResource("PlaneMesh_vfhkl")
 
 [node name="OwnedPlotRoot" type="Node3D" parent="." unique_id=1690829213]
+visible = false
 
-[node name="TransitionAudioPlayer" type="AudioStreamPlayer" parent="." unique_id=736189395]
+[node name="TransitionAudioPlayer" type="AudioStreamPlayer3D" parent="." unique_id=807106682]
 stream = ExtResource("4_7o2jj")
