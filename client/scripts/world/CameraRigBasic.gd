@@ -41,6 +41,16 @@ class_name CameraRigBasic
 var _zoom_distance: float = 14.0
 var _pitch_degrees: float = -45.0
 var _is_rotating_with_mouse: bool = false
+# Small RMB drag threshold before camera rotation begins.
+#
+# Why:
+# - Prevent tiny accidental mouse movement from nudging the camera
+#   while the player is trying to right-click rubble.
+# - Rotation only starts once the drag is clearly intentional.
+const RMB_ROTATE_START_DRAG_DISTANCE: float = 10.0
+
+var _is_rmb_rotate_armed: bool = false
+var _right_mouse_press_screen_position: Vector2 = Vector2.ZERO
 var _controls_locked: bool = false
 var _active_tween: Tween = null
 
@@ -56,7 +66,18 @@ func set_controls_locked(locked: bool) -> void:
 	_controls_locked = locked
 
 	if locked:
-		_is_rotating_with_mouse = false
+		cancel_mouse_rotate()
+		
+func cancel_mouse_rotate() -> void:
+	# Force-stop all RMB rotation state.
+	#
+	# Why this exists:
+	# - Some UI flows (like PopupMenu) can consume the release/dismiss input.
+	# - The camera now has both an "armed" state and an active rotate state.
+	# - UI callers need one reliable way to fully reset both.
+	_is_rotating_with_mouse = false
+	_is_rmb_rotate_armed = false
+	_right_mouse_press_screen_position = Vector2.ZERO
 
 func get_zoom_distance() -> float:
 	return _zoom_distance
@@ -162,40 +183,58 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	# Use _unhandled_input so UI gets first chance to consume input.
 	# Camera controls only react to input that the UI did not already handle.
-	
+
 	if _controls_locked:
 		return
 
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			_is_rotating_with_mouse = event.pressed
-			if event.pressed:
+		var mouse_button_event := event as InputEventMouseButton
+
+		if mouse_button_event.button_index == MOUSE_BUTTON_RIGHT:
+			if mouse_button_event.pressed:
+				# Arm possible camera rotation, but do not begin rotating yet.
+				# This prevents tiny click jitter from moving the camera.
+				_is_rmb_rotate_armed = true
+				_is_rotating_with_mouse = false
+				_right_mouse_press_screen_position = mouse_button_event.position
 				get_viewport().set_input_as_handled()
+			else:
+				# Releasing RMB should always clear both armed and active states.
+				cancel_mouse_rotate()
 			return
 
-		if event.pressed:
-			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-				_zoom_toward_mouse(-zoom_step, event.position)
+		if mouse_button_event.pressed:
+			if mouse_button_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				_zoom_toward_mouse(-zoom_step, mouse_button_event.position)
 				get_viewport().set_input_as_handled()
 				return
-			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				_zoom_toward_mouse(zoom_step, event.position)
+			elif mouse_button_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_zoom_toward_mouse(zoom_step, mouse_button_event.position)
 				get_viewport().set_input_as_handled()
 				return
 
-	if event is InputEventMouseMotion and _is_rotating_with_mouse:
-		# Horizontal mouse drag = yaw
-		# Vertical mouse drag = pitch/tilt
-		yaw_pivot.rotate_y(deg_to_rad(-event.relative.x * mouse_yaw_sensitivity))
+	if event is InputEventMouseMotion:
+		var mouse_motion_event := event as InputEventMouseMotion
 
-		_pitch_degrees = clamp(
-			_pitch_degrees - (event.relative.y * mouse_pitch_sensitivity),
-			min_pitch_degrees,
-			max_pitch_degrees
-		)
-		_apply_pitch()
+		# If RMB is armed but not yet rotating, only begin rotation after
+		# a small threshold so accidental hand wobble does not twitch the camera.
+		if _is_rmb_rotate_armed and not _is_rotating_with_mouse:
+			if mouse_motion_event.position.distance_to(_right_mouse_press_screen_position) >= RMB_ROTATE_START_DRAG_DISTANCE:
+				_is_rotating_with_mouse = true
 
-		get_viewport().set_input_as_handled()
+		if _is_rotating_with_mouse:
+			# Horizontal mouse drag = yaw
+			# Vertical mouse drag = pitch/tilt
+			yaw_pivot.rotate_y(deg_to_rad(-mouse_motion_event.relative.x * mouse_yaw_sensitivity))
+
+			_pitch_degrees = clamp(
+				_pitch_degrees - (mouse_motion_event.relative.y * mouse_pitch_sensitivity),
+				min_pitch_degrees,
+				max_pitch_degrees
+			)
+			_apply_pitch()
+
+			get_viewport().set_input_as_handled()
 
 func _handle_movement(delta: float) -> void:
 	if _controls_locked:

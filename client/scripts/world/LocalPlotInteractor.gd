@@ -1,10 +1,22 @@
 extends Node
 class_name LocalPlotInteractor3D
 
-signal rubble_clicked(object_id: String)
+signal rubble_context_requested(object_id: String, screen_position: Vector2)
 
 var _camera: Camera3D = null
 var _enabled: bool = false
+
+# Right-click context behavior:
+# - press may begin a context interaction
+# - drag cancels the menu and allows camera rotation to remain the main feel
+# - release without drag opens the context menu
+const RMB_CLICK_MAX_DRAG_DISTANCE: float = 15.0
+
+var _right_mouse_press_screen_position: Vector2 = Vector2.ZERO
+
+var _right_mouse_pressed: bool = false
+var _right_mouse_press_object_id: String = ""
+var _right_mouse_dragged: bool = false
 
 func setup(camera: Camera3D) -> void:
 	# The interactor needs the active gameplay camera so it can raycast
@@ -14,6 +26,15 @@ func setup(camera: Camera3D) -> void:
 func set_enabled(enabled: bool) -> void:
 	_enabled = enabled
 
+	# If local interaction gets disabled during a half-finished RMB gesture
+	# (for example while entering/exiting plot mode), clear that state so
+	# no stale menu interaction survives into the next mode.
+	if not enabled:
+		_right_mouse_pressed = false
+		_right_mouse_press_screen_position = Vector2.ZERO
+		_right_mouse_press_object_id = ""
+		_right_mouse_dragged = false
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not _enabled:
 		return
@@ -21,14 +42,49 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _camera == null:
 		return
 
-	# Local rubble interaction is left-click only for this first real pass.
+	# Right-click local interaction is resolved on release, not on press.
+	#
+	# Why:
+	# - CameraRigBasic already uses RMB hold/drag for rotation.
+	# - If we open the rubble menu on RMB press, the two systems fight each other.
+	# - So we only open the menu if the player pressed on rubble and then released
+	#   without dragging beyond a small threshold.
 	if event is InputEventMouseButton:
 		var mouse_event := event as InputEventMouseButton
-		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed:
-			var object_id := _pick_rubble_object_id_at_screen_pos(mouse_event.position)
-			if object_id != "":
-				rubble_clicked.emit(object_id)
-				get_viewport().set_input_as_handled()
+
+		if mouse_event.button_index == MOUSE_BUTTON_RIGHT:
+			if mouse_event.pressed:
+				_right_mouse_pressed = true
+				_right_mouse_press_screen_position = mouse_event.position
+				_right_mouse_press_object_id = _pick_rubble_object_id_at_screen_pos(mouse_event.position)
+				_right_mouse_dragged = false
+				return
+
+			# Right mouse released:
+			if _right_mouse_pressed:
+				var release_object_id := _pick_rubble_object_id_at_screen_pos(mouse_event.position)
+				var should_open_menu := (
+					not _right_mouse_dragged
+					and _right_mouse_press_object_id != ""
+					and release_object_id == _right_mouse_press_object_id
+				)
+
+				_right_mouse_pressed = false
+
+				if should_open_menu:
+					rubble_context_requested.emit(release_object_id, mouse_event.position)
+					get_viewport().set_input_as_handled()
+
+				_right_mouse_press_screen_position = Vector2.ZERO
+				_right_mouse_press_object_id = ""
+				_right_mouse_dragged = false
+				return
+
+	if event is InputEventMouseMotion:
+		if _right_mouse_pressed and not _right_mouse_dragged:
+			var motion_event := event as InputEventMouseMotion
+			if motion_event.position.distance_to(_right_mouse_press_screen_position) > RMB_CLICK_MAX_DRAG_DISTANCE:
+				_right_mouse_dragged = true
 
 func _pick_rubble_object_id_at_screen_pos(screen_pos: Vector2) -> String:
 	var ray_origin := _camera.project_ray_origin(screen_pos)

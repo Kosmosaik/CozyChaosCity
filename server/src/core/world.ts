@@ -89,6 +89,7 @@ function makeStarterPlotDetail(): PlotDetail {
         y,
         footprint_w: STARTER_RUBBLE_SIZE,
         footprint_h: STARTER_RUBBLE_SIZE,
+        clear_hits_remaining: STARTER_RUBBLE_CLEAR_HITS,
       });
     }
   }
@@ -305,7 +306,28 @@ function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
         y,
         footprint_w: STARTER_RUBBLE_SIZE,
         footprint_h: STARTER_RUBBLE_SIZE,
+        clear_hits_remaining: STARTER_RUBBLE_CLEAR_HITS,
       });
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function ensureStarterRubbleObjectClearHits(detail: PlotDetail): boolean {
+  let changed = false;
+
+  for (const obj of detail.starter_objects) {
+    if (obj.kind !== "RUBBLE_4X4") {
+      continue;
+    }
+
+    if (
+      typeof obj.clear_hits_remaining !== "number" ||
+      obj.clear_hits_remaining <= 0
+    ) {
+      obj.clear_hits_remaining = STARTER_RUBBLE_CLEAR_HITS;
       changed = true;
     }
   }
@@ -330,13 +352,35 @@ export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailC
   return cell ?? null;
 }
 
-export function clearPlotDetailObject(plot: Plot, objectId: string): boolean {
+export function applyClearActionToPlotObject(
+  plot: Plot,
+  objectId: string
+): { changed: boolean; cleared: boolean; hitsRemaining: number } {
   const rubbleObject = getRubbleObjectById(plot, objectId);
   if (!rubbleObject) {
-    return false;
+    return { changed: false, cleared: false, hitsRemaining: -1 };
   }
 
-  return clearRubbleObjectFootprint(plot, rubbleObject);
+  const currentHitsRemaining =
+    typeof rubbleObject.clear_hits_remaining === "number" && rubbleObject.clear_hits_remaining > 0
+      ? rubbleObject.clear_hits_remaining
+      : STARTER_RUBBLE_CLEAR_HITS;
+
+  if (currentHitsRemaining > 1) {
+    rubbleObject.clear_hits_remaining = currentHitsRemaining - 1;
+    return {
+      changed: true,
+      cleared: false,
+      hitsRemaining: rubbleObject.clear_hits_remaining,
+    };
+  }
+
+  const cleared = clearRubbleObjectFootprint(plot, rubbleObject);
+  return {
+    changed: cleared,
+    cleared,
+    hitsRemaining: 0,
+  };
 }
 
 export function isPlotDetailCellClearable(plot: Plot, x: number, y: number): boolean {
@@ -463,6 +507,7 @@ const STARTER_DETAIL_SIZE = 40;
 const STARTER_CLEAR_AREA_SIZE = 8;
 const STARTER_SHACK_SIZE = 4;
 const STARTER_RUBBLE_SIZE = 4;
+const STARTER_RUBBLE_CLEAR_HITS = 3;
 
 function moduleKey(mx: number, my: number): string {
   return `M_${mx}_${my}`;
@@ -591,6 +636,7 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
   }
 
   let migratedRubbleObjects = 0;
+  let migratedRubbleClearHits = 0;
 
   for (const plot of world.plots) {
     if (!plot.detail) {
@@ -601,12 +647,18 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
       migratedRubbleObjects += 1;
       changed = true;
     }
+    if (ensureStarterRubbleObjectClearHits(plot.detail)) {
+      migratedRubbleClearHits += 1;
+      changed = true;
+    }
   }
 
-  if (migratedRubbleObjects > 0) {
+  if (migratedRubbleObjects > 0 || migratedRubbleClearHits > 0) {
     return {
       changed,
-      reason: `Migrated rubble local objects for ${migratedRubbleObjects} claimed plot(s).`,
+      reason:
+        `Migrated rubble local data for ${migratedRubbleObjects} claimed plot(s)` +
+        ` and initialized clear-hit state for ${migratedRubbleClearHits} claimed plot(s).`,
     };
   }
 

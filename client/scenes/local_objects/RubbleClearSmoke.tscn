@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://cd6tkq3pqv1d4"]
+
+[ext_resource type="Texture2D" uid="uid://crqmhk2xvo458" path="res://assets/particles/smoke_flipbook.png" id="1_cg5yf"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_smoke"]
+transparency = 1
+depth_draw_mode = 2
+shading_mode = 0
+albedo_texture = ExtResource("1_cg5yf")
+billboard_mode = 3
+billboard_keep_scale = true
+particles_anim_h_frames = 4
+particles_anim_v_frames = 3
+particles_anim_loop = false
+
+[sub_resource type="Gradient" id="Gradient_3pnyh"]
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_fevf7"]
+gradient = SubResource("Gradient_3pnyh")
+
+[sub_resource type="Curve" id="Curve_3pnyh"]
+_data = [Vector2(0, 0.8764045), 0.0, 0.23152876, 0, 0, Vector2(1, 1), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="CurveTexture" id="CurveTexture_fevf7"]
+curve = SubResource("Curve_3pnyh")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_smoke"]
+emission_shape_scale = Vector3(5, 2, 5)
+emission_shape = 1
+emission_sphere_radius = 0.6
+direction = Vector3(0, 1, 0)
+spread = 40.0
+initial_velocity_min = 0.19999999
+initial_velocity_max = 0.59999996
+gravity = Vector3(0, 0.5, 0)
+radial_accel_min = 0.19999775
+radial_accel_max = 0.79999775
+damping_min = 0.2
+damping_max = 1.0
+scale_min = 3.0
+scale_max = 5.0
+scale_curve = SubResource("CurveTexture_fevf7")
+color_ramp = SubResource("GradientTexture1D_fevf7")
+anim_speed_min = 2.6399999
+anim_speed_max = 2.6399999
+
+[sub_resource type="QuadMesh" id="QuadMesh_smoke"]
+center_offset = Vector3(0, -0.2, 0)
+
+[node name="RubbleClearSmoke" type="Node3D" unique_id=808325467]
+
+[node name="Smoke" type="GPUParticles3D" parent="." unique_id=495006635]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6512897, 0)
+material_override = SubResource("StandardMaterial3D_smoke")
+emitting = false
+amount = 30
+lifetime = 3.0999999999999996
+one_shot = true
+speed_scale = 1.2
+explosiveness = 0.45
+randomness = 0.29
+fixed_fps = 60
+process_material = SubResource("ParticleProcessMaterial_smoke")
+draw_pass_1 = SubResource("QuadMesh_smoke")

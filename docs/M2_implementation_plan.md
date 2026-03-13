@@ -34,11 +34,11 @@ Instead:
 
 Build M2 in practical vertical slices:
 
-1. **Server data foundation**
-2. **Client mode switching + first local owned-plot rendering**
-3. **Player Plot camera parity**
-4. **Real local interaction with rubble**
-5. **Neighborhood loading/rendering after the owned plot feels playable**
+1. [x] Server data foundation
+2. [x] Client mode switching + first local owned-plot rendering
+3. [x] Player Plot camera parity
+4. [x] Real local interaction with rubble
+5. [ ] Neighborhood loading/rendering after the owned plot feels playable
 
 ---
 
@@ -238,15 +238,15 @@ Before adding nearby surrounding plots, make the owned plot itself feel properly
 
 ---
 
-## Immediate next goal: Player Plot camera parity
+## Immediate next goal: neighborhood loading/rendering
 
-After entering Player Plot mode, the player should be able to move around the owned plot more freely using the same general camera feel as world view.
+Now that Player Plot camera parity and real rubble interaction are both working,
+the next M2 step is to load and render the surrounding neighborhood around the owned plot.
 
-This means:
-- preserve the existing enter/exit transition
-- preserve the current camera rig philosophy
-- allow freer local camera movement after entering
-- avoid making Player Plot mode feel like a mostly fixed overview shot
+Target direction:
+- keep the owned plot as the high-detail center
+- add nearby surrounding plots/resources in reduced/public detail
+- preserve the current enter/exit transition and owned-plot interaction path
 
 ---
 

@@ -4,6 +4,19 @@
 [ext_resource type="Script" uid="uid://c6fus6plfw6uv" path="res://scripts/world/CameraRigBasic.gd" id="2_lhvpt"]
 [ext_resource type="AudioStream" uid="uid://blmhpfntk3u5" path="res://sound/transition.ogg" id="4_7o2jj"]
 
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_lhvpt"]
+sky_top_color = Color(0.2901961, 0.5647059, 0.8862745, 1)
+sky_horizon_color = Color(0.7490196, 0.90588236, 1, 1)
+ground_bottom_color = Color(0.29411766, 0.3529412, 0.23921569, 1)
+ground_horizon_color = Color(0.4862745, 0.54509807, 0.3529412, 1)
+
+[sub_resource type="Sky" id="Sky_7o2jj"]
+sky_material = SubResource("ProceduralSkyMaterial_lhvpt")
+
+[sub_resource type="Environment" id="Environment_jre3v"]
+background_mode = 2
+sky = SubResource("Sky_7o2jj")
+
 [node name="GameWorld3D" type="Node3D" unique_id=1513630665]
 script = ExtResource("1_cepi3")
 
@@ -23,8 +36,9 @@ current = true
 fov = 65.0
 
 [node name="SunLight" type="DirectionalLight3D" parent="." unique_id=605205620]
-transform = Transform3D(0.98419553, 0.13201228, 0.118032664, -5.827011e-08, -0.66653246, 0.74547595, 0.17708458, -0.73369426, -0.6559983, 0, 0, 0)
+transform = Transform3D(0.9205048, -0.38633776, -0.058428094, 1.3072791e-08, -0.14953531, 0.9887563, -0.39073095, -0.9101551, -0.13764797, 0, 0, 0)
 light_color = Color(0.94380873, 1, 0.855497, 1)
+light_energy = 1.1
 light_angular_distance = 0.45
 shadow_enabled = true
 
@@ -34,3 +48,6 @@ shadow_enabled = true
 
 [node name="TransitionAudioPlayer" type="AudioStreamPlayer" parent="." unique_id=736189395]
 stream = ExtResource("4_7o2jj")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1114450958]
+environment = SubResource("Environment_jre3v")

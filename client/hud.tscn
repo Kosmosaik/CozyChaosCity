@@ -137,11 +137,6 @@ visible = false
 layout_mode = 2
 text = "Claim"
 
-[node name="DebugClearCellButton" type="Button" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=1624293370]
-visible = false
-layout_mode = 2
-text = "Clear Cell (0,0)"
-
 [node name="EnterPlotButton" type="Button" parent="PlotInfoPanel/MarginContainer/VBoxContainer" unique_id=796627816]
 visible = false
 layout_mode = 2
@@ -251,3 +246,5 @@ theme_override_colors/font_pressed_color = Color(0.72156864, 0.6901961, 0.501960
 theme_override_colors/font_hover_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
 theme_override_colors/font_hover_pressed_color = Color(0.72156864, 0.6901961, 0.5019608, 1)
 text = "Quit"
+
+[node name="RubbleContextMenu" type="PopupMenu" parent="." unique_id=1197873931]

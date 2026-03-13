@@ -1,10 +1,16 @@
 extends StaticBody3D
 class_name Rubble4x4
 
+const CLEAR_SMOKE_SCENE: PackedScene = preload("res://scenes/local_objects/RubbleClearSmoke.tscn")
+
 signal clear_animation_finished(object_id: String)
 
 @export var fallback_sink_distance: float = 1.25
 @export var fallback_sink_duration: float = 0.45
+
+@export var clear_smoke_y_offset: float = 1.25
+@export var clear_smoke_lifetime: float = 3.0
+
 
 var _object_id: String = ""
 var _is_clearing: bool = false
@@ -23,6 +29,7 @@ func play_clear_animation() -> void:
 		return
 
 	_is_clearing = true
+	_spawn_clear_smoke()
 	input_ray_pickable = false
 	_disable_collision_shapes_recursive(self)
 
@@ -88,3 +95,29 @@ func _disable_collision_shapes_recursive(node: Node) -> void:
 			(child as CollisionShape3D).disabled = true
 
 		_disable_collision_shapes_recursive(child)
+		
+func _spawn_clear_smoke() -> void:
+	if CLEAR_SMOKE_SCENE == null:
+		return
+
+	var parent_node := get_parent()
+	if parent_node == null:
+		return
+
+	var instance = CLEAR_SMOKE_SCENE.instantiate()
+	if not (instance is Node3D):
+		return
+
+	var smoke := instance as Node3D
+	parent_node.add_child(smoke)
+	smoke.global_position = global_position + Vector3(0.0, clear_smoke_y_offset, 0.0)
+
+	_cleanup_spawned_node_later(smoke, clear_smoke_lifetime)
+
+func _cleanup_spawned_node_later(node: Node, delay_seconds: float) -> void:
+	_cleanup_spawned_node_later_async(node, delay_seconds)
+
+func _cleanup_spawned_node_later_async(node: Node, delay_seconds: float) -> void:
+	await get_tree().create_timer(delay_seconds).timeout
+	if is_instance_valid(node):
+		node.queue_free()

@@ -7,7 +7,7 @@ class_name GameWorld3D
 
 signal plot_selected(plot: Dictionary, is_claimable: bool)
 signal view_mode_changed(mode_name: String, active_plot_id: String)
-signal local_rubble_clear_requested(plot_id: String, object_id: String)
+signal local_rubble_context_requested(plot_id: String, object_id: String, screen_position: Vector2)
 
 @onready var camera_rig: CameraRigBasic = $CameraRig
 @onready var camera_3d: Camera3D = $CameraRig/YawPivot/PitchPivot/Camera3D
@@ -138,6 +138,13 @@ func refresh_selected_plot_ui() -> void:
 	_emit_selected_plot_state()
 
 func _emit_selected_plot_state() -> void:
+	# World-tile selection UI is only valid in macro world view.
+	# While inside Player Plot mode, the left-side plot panel must stay hidden,
+	# even if the active owned plot receives authoritative plot_update messages.
+	if current_view_mode != "WORLD":
+		plot_selected.emit({}, false)
+		return
+
 	if selected_plot_id == "":
 		plot_selected.emit({}, false)
 		return
@@ -279,8 +286,9 @@ func exit_player_plot_mode() -> bool:
 func get_view_mode() -> String:
 	return current_view_mode
 	
-func _on_local_rubble_clicked(object_id: String) -> void:
-	# Forward the click upward without coupling GameWorld3D directly to networking.
+func _on_local_rubble_context_requested(object_id: String, screen_position: Vector2) -> void:
+	# Forward the local-object interaction upward without coupling GameWorld3D
+	# directly to HUD or networking.
 	if current_view_mode != "PLAYER_PLOT":
 		return
 
@@ -290,7 +298,7 @@ func _on_local_rubble_clicked(object_id: String) -> void:
 	if object_id == "":
 		return
 
-	local_rubble_clear_requested.emit(active_player_plot_id, object_id)
+	local_rubble_context_requested.emit(active_player_plot_id, object_id, screen_position)
 	
 func _apply_player_plot_camera_bounds(detail: Dictionary) -> void:
 	# Player Plot mode reuses the same camera rig as world mode, but constrains
@@ -440,7 +448,7 @@ func _ready() -> void:
 	local_plot_interactor.setup(camera_3d)
 	local_plot_interactor.set_enabled(false)
 	add_child(local_plot_interactor)
-	local_plot_interactor.rubble_clicked.connect(_on_local_rubble_clicked)
+	local_plot_interactor.rubble_context_requested.connect(_on_local_rubble_context_requested)
 
 	# If HUD/NetClient already delivered world data before _ready finished,
 	# render that cached snapshot now.

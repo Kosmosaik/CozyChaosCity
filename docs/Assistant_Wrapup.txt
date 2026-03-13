@@ -1,7 +1,7 @@
 This is an end-of-session wrap-up task.
 
 Your job:
-1. Read the repo and summarize the current implemented state from the actual files.
+1. Open the newly uploaded .zip in the Project source and summarize the current implemented state from the actual files.
 2. Identify what changed in this session and what is now true in the repo.
 3. Prepare end-of-session wrap-up materials:
    - recommended git add / commit / push commands
@@ -20,7 +20,6 @@ Important repo-state guidance:
 - The current session may have changed gameplay, rendering, networking, docs, or workflow priorities.
 - Reflect the current real implementation, not old plans.
 - If priorities changed during development, update the docs to match the new actual priority order.
-- If neighborhood is no longer next, do not write docs as if it is next.
 - If debug systems are still temporary, say so clearly.
 
 Output format I want:

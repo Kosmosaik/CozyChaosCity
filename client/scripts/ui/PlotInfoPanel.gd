@@ -2,7 +2,6 @@ extends PanelContainer
 class_name PlotInfoPanel
 
 signal claim_requested(plot_id: String)
-signal debug_clear_requested(plot_id: String)
 signal enter_plot_requested(plot_id: String)
 
 # PlotInfoPanel owns the selected-plot popup UI.
@@ -17,7 +16,6 @@ signal enter_plot_requested(plot_id: String)
 @onready var owner_value_label: Label = $MarginContainer/VBoxContainer/InfoGrid/OwnerValueLabel
 @onready var claim_button: Button = $MarginContainer/VBoxContainer/ClaimButton
 @onready var enter_plot_button: Button = $MarginContainer/VBoxContainer/EnterPlotButton
-@onready var debug_clear_cell_button: Button = $MarginContainer/VBoxContainer/DebugClearCellButton
 
 var _selected_plot_id: String = ""
 
@@ -26,7 +24,6 @@ func _ready() -> void:
 	hide()
 	claim_button.pressed.connect(_on_claim_pressed)
 	enter_plot_button.pressed.connect(_on_enter_plot_pressed)
-	debug_clear_cell_button.pressed.connect(_on_debug_clear_pressed)
 
 func clear_panel() -> void:
 	# Hide the panel and clear all temporary selection state.
@@ -38,15 +35,13 @@ func clear_panel() -> void:
 	claim_button.disabled = true
 	enter_plot_button.visible = false
 	enter_plot_button.disabled = true
-	debug_clear_cell_button.visible = false
-	debug_clear_cell_button.disabled = true
 	hide()
 
 func show_plot(
 	plot: Dictionary,
 	is_claimable: bool,
 	is_logged_in: bool,
-	is_owned_by_me: bool,
+	_is_owned_by_me: bool,
 	can_enter_plot: bool
 ) -> void:
 	# Display the currently selected plot.
@@ -75,11 +70,6 @@ func show_plot(
 	enter_plot_button.visible = can_enter_plot
 	enter_plot_button.disabled = not (can_enter_plot and is_logged_in)
 
-	# Temporary M2 debug button:
-	# only show it for the local player's own claimed plot.
-	debug_clear_cell_button.visible = is_owned_by_me
-	debug_clear_cell_button.disabled = not (is_owned_by_me and is_logged_in)
-
 	show()
 
 func _on_claim_pressed() -> void:
@@ -93,9 +83,3 @@ func _on_enter_plot_pressed() -> void:
 		return
 
 	enter_plot_requested.emit(_selected_plot_id)
-	
-func _on_debug_clear_pressed() -> void:
-	if _selected_plot_id == "":
-		return
-
-	debug_clear_requested.emit(_selected_plot_id)

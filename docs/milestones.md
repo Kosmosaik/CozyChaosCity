@@ -107,26 +107,35 @@ The project is now a working multiplayer 3D prototype with login, inspection, cl
 
 ## Current Milestone
 
-## M2 - Multi-Scale Shared World Foundation
+### M2 - Multi-Scale Shared World Foundation
 
-### Summary
+**Already implemented**
+- shell data on plots
+- owned-plot detail data on claimed player plots
+- first Player Plot mode
+- enter/exit flow between World Map mode and Player Plot mode
+- local owned-plot rendering
+- compact owner-only detail payloads (`cell_rows`)
+- player-plot camera parity using the existing camera rig
+- real rubble interaction:
+  - click rubble
+  - clear by object id
+  - authoritative server update
+  - animated removal on client
+- local visual polish:
+  - animated rubble removal
+  - randomized rubble rotation/offset
+  - randomized multi-texture ground shader
 
-M2 should establish the first proper version of the game's **two-scale shared world**.
+**Next**
+- neighborhood loading/rendering around the owned plot
+- reduced-detail nearby plot/resource rendering
+- then local interaction UX polish as needed
 
-This milestone should not treat the player plot as a completely isolated pocket dimension.  
-Instead, it should introduce **two viewing/detail modes over the same shared world context**:
-
-- **World Map mode**
-- **Player Plot mode**
-
-The difference between these modes is not that they are separate worlds.  
-The difference is:
-
-- how much of the world is rendered
-- what detail level is rendered
-- what the player is allowed to interact with
-
-This preserves the feeling of a real shared world while allowing the player's own city to become richer and more detailed.
+**Still temporary / limited**
+- old debug clear path still exists
+- local NPC is still a placeholder
+- local mode currently renders only the owned plot
 
 ---
 
@@ -205,11 +214,11 @@ Render:
 
 #### Nearby other player plots
 Render:
-- shell/exterior only
+- shell/exterior only (the outer walls of a building)
 - public outside structure
 - no interior details
 - no interior objects
-- no inside-only NPCs
+- no inside-only NPCs (only NPCs that are tagged as outside)
 
 #### Nearby resource zones
 Render:
@@ -361,8 +370,7 @@ The milestones below remain intentionally broader and may evolve as M2 clarifies
 Turn the owned plot into the first real playable city space.
 
 **Likely focus**
-- clearing rubble
-- reclaiming usable building space
+- clearing rubble (already completed, but needs refinement (selection highlighting, x amount of interactions before it's cleared etc))
 - first basic orders/actions
 - first starter NPC workflow
 - first public-vs-private visibility rules in practice

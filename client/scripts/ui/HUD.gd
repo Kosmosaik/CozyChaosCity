@@ -4,7 +4,9 @@ extends Control
 # These paths match the node structure you showed + the two new nodes we just added.
 
 @onready var game_world := get_tree().get_root().get_node_or_null("Main/GameWorld3D")
+@onready var camera_rig: CameraRigBasic = get_tree().get_root().get_node_or_null("Main/GameWorld3D/CameraRig")
 @onready var plot_info_panel: PlotInfoPanel = $PlotInfoPanel
+@onready var rubble_context_menu: PopupMenu = $RubbleContextMenu
 
 @onready var menu_overlay: Control = $MenuOverlay
 @onready var top_bar: PanelContainer = $TopBar
@@ -24,6 +26,10 @@ extends Control
 var net: NetClient
 var selected_plot_id: String = ""
 var _is_logged_in: bool = false
+const RUBBLE_MENU_ID_CLEAR: int = 1
+
+var _pending_rubble_menu_plot_id: String = ""
+var _pending_rubble_menu_object_id: String = ""
 
 func _show_login_menu() -> void:
 	# Login/menu state:
@@ -54,6 +60,14 @@ func _set_status_text(text: String) -> void:
 	# always has the latest connection status.
 	menu_status_label.text = text
 	status_label.text = text
+	
+func _cancel_camera_popup_conflict_state() -> void:
+	# Popup interactions can swallow the mouse release / dismissal input that
+	# CameraRigBasic normally relies on to stop RMB rotation.
+	# Force-reset the rotate state whenever the rubble popup is shown or hidden
+	# so the camera never gets stuck in free-rotate mode.
+	if camera_rig != null:
+		camera_rig.cancel_mouse_rotate()
 
 func _ready() -> void:
 	# Initial UI state
@@ -75,8 +89,9 @@ func _ready() -> void:
 	# The popup panel is the new interaction path for plot claims.
 	claim_button.pressed.connect(_on_claim_pressed)
 	plot_info_panel.claim_requested.connect(_on_plot_info_claim_requested)
-	plot_info_panel.debug_clear_requested.connect(_on_plot_info_debug_clear_requested)
 	plot_info_panel.enter_plot_requested.connect(_on_plot_info_enter_plot_requested)
+	rubble_context_menu.id_pressed.connect(_on_rubble_context_menu_id_pressed)
+	rubble_context_menu.popup_hide.connect(_on_rubble_context_menu_hidden)
 
 	# Find NetClient (you already used this pattern)
 	net = get_tree().get_first_node_in_group("netclient") as NetClient
@@ -92,7 +107,7 @@ func _ready() -> void:
 	if game_world != null:
 		game_world.plot_selected.connect(_on_plot_selected)
 		game_world.view_mode_changed.connect(_on_view_mode_changed)
-		game_world.local_rubble_clear_requested.connect(_on_local_rubble_clear_requested)
+		game_world.local_rubble_context_requested.connect(_on_local_rubble_context_requested)
 
 	# Hook NetClient signals
 	net.status_changed.connect(_on_status)
@@ -100,7 +115,6 @@ func _ready() -> void:
 	net.plot_updated.connect(_on_plot_update)
 	net.world_patch_received.connect(_on_world_patch)
 	net.claim_result_received.connect(_on_claim_result)
-	net.debug_clear_plot_cell_result_received.connect(_on_debug_clear_plot_cell_result)
 	net.clear_plot_object_result_received.connect(_on_clear_plot_object_result)
 
 	# IMPORTANT: identity_ready signature is now (player_id, display_name)
@@ -232,23 +246,26 @@ func _on_exit_plot_pressed() -> void:
 
 	_set_status_text("Returning to world view...")
 	
-func _on_local_rubble_clear_requested(plot_id: String, object_id: String) -> void:
-	if not _is_logged_in:
-		_set_status_text("Not logged in. Connect first.")
-		return
-
-	if net == null:
-		_set_status_text("NetClient not found.")
-		return
-
+func _on_local_rubble_context_requested(plot_id: String, object_id: String, screen_position: Vector2) -> void:
 	if plot_id == "" or object_id == "":
-		_set_status_text("Invalid rubble clear request.")
 		return
 
-	net.clear_plot_object(plot_id, object_id)
-	_set_status_text("Clearing rubble %s..." % object_id)
+	_pending_rubble_menu_plot_id = plot_id
+	_pending_rubble_menu_object_id = object_id
 	
-func _on_plot_info_debug_clear_requested(plot_id: String) -> void:
+	_cancel_camera_popup_conflict_state()
+
+	# Rebuild the menu fresh each time so later actions can be added safely.
+	
+	rubble_context_menu.clear()
+	rubble_context_menu.add_item("Clear", RUBBLE_MENU_ID_CLEAR)
+	rubble_context_menu.position = Vector2i(screen_position)
+	rubble_context_menu.popup()
+	
+func _on_rubble_context_menu_id_pressed(menu_id: int) -> void:
+	if menu_id != RUBBLE_MENU_ID_CLEAR:
+		return
+
 	if not _is_logged_in:
 		_set_status_text("Not logged in. Connect first.")
 		return
@@ -257,14 +274,24 @@ func _on_plot_info_debug_clear_requested(plot_id: String) -> void:
 		_set_status_text("NetClient not found.")
 		return
 
-	selected_plot_id = plot_id
+	if _pending_rubble_menu_plot_id == "" or _pending_rubble_menu_object_id == "":
+		_set_status_text("No rubble action is currently selected.")
+		return
 
-	# Temporary M2 debug action:
-	# clear the top-left local rubble cell on the owned plot.
-	net.debug_clear_plot_cell(selected_plot_id, 0, 0)
-	_set_status_text("Debug clear requested for %s cell (0,0)..." % selected_plot_id)
+	net.clear_plot_object(_pending_rubble_menu_plot_id, _pending_rubble_menu_object_id)
+	_set_status_text("Working rubble %s..." % _pending_rubble_menu_object_id)
+	
+func _on_rubble_context_menu_hidden() -> void:
+	# Covers the case where the player dismisses the popup by clicking elsewhere.
+	# In that path, the camera may never receive the expected mouse release event.
+	_cancel_camera_popup_conflict_state()
 
 func _on_view_mode_changed(mode_name: String, active_plot_id: String) -> void:
+	rubble_context_menu.hide()
+	_cancel_camera_popup_conflict_state()
+	_pending_rubble_menu_plot_id = ""
+	_pending_rubble_menu_object_id = ""
+	
 	if mode_name == "PLAYER_PLOT":
 		exit_plot_button.visible = true
 		plot_info_panel.clear_panel()
@@ -294,25 +321,18 @@ func _on_claim_result(result: Dictionary) -> void:
 		status_label.text = "Claim failed: %s" % result.get("reason", "unknown")
 		# PlotView updates will arrive via plot_update/world_state and re-enable button if appropriate
 
-func _on_debug_clear_plot_cell_result(result: Dictionary) -> void:
-	if result.get("ok", false):
-		_set_status_text(
-			"Debug clear succeeded: %s (%d,%d)" % [
-				str(result.get("plot_id", "")),
-				int(result.get("x", -1)),
-				int(result.get("y", -1)),
-			]
-		)
-	else:
-		_set_status_text(
-			"Debug clear failed: %s" % str(result.get("reason", "unknown"))
-		)
-
 func _on_clear_plot_object_result(result: Dictionary) -> void:
 	if result.get("ok", false):
-		_set_status_text(
-			"Rubble cleared: %s" % str(result.get("object_id", ""))
-		)
+		var object_id := str(result.get("object_id", ""))
+		var was_cleared := bool(result.get("cleared", false))
+		var hits_remaining := int(result.get("hits_remaining", -1))
+
+		if was_cleared:
+			_set_status_text("Rubble cleared: %s" % object_id)
+		else:
+			_set_status_text(
+				"Rubble worked: %s (%d clear actions left)" % [object_id, hits_remaining]
+			)
 	else:
 		_set_status_text(
 			"Clear rubble failed: %s" % str(result.get("reason", "unknown"))

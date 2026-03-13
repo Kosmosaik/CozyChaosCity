@@ -2,8 +2,7 @@ import { WebSocketServer } from "ws";
 import { CONFIG } from "./core/config";
 import { EnvelopeSchema, makeMsg, WorldState } from "./net/protocol";
 import {
-  clearPlotDetailCell,
-  clearPlotDetailObject,
+  applyClearActionToPlotObject,
   countFreePlayerPlots,
   ensureClaimedPlayerPlotInitialized,
   expandWorld,
@@ -261,7 +260,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
-        if (env.type === "clear_plot_object") {
+    if (env.type === "clear_plot_object") {
       const plotId = env.payload?.plot_id;
       const objectId = env.payload?.object_id;
 
@@ -310,8 +309,8 @@ wss.on("connection", (ws) => {
         return;
       }
 
-      const changed = clearPlotDetailObject(plot, objectId);
-      if (!changed) {
+      const action = applyClearActionToPlotObject(plot, objectId);
+      if (!action.changed) {
         ws.send(
           makeMsg(
             "clear_plot_object_result",
@@ -342,96 +341,13 @@ wss.on("connection", (ws) => {
       ws.send(
         makeMsg(
           "clear_plot_object_result",
-          { ok: true, plot_id: plotId, object_id: objectId },
-          env.req_id
-        )
-      );
-      return;
-    }
-
-    if (env.type === "debug_clear_plot_cell") {
-      const plotId = env.payload?.plot_id;
-      const x = env.payload?.x;
-      const y = env.payload?.y;
-
-      if (typeof plotId !== "string" || typeof x !== "number" || typeof y !== "number") {
-        ws.send(
-          makeMsg(
-            "debug_clear_plot_cell_result",
-            { ok: false, reason: "invalid_payload" },
-            env.req_id
-          )
-        );
-        return;
-      }
-
-      const plot = world.plots.find((p) => p.id === plotId);
-      if (!plot) {
-        ws.send(
-          makeMsg(
-            "debug_clear_plot_cell_result",
-            { ok: false, reason: "plot_not_found" },
-            env.req_id
-          )
-        );
-        return;
-      }
-
-      if (plot.type !== "PLAYER") {
-        ws.send(
-          makeMsg(
-            "debug_clear_plot_cell_result",
-            { ok: false, reason: "not_player_plot" },
-            env.req_id
-          )
-        );
-        return;
-      }
-
-      if (plot.claimed_by !== st.player_id) {
-        ws.send(
-          makeMsg(
-            "debug_clear_plot_cell_result",
-            { ok: false, reason: "not_plot_owner" },
-            env.req_id
-          )
-        );
-        return;
-      }
-
-      const changed = clearPlotDetailCell(plot, x, y);
-      if (!changed) {
-        ws.send(
-          makeMsg(
-            "debug_clear_plot_cell_result",
-            { ok: false, reason: "cell_not_clearable" },
-            env.req_id
-          )
-        );
-        return;
-      }
-
-      world.version += 1;
-      saveWorldAtomic(CONFIG.persistPath, world);
-
-      for (const client of wss.clients) {
-        if (client.readyState !== client.OPEN) continue;
-
-        const clientState = conns.get(client);
-        const plotForClient = decoratePlotForClient(plot, clientState?.player_id ?? null);
-
-        client.send(
-          makeMsg("plot_update", {
-            plot: plotForClient,
-            owner_display_name: plotForClient.owner_display_name,
-          })
-        );
-      }
-
-      ws.send(
-        makeMsg(
-          "debug_clear_plot_cell_result",
-          { ok: true, plot_id: plotId, x, y },
+          {
+            ok: true,
+            plot_id: plotId,
+            object_id: objectId,
+            cleared: action.cleared,
+            hits_remaining: action.hitsRemaining,
+          },
           env.req_id
         )
       );

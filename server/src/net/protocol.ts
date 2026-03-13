@@ -94,6 +94,14 @@ export type PlotDetailStarterObject = {
    */
   footprint_w?: number;
   footprint_h?: number;
+
+    /**
+   * Remaining number of clear/work actions required before this object
+   * is fully removed from the plot.
+   *
+   * Only used for clearable authored objects such as rubble.
+   */
+  clear_hits_remaining?: number;
 };
 
 export type PlotDetail = {

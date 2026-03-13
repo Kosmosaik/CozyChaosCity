@@ -278,3 +278,47 @@ This project is in early development. Version numbers are informal for now.
 - The debug clear button is still a temporary developer/testing interaction path.
 - NPC still uses a temporary placeholder marker in local view.
 - Ground/rubble visuals are now on the correct architectural path, but more polish and final art setup are still expected later.
+
+---
+
+## [0.0.7] — 2026-03-12 — M2 Progress (Player Plot Camera Parity + Real Rubble Interaction + Local Visual Polish)
+
+### Added
+- First real local object interaction flow in Player Plot mode:
+  - click rubble object
+  - send clear request by object id
+  - server validates ownership and clears authoritatively
+  - updated plot detail is broadcast back to clients
+- Dedicated local plot interaction script:
+  - `client/scripts/world/LocalPlotInteractor.gd`
+- Real object-based clear request path:
+  - `clear_plot_object`
+- Animated rubble clear/removal behavior using:
+  - `client/assets/Rubble_A.glb`
+  - `client/scripts/world/local_objects/Rubble4x4.gd`
+- Incremental owned-plot refresh path so removed rubble can animate out instead of instantly disappearing.
+- Local visual variation for rubble:
+  - random Y-axis rotation
+  - slight random X/Z placement offset
+- Randomized local ground material using 5 seamless textures through:
+  - `client/shaders/plot_ground_random_5.gdshader`
+  - `client/assets/ground_textures/`
+
+### Changed
+- Player Plot mode camera now reuses the world-style camera controls more naturally after entering.
+- Local camera movement is now bounded to the owned-plot area plus extra padding instead of remaining mostly fixed.
+- `OwnedPlotDetailRenderer3D.gd` now tracks starter objects by id and refreshes the active owned plot incrementally.
+- Rubble is now instantiated as the real authored scene root so click handling, ids, and clear animation all operate on the same node.
+- Active owned-plot local detail now refreshes when authoritative `plot_update` messages arrive.
+
+### Fixed
+- Fixed local rubble clicks not producing any action because the clickable rubble body was not receiving the authoritative object id.
+- Fixed rubble removal popping instantly by refreshing active local detail and animating removed rubble on the client.
+- Fixed Player Plot camera behavior so local mode no longer feels like a mostly locked overview shot.
+
+### Notes / Known limitations
+- The old debug clear path still exists and is temporary.
+- Neighborhood loading/rendering is still not implemented yet.
+- Nearby player plots and nearby resource plots are not yet rendered in local mode.
+- The current local NPC is still a placeholder marker.
+- Local rubble interaction currently clears on click directly; hover/selection feedback is not implemented yet.
