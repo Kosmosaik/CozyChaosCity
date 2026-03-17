@@ -6,6 +6,8 @@ extends Control
 @onready var game_world := get_tree().get_root().get_node_or_null("Main/GameWorld3D")
 @onready var camera_rig: CameraRigBasic = get_tree().get_root().get_node_or_null("Main/GameWorld3D/CameraRig")
 @onready var plot_info_panel: PlotInfoPanel = $PlotInfoPanel
+@onready var bottom_action_bar: BottomActionBar = $BottomActionBar
+@onready var orders_menu_panel: OrdersMenuPanel = $OrdersMenuPanel
 @onready var npc_character_sheet: NpcCharacterSheet = $NpcCharacterSheet
 @onready var npc_overhead_labels_layer: NpcOverheadLabelsLayer = $NpcOverheadLabelsLayer
 @onready var rubble_context_menu: PopupMenu = $RubbleContextMenu
@@ -24,7 +26,6 @@ extends Control
 @onready var quit_button: Button = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/QuitButton
 @onready var quit_button_in_game: Button = $TopBar/HBoxContainer/QuitButtonInGame
 @onready var exit_plot_button: Button = $TopBar/HBoxContainer/ExitPlotButton
-@onready var scavenge_button: Button = $TopBar/HBoxContainer/ScavengeButton
 
 
 var net: NetClient
@@ -85,8 +86,12 @@ func _ready() -> void:
 		npc_character_sheet.clear_panel()
 	npc_overhead_labels_layer.clear_labels()
 	exit_plot_button.visible = false
-	scavenge_button.visible = false
-	scavenge_button.disabled = true
+
+	if bottom_action_bar != null:
+		bottom_action_bar.hide_bar()
+
+	if orders_menu_panel != null:
+		orders_menu_panel.clear_panel()
 
 	_show_login_menu()
 	_set_status_text("Enter username and press Connect.")
@@ -96,8 +101,13 @@ func _ready() -> void:
 	quit_button.pressed.connect(_on_quit_pressed)
 	quit_button_in_game.pressed.connect(_on_quit_pressed)
 	exit_plot_button.pressed.connect(_on_exit_plot_pressed)
-	scavenge_button.pressed.connect(_on_scavenge_pressed)
+	if bottom_action_bar != null:
+		bottom_action_bar.orders_pressed.connect(_on_bottom_orders_pressed)
+		bottom_action_bar.leave_plot_pressed.connect(_on_bottom_leave_plot_pressed)
 
+	if orders_menu_panel != null:
+		orders_menu_panel.order_requested.connect(_on_orders_menu_order_requested)
+		orders_menu_panel.close_requested.connect(_on_orders_menu_close_requested)
 
 	# Keep the old top-bar claim button hidden for now.
 	# The popup panel is the new interaction path for plot claims.
@@ -166,6 +176,248 @@ func _process(_delta: float) -> void:
 	var label_entries: Array = renderer.get_npc_overhead_label_entries(camera, viewport_rect.size)
 	npc_overhead_labels_layer.sync_labels(label_entries)
 
+func _toggle_orders_menu() -> void:
+	if orders_menu_panel == null or bottom_action_bar == null:
+		return
+
+	if orders_menu_panel.visible:
+		orders_menu_panel.clear_panel()
+		bottom_action_bar.set_orders_highlighted(false)
+		return
+
+	_refresh_orders_menu()
+
+func _refresh_orders_menu() -> void:
+	if orders_menu_panel == null or bottom_action_bar == null:
+		return
+
+	if game_world == null:
+		orders_menu_panel.clear_panel()
+		bottom_action_bar.set_orders_highlighted(false)
+		return
+
+	if game_world.get_view_mode() != "PLAYER_PLOT":
+		orders_menu_panel.clear_panel()
+		bottom_action_bar.set_orders_highlighted(false)
+		return
+
+	var plot_id: String = game_world.get_active_player_plot_id()
+	if plot_id == "":
+		orders_menu_panel.clear_panel()
+		bottom_action_bar.set_orders_highlighted(false)
+		return
+
+	var detail: Dictionary = game_world.get_active_player_plot_detail()
+	if detail.is_empty():
+		orders_menu_panel.clear_panel()
+		bottom_action_bar.set_orders_highlighted(false)
+		return
+
+	var active_order_text: String = _build_active_order_text(detail)
+	var order_entries: Array = _build_order_entries(detail)
+
+	orders_menu_panel.show_orders(plot_id, active_order_text, order_entries)
+	bottom_action_bar.set_orders_highlighted(true)
+	
+func _refresh_orders_menu_if_open() -> void:
+	# Authoritative plot updates should refresh the orders menu only when the
+	# player currently has it open. Server updates must not force the menu open.
+	if orders_menu_panel == null:
+		return
+
+	if not orders_menu_panel.visible:
+		return
+
+	_refresh_orders_menu()
+
+func _build_active_order_text(detail: Dictionary) -> String:
+	var active_order_value: Variant = detail.get("active_order", null)
+	if typeof(active_order_value) != TYPE_DICTIONARY:
+		return "None"
+
+	var active_order: Dictionary = active_order_value as Dictionary
+	var kind: String = str(active_order.get("kind", ""))
+
+	if kind == "":
+		return "None"
+
+	if kind == "SCAVENGING":
+		return "Scavenging"
+
+	return kind.replace("_", " ").capitalize()
+
+func _build_order_entries(detail: Dictionary) -> Array:
+	var entries: Array = []
+
+	# Real implemented order.
+	var scavenging_entry: Dictionary = {
+		"kind": "SCAVENGING",
+		"label": "Scavenge",
+		"enabled": false,
+		"disabled_reason": _get_scavenging_disabled_reason(detail),
+		"target_scope": "ALL",
+	}
+	scavenging_entry["enabled"] = str(scavenging_entry.get("disabled_reason", "")) == ""
+	entries.append(scavenging_entry)
+
+	# Temporary client-only placeholder orders for menu layout testing.
+	# These must stay disabled and must not be wired to the server yet.
+	var clear_area_entry: Dictionary = {
+		"kind": "PLACEHOLDER_CLEAR_AREA",
+		"label": "Clear Area",
+		"enabled": false,
+		"target_scope": "ALL",
+	}
+	entries.append(clear_area_entry)
+
+	var haul_entry: Dictionary = {
+		"kind": "PLACEHOLDER_HAUL",
+		"label": "Haul",
+		"enabled": false,
+		"target_scope": "ALL",
+	}
+	entries.append(haul_entry)
+
+	var deliver_entry: Dictionary = {
+		"kind": "PLACEHOLDER_DELIVER",
+		"label": "Deliver",
+		"enabled": false,
+		"target_scope": "ALL",
+	}
+	entries.append(deliver_entry)
+
+	var repair_entry: Dictionary = {
+		"kind": "PLACEHOLDER_REPAIR",
+		"label": "Repair",
+		"enabled": false,
+		"target_scope": "ALL",
+	}
+	entries.append(repair_entry)
+
+	return entries
+
+func _get_scavenging_disabled_reason(detail: Dictionary) -> String:
+	var active_order_value: Variant = detail.get("active_order", null)
+	if typeof(active_order_value) == TYPE_DICTIONARY:
+		var active_order: Dictionary = active_order_value as Dictionary
+		if str(active_order.get("kind", "")) == "SCAVENGING":
+			return ""
+
+	if not _has_eligible_order_npc(detail, "SCAVENGING"):
+		return "No eligible scavenger is available."
+
+	if not _has_scavenge_target(detail):
+		return "No rubble remains on this plot."
+
+	return ""
+
+func _has_eligible_order_npc(detail: Dictionary, order_kind: String) -> bool:
+	var npcs_value: Variant = detail.get("npcs", [])
+	if typeof(npcs_value) != TYPE_ARRAY:
+		return false
+
+	var npcs: Array = npcs_value as Array
+	for npc_value in npcs:
+		if typeof(npc_value) != TYPE_DICTIONARY:
+			continue
+
+		var npc: Dictionary = npc_value as Dictionary
+		var allowed_value: Variant = npc.get("allowed_order_kinds", [])
+		if typeof(allowed_value) != TYPE_ARRAY:
+			continue
+
+		var allowed_order_kinds: Array = allowed_value as Array
+		for allowed_kind_value in allowed_order_kinds:
+			if str(allowed_kind_value) == order_kind:
+				return true
+
+	return false
+
+func _has_scavenge_target(detail: Dictionary) -> bool:
+	var starter_objects_value: Variant = detail.get("starter_objects", [])
+	if typeof(starter_objects_value) != TYPE_ARRAY:
+		return false
+
+	var starter_objects: Array = starter_objects_value as Array
+	for object_value in starter_objects:
+		if typeof(object_value) != TYPE_DICTIONARY:
+			continue
+
+		var starter_object: Dictionary = object_value as Dictionary
+		if str(starter_object.get("kind", "")) == "RUBBLE_4X4":
+			return true
+
+	return false
+
+func _get_order_failure_text(reason: String) -> String:
+	match reason:
+		"plot_not_found":
+			return "That plot no longer exists."
+		"not_player_plot":
+			return "Orders can only be issued on player plots."
+		"not_plot_owner":
+			return "You can only issue orders on your own plot."
+		"order_already_active":
+			return "That order is already active."
+		"nothing_to_scavenge":
+			return "There is no rubble left to scavenge."
+		"no_eligible_npc":
+			return "No eligible scavenger is available."
+		"no_valid_target":
+			return "No valid target was found for that order."
+		"order_rejected":
+			return "The order was rejected."
+		_:
+			return "Order failed: %s" % reason
+
+func _request_plot_order(order_kind: String, target_scope: String) -> void:
+	if not _is_logged_in:
+		_set_status_text("Not logged in. Connect first.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "Not logged in. Connect first.", false)
+		return
+
+	if net == null:
+		_set_status_text("NetClient not found.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "NetClient not found.", false)
+		return
+
+	if _active_player_plot_id == "":
+		_set_status_text("No active owned plot.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "No active owned plot.", false)
+		return
+
+	if orders_menu_panel != null:
+		orders_menu_panel.set_request_pending(order_kind)
+
+	net.issue_plot_order(_active_player_plot_id, order_kind, target_scope)
+
+	if order_kind == "SCAVENGING":
+		_set_status_text("Issuing scavenging order...")
+	else:
+		_set_status_text("Issuing order...")
+
+func _close_orders_menu() -> void:
+	if orders_menu_panel != null:
+		orders_menu_panel.clear_panel()
+
+	if bottom_action_bar != null:
+		bottom_action_bar.set_orders_highlighted(false)
+
+func _on_bottom_orders_pressed() -> void:
+	_toggle_orders_menu()
+
+func _on_bottom_leave_plot_pressed() -> void:
+	_on_exit_plot_pressed()
+
+func _on_orders_menu_order_requested(order_kind: String, target_scope: String) -> void:
+	_request_plot_order(order_kind, target_scope)
+
+func _on_orders_menu_close_requested() -> void:
+	_close_orders_menu()
+
 func _on_connect_pressed() -> void:
 	if net == null:
 		return
@@ -223,13 +475,19 @@ func _on_world_state(world: Dictionary) -> void:
 	if game_world != null:
 		game_world.set_world(world)
 
+	_refresh_orders_menu_if_open()
+
 func _on_plot_update(plot: Dictionary) -> void:
 	if game_world != null:
 		game_world.apply_plot_update(plot)
 
+	_refresh_orders_menu_if_open()
+
 func _on_world_patch(patch: Dictionary) -> void:
 	if game_world != null:
 		game_world.apply_world_patch(patch)
+
+	_refresh_orders_menu_if_open()
 
 func _on_plot_selected(plot: Dictionary, is_claimable: bool) -> void:
 	if plot.is_empty():
@@ -285,33 +543,31 @@ func _on_exit_plot_pressed() -> void:
 		return
 
 	_set_status_text("Returning to world view...")
-	
-func _on_scavenge_pressed() -> void:
-	if not _is_logged_in:
-		_set_status_text("Not logged in. Connect first.")
-		return
-
-	if net == null:
-		_set_status_text("NetClient not found.")
-		return
-
-	if _active_player_plot_id == "":
-		_set_status_text("No active owned plot.")
-		return
-
-	scavenge_button.disabled = true
-	net.issue_plot_order(_active_player_plot_id, "SCAVENGING", "ALL")
-	_set_status_text("Issuing scavenging order...")
 
 func _on_issue_plot_order_result(result: Dictionary) -> void:
-	scavenge_button.disabled = false
+	var was_success: bool = bool(result.get("ok", false))
 
-	if result.get("ok", false):
-		_set_status_text("Scavenging started.")
+	if was_success:
+		var order_kind: String = str(result.get("order_kind", ""))
+		var success_text: String = "Order started."
+
+		if order_kind == "SCAVENGING":
+			success_text = "Scavenging started."
+
+		_set_status_text(success_text)
+
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result(success_text, "", true)
 	else:
-		_set_status_text(
-			"Order failed: %s" % str(result.get("reason", "unknown"))
-		)
+		var reason: String = str(result.get("reason", "unknown"))
+		var failure_text: String = _get_order_failure_text(reason)
+
+		_set_status_text(failure_text)
+
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", failure_text, false)
+
+	_refresh_orders_menu_if_open()
 	
 func _on_local_rubble_context_requested(plot_id: String, object_id: String, screen_position: Vector2) -> void:
 	if plot_id == "" or object_id == "":
@@ -373,14 +629,20 @@ func _on_view_mode_changed(mode_name: String, active_plot_id: String) -> void:
 	npc_overhead_labels_layer.clear_labels()
 
 	if mode_name == "PLAYER_PLOT":
-		exit_plot_button.visible = true
-		scavenge_button.visible = true
-		scavenge_button.disabled = false
+		exit_plot_button.visible = false
 		plot_info_panel.clear_panel()
+
+		if bottom_action_bar != null:
+			bottom_action_bar.show_for_player_plot()
+
+		_close_orders_menu()
 	else:
 		exit_plot_button.visible = false
-		scavenge_button.visible = false
-		scavenge_button.disabled = true
+
+		if bottom_action_bar != null:
+			bottom_action_bar.hide_bar()
+
+		_close_orders_menu()
 
 		if game_world != null:
 			game_world.refresh_selected_plot_ui()

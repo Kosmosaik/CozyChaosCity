@@ -1,0 +1,50 @@
+[gd_scene format=3 uid="uid://vvmit6bw1b3y"]
+
+[ext_resource type="Script" uid="uid://cdnl31vbsas6q" path="res://scripts/ui/BottomActionBar.gd" id="1_bbfx0"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bbfx0"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.101960786, 0.101960786, 0.101960786, 0.81960785)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.4817894, 0.48178953, 0.48178923, 1)
+corner_radius_top_left = 9
+corner_radius_top_right = 9
+corner_radius_bottom_right = 9
+corner_radius_bottom_left = 9
+
+[node name="BottomActionBar" type="PanelContainer" unique_id=271737238]
+custom_minimum_size = Vector2(0, 100)
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -51.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_bbfx0")
+script = ExtResource("1_bbfx0")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=278142019]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 30
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer" unique_id=1812600510]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="OrdersButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=1360621140]
+layout_mode = 2
+text = "Orders"
+
+[node name="LeavePlotButton" type="Button" parent="MarginContainer/HBoxContainer" unique_id=1578387639]
+layout_mode = 2
+text = "Leave Plot"

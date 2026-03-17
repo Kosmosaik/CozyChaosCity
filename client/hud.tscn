@@ -7,7 +7,9 @@
 [ext_resource type="StyleBox" uid="uid://biwp0bjou3rmy" path="res://new_style_box_flat2.tres" id="4_a2258"]
 [ext_resource type="StyleBox" uid="uid://b74p8a7eca2oc" path="res://new_style_box_flat3.tres" id="6_1xsix"]
 [ext_resource type="PackedScene" uid="uid://d08tg3ybm6yf1" path="res://scenes/ui/NpcCharacterSheet.tscn" id="7_npc_sheet_scene"]
-[ext_resource type="Script" path="res://scripts/ui/NpcOverheadLabelsLayer.gd" id="8_npc_overhead_script"]
+[ext_resource type="Script" uid="uid://desg5grpn44bf" path="res://scripts/ui/NpcOverheadLabelsLayer.gd" id="8_npc_overhead_script"]
+[ext_resource type="PackedScene" uid="uid://vvmit6bw1b3y" path="res://scenes/ui/BottomActionBar.tscn" id="9_gpiub"]
+[ext_resource type="PackedScene" uid="uid://45l3hes12ooc" path="res://scenes/ui/OrdersMenuPanel.tscn" id="10_amv7k"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8sq4i"]
 bg_color = Color(0.43137255, 0.32941177, 0.28627452, 0.8862745)
@@ -76,13 +78,6 @@ text = "Online: -"
 vertical_alignment = 1
 
 [node name="VSeparator6" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=297111922]
-layout_mode = 2
-
-[node name="ScavengeButton" type="Button" parent="TopBar/HBoxContainer" unique_id=646369559]
-layout_mode = 2
-text = "Scavenge"
-
-[node name="VSeparator4" type="VSeparator" parent="TopBar/HBoxContainer" unique_id=640354342]
 layout_mode = 2
 
 [node name="ExitPlotButton" type="Button" parent="TopBar/HBoxContainer" unique_id=1234856782]
@@ -154,7 +149,7 @@ text = "Enter Plot"
 [node name="NpcCharacterSheet" parent="." unique_id=368671464 instance=ExtResource("7_npc_sheet_scene")]
 layout_mode = 1
 
-[node name="NpcOverheadLabelsLayer" type="Control" parent="."]
+[node name="NpcOverheadLabelsLayer" type="Control" parent="." unique_id=1971370058]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -270,3 +265,18 @@ theme_override_colors/font_hover_pressed_color = Color(0.72156864, 0.6901961, 0.
 text = "Quit"
 
 [node name="RubbleContextMenu" type="PopupMenu" parent="." unique_id=1197873931]
+
+[node name="BottomActionBar" parent="." unique_id=271737238 instance=ExtResource("9_gpiub")]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -203.0
+offset_top = -103.0
+offset_right = 203.0
+offset_bottom = -3.0
+
+[node name="OrdersMenuPanel" parent="." unique_id=1615364544 instance=ExtResource("10_amv7k")]
+layout_mode = 1
+offset_top = -207.0
+offset_bottom = -106.0

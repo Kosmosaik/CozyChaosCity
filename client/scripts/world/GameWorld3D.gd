@@ -300,6 +300,34 @@ func get_camera_3d() -> Camera3D:
 func get_owned_plot_renderer() -> OwnedPlotDetailRenderer3D:
 	return owned_plot_renderer
 	
+func get_active_player_plot_id() -> String:
+	return active_player_plot_id
+
+func get_active_player_plot() -> Dictionary:
+	if current_view_mode != "PLAYER_PLOT":
+		return {}
+
+	if active_player_plot_id == "":
+		return {}
+
+	var active_plot: Dictionary = plots_by_id.get(active_player_plot_id, {})
+	if active_plot.is_empty():
+		return {}
+
+	return active_plot.duplicate(true)
+
+func get_active_player_plot_detail() -> Dictionary:
+	var active_plot: Dictionary = get_active_player_plot()
+	if active_plot.is_empty():
+		return {}
+
+	var detail_value: Variant = active_plot.get("detail", null)
+	if typeof(detail_value) != TYPE_DICTIONARY:
+		return {}
+
+	var detail: Dictionary = detail_value as Dictionary
+	return detail.duplicate(true)
+	
 func get_active_plot_npc_by_id(npc_id: String) -> Dictionary:
 	if current_view_mode != "PLAYER_PLOT":
 		return {}

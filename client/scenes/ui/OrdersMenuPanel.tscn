@@ -1,0 +1,90 @@
+[gd_scene format=3 uid="uid://45l3hes12ooc"]
+
+[ext_resource type="Script" uid="uid://cb4s33tuacnoi" path="res://scripts/ui/OrdersMenuPanel.gd" id="1_1iku1"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1iku1"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.101960786, 0.101960786, 0.101960786, 0.81960785)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.48235294, 0.48235294, 0.48235294, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="OrdersMenuPanel" type="PanelContainer" unique_id=1615364544]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -212.0
+offset_top = -101.0
+offset_right = 212.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_1iku1")
+script = ExtResource("1_1iku1")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=1751194146]
+layout_mode = 2
+size_flags_vertical = 8
+theme_override_constants/margin_left = 6
+theme_override_constants/margin_top = 6
+theme_override_constants/margin_right = 6
+theme_override_constants/margin_bottom = 6
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=1483007424]
+layout_mode = 2
+
+[node name="HeaderRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=513536096]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer/HeaderRow" unique_id=509900258]
+layout_mode = 2
+tooltip_text = "cscscs"
+text = "Orders"
+
+[node name="CloseButton" type="Button" parent="MarginContainer/VBoxContainer/HeaderRow" unique_id=1773142194]
+layout_mode = 2
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 16
+text = "X"
+
+[node name="FeedbackLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=988506160]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+autowrap_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=1749206309]
+layout_mode = 2
+theme_override_constants/separation = 150
+
+[node name="OrdersList" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=1190382922]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="VSeparator" type="VSeparator" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=1084760576]
+layout_mode = 2
+
+[node name="InfoGrid" type="GridContainer" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=56035401]
+layout_mode = 2
+columns = 2
+
+[node name="ActiveOrderLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid" unique_id=1337399913]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_vertical = 3
+text = "Active:"
+
+[node name="ActiveOrderValueLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid" unique_id=1563935660]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_vertical = 1
+text = "None"
