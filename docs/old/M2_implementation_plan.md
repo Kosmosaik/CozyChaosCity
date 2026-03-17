@@ -38,7 +38,8 @@ Build M2 in practical vertical slices:
 2. [x] Client mode switching + first local owned-plot rendering
 3. [x] Player Plot camera parity
 4. [x] Real local interaction with rubble
-5. [ ] Neighborhood loading/rendering after the owned plot feels playable
+5. [ ] Continue owned-plot/local gameplay polish and follow-up interaction work
+6. [ ] Neighborhood loading/rendering later, after the owned plot/local layer has more gameplay value
 
 ---
 
@@ -88,11 +89,14 @@ You do not need full interior systems now, but the model should leave room for t
 
 ## Server tasks
 
-- [ ] Add shell/public summary data to plots
-- [ ] Add detailed owned-plot/local data structure
-- [ ] Add starter ruined state generator for claimed player plots
-- [ ] Ensure plot detail is persisted
-- [ ] Keep old world functionality working during transition
+- [x] Add shell/public summary data to plots
+- [x] Add detailed owned-plot/local data structure
+- [x] Add starter ruined state generator for claimed player plots
+- [x] Ensure plot detail is persisted
+- [x] Keep old world functionality working during transition
+- [x] Add object-id-based rubble clearing support
+- [x] Add multi-step rubble clear state (`clear_hits_remaining`)
+- [x] Keep owned-plot detail privileged to the owner view
 
 ---
 
@@ -169,8 +173,10 @@ Later, local detail updates should be patchable, but M2 can begin with full neig
 - [ ] Define request for entering Player Plot mode
 - [ ] Define response carrying neighborhood state
 - [ ] Define request for exiting Player Plot mode
-- [ ] Keep existing world-state protocol intact where possible
-- [ ] Make new protocol version changes carefully and consistently
+- [x] Keep existing world-state protocol intact where possible
+- [x] Make new protocol version changes carefully and consistently
+- [x] Add `clear_plot_object` request/result flow for local rubble interaction
+- [x] Return clear-result state including whether rubble was fully removed and how many hits remain
 
 ---
 
@@ -223,9 +229,11 @@ This is cleaner than overloading one renderer with every detail tier.
 - [x] Add Player Plot mode behavior
 - [x] Add enter/exit flow
 - [x] Keep selection/interactions mode-aware
-- [ ] Carry world-style camera movement into Player Plot mode after entering
-- [ ] Keep local camera control feeling natural and playable
-- [ ] Keep camera handling clean between modes without turning local mode into a locked showcase view
+- [x] Carry world-style camera movement into Player Plot mode after entering
+- [x] Keep local camera control feeling natural and playable
+- [x] Keep camera handling clean between modes without turning local mode into a locked showcase view
+- [x] Suppress world-side plot selection UI while inside Player Plot mode
+- [x] Add popup/menu-safe camera reset handling for local interaction
 
 ---
 
@@ -238,30 +246,37 @@ Before adding nearby surrounding plots, make the owned plot itself feel properly
 
 ---
 
-## Immediate next goal: neighborhood loading/rendering
+## Immediate next goal: owned-plot/local gameplay polish and follow-up interaction work
 
 Now that Player Plot camera parity and real rubble interaction are both working,
-the next M2 step is to load and render the surrounding neighborhood around the owned plot.
+the next M2 step is to keep improving the owned-plot/local layer so it feels more like the start of real gameplay.
 
 Target direction:
-- keep the owned plot as the high-detail center
-- add nearby surrounding plots/resources in reduced/public detail
-- preserve the current enter/exit transition and owned-plot interaction path
+- preserve the current enter/exit transition
+- preserve the owned-plot interaction path
+- improve local interaction feel
+- replace temporary placeholders where it adds value
+- prepare for broader local gameplay systems before widening the rendered scope
 
 ---
 
-## After camera parity: real rubble interaction
+## Real rubble interaction is now implemented
 
-Once local camera control feels right, replace the temporary debug clear path with a real interaction flow:
+The old temporary debug clear path has been replaced by a real interaction flow:
 
-- click rubble object
+- right click rubble
+- release without meaningful drag
+- open a menu at the cursor
+- click `Clear`
 - validate interaction
-- send clear action
-- remove rubble object
+- send clear action by object id
+- reduce clear count
+- remove rubble object on the final clear
 - free its occupied hidden cells
 - refresh the local plot view
+- play clear feedback/animation
 
-This becomes the first real local gameplay loop.
+This is now the first real local gameplay loop.
 
 ---
 
@@ -271,6 +286,7 @@ Only once:
 - local camera feels good
 - rubble interaction feels real
 - the owned plot itself feels playable
+- the local layer has more gameplay value
 
 then proceed with:
 
@@ -293,10 +309,13 @@ But this should now be treated as a **later M2 sub-step**, not the immediate nex
 
 ## Tasks
 
-- [ ] Carry world-style camera behavior into Player Plot mode
-- [ ] Support freer camera movement inside the owned plot
-- [ ] Replace debug clear with real rubble click interaction
-- [ ] Add proper local clear/remove feedback
+- [x] Carry world-style camera behavior into Player Plot mode
+- [x] Support freer camera movement inside the owned plot
+- [x] Replace debug clear with real rubble interaction
+- [x] Add proper local clear/remove feedback
+- [x] Add menu/camera input cleanup for local rubble interaction
+- [ ] Continue owned-plot/local interaction polish
+- [ ] Replace temporary local placeholders where needed
 - [ ] Only after that, add neighborhood loading/rendering
 
 ---
@@ -316,7 +335,8 @@ The project now has an early but real starter-state implementation:
   - clearability
   - future snapping / structure placement
 - temporary NPC marker
-- temporary debug clear path for removing rubble
+- real rubble interaction path instead of the old debug clear path
+- multi-step rubble clearing with final clear/removal feedback
 
 ## First starter state should include
 - ruined/blocked sections
@@ -337,10 +357,11 @@ This should remain visually simple for now, but structurally correct.
 - [x] Add starter shack data
 - [x] Add starter NPC placeholder data
 - [x] Add starter rubble object data
-- [x] Add temporary debug clear path
+- [x] Replace temporary debug clear path with a real rubble interaction path
+- [x] Add proper local clear/remove feedback
 - [ ] Make local elements inspectable in Player Plot mode
 - [ ] Replace temporary NPC marker with a real NPC scene
-- [ ] Improve final ground / rubble art polish
+- [ ] Improve final ground / rubble art polish further as needed
 
 ---
 
@@ -372,7 +393,7 @@ For M2:
 
 - [ ] Separate shell/public data from private/interior-facing data
 - [ ] Ensure neighboring plots do not expose private internals
-- [ ] Keep owned-plot detail privileged to owner view
+- [x] Keep owned-plot detail privileged to owner view
 - [ ] Prepare for future outside/public NPC visibility
 
 ---
@@ -396,21 +417,32 @@ Client mode support
 Protocol / data safety
 - [x] keep owned-plot detail privileged to owner view
 - [x] compact large local detail payloads for safer runtime behavior
+- [x] add object-id-based local rubble interaction flow
 
 ## Phase 4
 Owned-plot playability
-- [ ] carry world-style camera behavior into Player Plot mode
-- [ ] make local camera movement feel natural after entering
-- [ ] keep local mode readable without locking the player into a static overview
+- [x] carry world-style camera behavior into Player Plot mode
+- [x] make local camera movement feel natural after entering
+- [x] keep local mode readable without locking the player into a static overview
+- [x] add local camera/menu conflict cleanup
+- [x] add a small camera drag threshold before RMB rotate begins
 
 ## Phase 5
 Starter interactions
+- [x] replace temporary debug clear flow with proper rubble interaction
+- [x] right click rubble -> popup -> clear -> reduce/remove object -> free cells
+- [x] add stronger local clear/remove feedback
+- [x] add multi-step rubble clearing
 - [ ] inspect local objects
-- [ ] replace temporary debug clear flow with proper rubble interaction
-- [ ] click rubble -> clear -> remove object -> free cells
 - [ ] add stronger local build/clear interaction rules
 
 ## Phase 6
+Next local-depth work before neighborhood
+- [ ] continue owned-plot/local gameplay polish
+- [ ] replace temporary placeholders where needed
+- [ ] deepen local interaction hooks
+
+## Phase 7
 Neighborhood work
 - [ ] add protocol for local/neighborhood view
 - [ ] add local neighborhood data handling

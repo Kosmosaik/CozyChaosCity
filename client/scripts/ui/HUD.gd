@@ -6,6 +6,8 @@ extends Control
 @onready var game_world := get_tree().get_root().get_node_or_null("Main/GameWorld3D")
 @onready var camera_rig: CameraRigBasic = get_tree().get_root().get_node_or_null("Main/GameWorld3D/CameraRig")
 @onready var plot_info_panel: PlotInfoPanel = $PlotInfoPanel
+@onready var npc_character_sheet: NpcCharacterSheet = $NpcCharacterSheet
+@onready var npc_overhead_labels_layer: NpcOverheadLabelsLayer = $NpcOverheadLabelsLayer
 @onready var rubble_context_menu: PopupMenu = $RubbleContextMenu
 
 @onready var menu_overlay: Control = $MenuOverlay
@@ -22,6 +24,8 @@ extends Control
 @onready var quit_button: Button = $MenuOverlay/CenterContainer/MenuPanel/MarginContainer/VBoxContainer/QuitButton
 @onready var quit_button_in_game: Button = $TopBar/HBoxContainer/QuitButtonInGame
 @onready var exit_plot_button: Button = $TopBar/HBoxContainer/ExitPlotButton
+@onready var scavenge_button: Button = $TopBar/HBoxContainer/ScavengeButton
+
 
 var net: NetClient
 var selected_plot_id: String = ""
@@ -30,6 +34,8 @@ const RUBBLE_MENU_ID_CLEAR: int = 1
 
 var _pending_rubble_menu_plot_id: String = ""
 var _pending_rubble_menu_object_id: String = ""
+
+var _active_player_plot_id: String = ""
 
 func _show_login_menu() -> void:
 	# Login/menu state:
@@ -75,7 +81,13 @@ func _ready() -> void:
 	claim_button.visible = false
 	_is_logged_in = false
 	plot_info_panel.clear_panel()
+	if npc_character_sheet != null:
+		npc_character_sheet.clear_panel()
+	npc_overhead_labels_layer.clear_labels()
 	exit_plot_button.visible = false
+	scavenge_button.visible = false
+	scavenge_button.disabled = true
+
 	_show_login_menu()
 	_set_status_text("Enter username and press Connect.")
 
@@ -84,6 +96,8 @@ func _ready() -> void:
 	quit_button.pressed.connect(_on_quit_pressed)
 	quit_button_in_game.pressed.connect(_on_quit_pressed)
 	exit_plot_button.pressed.connect(_on_exit_plot_pressed)
+	scavenge_button.pressed.connect(_on_scavenge_pressed)
+
 
 	# Keep the old top-bar claim button hidden for now.
 	# The popup panel is the new interaction path for plot claims.
@@ -108,6 +122,8 @@ func _ready() -> void:
 		game_world.plot_selected.connect(_on_plot_selected)
 		game_world.view_mode_changed.connect(_on_view_mode_changed)
 		game_world.local_rubble_context_requested.connect(_on_local_rubble_context_requested)
+		game_world.local_npc_selected.connect(_on_local_npc_selected)
+		game_world.local_npc_selection_cleared.connect(_on_local_npc_selection_cleared)
 
 	# Hook NetClient signals
 	net.status_changed.connect(_on_status)
@@ -116,6 +132,8 @@ func _ready() -> void:
 	net.world_patch_received.connect(_on_world_patch)
 	net.claim_result_received.connect(_on_claim_result)
 	net.clear_plot_object_result_received.connect(_on_clear_plot_object_result)
+	net.issue_plot_order_result_received.connect(_on_issue_plot_order_result)
+
 
 	# IMPORTANT: identity_ready signature is now (player_id, display_name)
 	net.identity_ready.connect(_on_identity_ready)
@@ -125,6 +143,28 @@ func _ready() -> void:
 	
 	net.latency_updated.connect(_on_latency_updated)
 	net.presence_updated.connect(_on_presence_updated)
+	
+func _process(_delta: float) -> void:
+	if game_world == null:
+		return
+
+	if npc_overhead_labels_layer == null:
+		return
+
+	if game_world.get_view_mode() != "PLAYER_PLOT":
+		npc_overhead_labels_layer.clear_labels()
+		return
+
+	var camera: Camera3D = game_world.get_camera_3d()
+	var renderer: OwnedPlotDetailRenderer3D = game_world.get_owned_plot_renderer()
+
+	if camera == null or renderer == null:
+		npc_overhead_labels_layer.clear_labels()
+		return
+
+	var viewport_rect: Rect2 = get_viewport_rect()
+	var label_entries: Array = renderer.get_npc_overhead_label_entries(camera, viewport_rect.size)
+	npc_overhead_labels_layer.sync_labels(label_entries)
 
 func _on_connect_pressed() -> void:
 	if net == null:
@@ -246,6 +286,33 @@ func _on_exit_plot_pressed() -> void:
 
 	_set_status_text("Returning to world view...")
 	
+func _on_scavenge_pressed() -> void:
+	if not _is_logged_in:
+		_set_status_text("Not logged in. Connect first.")
+		return
+
+	if net == null:
+		_set_status_text("NetClient not found.")
+		return
+
+	if _active_player_plot_id == "":
+		_set_status_text("No active owned plot.")
+		return
+
+	scavenge_button.disabled = true
+	net.issue_plot_order(_active_player_plot_id, "SCAVENGING", "ALL")
+	_set_status_text("Issuing scavenging order...")
+
+func _on_issue_plot_order_result(result: Dictionary) -> void:
+	scavenge_button.disabled = false
+
+	if result.get("ok", false):
+		_set_status_text("Scavenging started.")
+	else:
+		_set_status_text(
+			"Order failed: %s" % str(result.get("reason", "unknown"))
+		)
+	
 func _on_local_rubble_context_requested(plot_id: String, object_id: String, screen_position: Vector2) -> void:
 	if plot_id == "" or object_id == "":
 		return
@@ -261,7 +328,16 @@ func _on_local_rubble_context_requested(plot_id: String, object_id: String, scre
 	rubble_context_menu.add_item("Clear", RUBBLE_MENU_ID_CLEAR)
 	rubble_context_menu.position = Vector2i(screen_position)
 	rubble_context_menu.popup()
-	
+
+func _on_local_npc_selected(npc_data: Dictionary) -> void:
+	# HUD stays a presentation coordinator only.
+	# GameWorld3D owns which NPC is selected.
+	npc_character_sheet.show_npc(npc_data)
+
+func _on_local_npc_selection_cleared() -> void:
+	if npc_character_sheet != null:
+		npc_character_sheet.clear_panel()
+
 func _on_rubble_context_menu_id_pressed(menu_id: int) -> void:
 	if menu_id != RUBBLE_MENU_ID_CLEAR:
 		return
@@ -291,15 +367,21 @@ func _on_view_mode_changed(mode_name: String, active_plot_id: String) -> void:
 	_cancel_camera_popup_conflict_state()
 	_pending_rubble_menu_plot_id = ""
 	_pending_rubble_menu_object_id = ""
-	
+	_active_player_plot_id = active_plot_id
+	if npc_character_sheet != null:
+		npc_character_sheet.clear_panel()
+	npc_overhead_labels_layer.clear_labels()
+
 	if mode_name == "PLAYER_PLOT":
 		exit_plot_button.visible = true
+		scavenge_button.visible = true
+		scavenge_button.disabled = false
 		plot_info_panel.clear_panel()
 	else:
 		exit_plot_button.visible = false
+		scavenge_button.visible = false
+		scavenge_button.disabled = true
 
-		# Refresh the selected-plot popup when we return to world view
-		# so the player can continue using the normal M1 selection flow.
 		if game_world != null:
 			game_world.refresh_selected_plot_ui()
 

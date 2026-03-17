@@ -188,7 +188,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton:
-		var mouse_button_event := event as InputEventMouseButton
+		var mouse_button_event :InputEventMouseButton = event as InputEventMouseButton
 
 		if mouse_button_event.button_index == MOUSE_BUTTON_RIGHT:
 			if mouse_button_event.pressed:
@@ -214,7 +214,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 
 	if event is InputEventMouseMotion:
-		var mouse_motion_event := event as InputEventMouseMotion
+		var mouse_motion_event: InputEventMouseMotion = event as InputEventMouseMotion
 
 		# If RMB is armed but not yet rotating, only begin rotation after
 		# a small threshold so accidental hand wobble does not twitch the camera.
@@ -239,26 +239,26 @@ func _unhandled_input(event: InputEvent) -> void:
 func _handle_movement(delta: float) -> void:
 	if _controls_locked:
 		return
-	var input_dir := Input.get_vector("camera_left", "camera_right", "camera_down", "camera_up")
+	var input_dir: Vector2 = Input.get_vector("camera_left", "camera_right", "camera_down", "camera_up")
 	if input_dir == Vector2.ZERO:
 		return
 
 	# Scale move speed with zoom so travelling across the map feels faster when
 	# zoomed out and more precise when zoomed in.
-	var zoom_ratio := _zoom_distance / initial_zoom_distance
-	var move_speed := base_move_speed * zoom_ratio
+	var zoom_ratio : float = _zoom_distance / initial_zoom_distance
+	var move_speed : float = base_move_speed * zoom_ratio
 
 	# Move relative to the yaw pivot so "forward" follows the camera's facing
 	# direction on the ground plane, which is the typical city-builder feel.
-	var forward := -yaw_pivot.global_basis.z
+	var forward : Vector3 = -yaw_pivot.global_basis.z
 	forward.y = 0.0
 	forward = forward.normalized()
 
-	var right := yaw_pivot.global_basis.x
+	var right : Vector3 = yaw_pivot.global_basis.x
 	right.y = 0.0
 	right = right.normalized()
 
-	var move_vector := (right * input_dir.x) + (forward * input_dir.y)
+	var move_vector : Vector3 = (right * input_dir.x) + (forward * input_dir.y)
 	global_position += move_vector * move_speed * delta
 	_clamp_global_position_to_bounds()
 
@@ -281,12 +281,12 @@ func _zoom_toward_mouse(delta_zoom: float, mouse_screen_pos: Vector2) -> void:
 
 func _get_mouse_world_on_ground(mouse_screen_pos: Vector2):
 	# Project the mouse position into a 3D ray from the active camera.
-	var ray_origin := camera_3d.project_ray_origin(mouse_screen_pos)
-	var ray_direction := camera_3d.project_ray_normal(mouse_screen_pos)
+	var ray_origin : Vector3 = camera_3d.project_ray_origin(mouse_screen_pos)
+	var ray_direction : Vector3 = camera_3d.project_ray_normal(mouse_screen_pos)
 
 	# Our current world is flat, so zoom anchoring can use the ground plane y = 0.
 	# Plane(Vector3.UP, 0.0) means all points where y == 0.
-	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ground_plane : Plane = Plane(Vector3.UP, 0.0)
 	return ground_plane.intersects_ray(ray_origin, ray_direction)
 
 func _apply_zoom() -> void:

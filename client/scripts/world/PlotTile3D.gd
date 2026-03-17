@@ -6,6 +6,7 @@ class_name PlotTile3D
 # It does not know about networking, HUD, or world spawning rules.
 
 @onready var visual: MeshInstance3D = $Visual
+@onready var collider: CollisionShape3D = $Collider
 
 var plot_id: String = ""
 var grid_x: int = 0
@@ -26,6 +27,13 @@ func _ready() -> void:
 		visual.material_override = visual.material_override.duplicate()
 
 	_refresh_visual()
+	
+func set_tile_footprint_size(tile_size: float) -> void:
+	# Only expand the clickable footprint.
+	# Do NOT change the visual mesh here, otherwise the original plot layout/look gets destroyed.
+	var collision_box: BoxShape3D = collider.shape as BoxShape3D
+	if collision_box != null:
+		collision_box.size = Vector3(tile_size, 0.2, tile_size)
 
 func apply_plot(plot: Dictionary, my_player_id: String = "") -> void:
 	# Store the raw plot fields that matter for M1 visuals.
@@ -52,7 +60,7 @@ func set_hovered(is_hovered: bool, my_player_id: String = "") -> void:
 	_refresh_visual(my_player_id)
 
 func _refresh_visual(my_player_id: String = "") -> void:
-	var material := visual.material_override as StandardMaterial3D
+	var material : StandardMaterial3D = visual.material_override as StandardMaterial3D
 	if material == null:
 		return
 

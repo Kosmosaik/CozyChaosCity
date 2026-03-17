@@ -322,3 +322,124 @@ This project is in early development. Version numbers are informal for now.
 - Nearby player plots and nearby resource plots are not yet rendered in local mode.
 - The current local NPC is still a placeholder marker.
 - Local rubble interaction currently clears on click directly; hover/selection feedback is not implemented yet.
+
+---
+
+## [0.0.8] — 2026-03-13 — M2 Progress (Rubble UX Polish + Debug Clear Removal + Local Camera/Input Cleanup)
+
+### Added
+- Procedural sky / world environment for the 3D scene.
+- Dedicated rubble context menu in the HUD:
+  - right-click rubble
+  - cursor popup
+  - `Clear` action
+- Multi-step rubble clearing:
+  - starter rubble now tracks `clear_hits_remaining`
+  - each clear action reduces the remaining count
+  - final clear removes the rubble object
+- Clear-result feedback now reports:
+  - whether rubble was fully cleared
+  - how many clear actions remain
+- Smoke particle effect on final rubble removal:
+  - `client/scenes/local_objects/RubbleClearSmoke.tscn`
+  - `client/assets/particles/smoke_flipbook.png`
+- Extra local input polish for camera/menu coexistence:
+  - RMB release-to-open interaction logic
+  - camera rotate cancel/reset support for popup flows
+  - RMB drag threshold before camera rotation begins
+
+### Changed
+- Rubble interaction now uses a proper context action flow instead of immediate click-to-clear.
+- Local rubble interaction now opens on right-click release only when the pointer did not meaningfully drag.
+- Camera rotation no longer begins instantly on RMB press; a small drag threshold is required first.
+- HUD now prevents popup/menu flows from leaving the camera stuck in rotate mode.
+- Plot selection UI is now suppressed while inside Player Plot mode so rubble interaction does not wrongly reopen the world-side plot panel.
+
+### Removed
+- Removed the temporary debug clear cell gameplay path from the active client/server flow.
+- Removed debug clear UI from `PlotInfoPanel`.
+
+### Fixed
+- Fixed `PlotInfoPanel` reappearing during owned-plot rubble interaction.
+- Fixed camera/menu input conflicts when interacting with rubble quickly.
+- Fixed a stuck-camera state that could happen after opening and dismissing the rubble context menu.
+- Fixed rubble smoke not playing by using an active emitting particle setup.
+
+### Notes / Known limitations
+- Local NPC still uses a placeholder marker.
+- Player Plot mode still renders only the owned plot.
+- Neighborhood loading/rendering is still not implemented.
+- Local gameplay is still at an early interaction stage beyond rubble clearing.
+
+---
+
+## [0.0.9] — 2026-03-16 — M3 Progress (Foundation Hardening + Real NPC Orders + Stability Pass)
+
+### Added
+- First real local NPC gameplay foundation:
+  - dedicated `npcs` data on owned plot detail
+  - dedicated `jobs` data for owned-plot work
+  - first real local NPC actor rendering in Player Plot mode
+- First authoritative local order flow:
+  - `Scavenging`
+  - server validates order ownership/eligibility
+  - jobs are created authoritatively
+  - NPC performs the work loop on the owned plot
+- First authoritative NPC state loop:
+  - `idle`
+  - `moving_to_target`
+  - `working`
+  - `carrying_to_dropoff`
+  - `dropping_off`
+  - `returning`
+- Starter owned-plot scavenging loop:
+  - NPC selects local rubble work targets
+  - moves to the target
+  - works over time
+  - carries result back toward the shack dropoff
+- Client-safe world payload shaping:
+  - dedicated client world/build path
+  - owner-only local detail remains private
+  - player secrets are no longer included in world snapshots
+- Runtime protocol validation using dedicated message schemas.
+- Safer persistence foundation:
+  - runtime save path moved under `server/data/`
+  - debounced JSON world repository introduced
+- First server automated tests:
+  - client-world sanitization test
+  - NPC/job-system behavior test
+- First server code-quality toolchain:
+  - `typecheck`
+  - `test`
+  - `lint`
+
+### Changed
+- NPC order handling was refactored away from the earlier rushed single-order slice toward a more durable job-based foundation.
+- Scavenging now starts only when the player explicitly issues the order.
+- Repeated scavenging requests are now rejected while an active scavenging loop already exists on that plot.
+- NPC target selection now prefers the nearest valid queued rubble target instead of arbitrary queue order.
+- NPC local movement presentation now keeps active movement state more stable instead of restarting tweens unnecessarily on repeated updates.
+- Client networking now uses the newer protocol version and normalized wire-adapter flow for owned-plot detail.
+- World persistence/config setup is now cleaner and more production-oriented than the earlier direct save-file path.
+
+### Removed
+- Removed the unsafe client world snapshot behavior where full server player data could leak into client-facing world payloads.
+- Removed the old raw direct-save pattern as the main persistence path in favor of the repository/debounced save approach.
+
+### Fixed
+- Fixed a major security issue where player secrets could leak through full world payloads.
+- Fixed owned-plot re-entry crashes caused by freed NPC node references being reused in the local renderer.
+- Fixed NPC scavenging auto-starting on plot entry without the player pressing the order button.
+- Fixed NPC movement slowdown/snap issues caused by repeated tween restarts from repeated updates.
+- Fixed several Godot strict-typing/warning-as-error issues by replacing inferred local variables with explicit types in key world/client scripts.
+- Fixed server linting/tooling setup and brought the server baseline to passing:
+  - `npm run typecheck`
+  - `npm run test`
+  - `npm run lint`
+
+### Notes / Known limitations
+- The Scavenge button is still clickable while a scavenging loop is already active; the server rejects duplicate orders, but the button is not yet disabled in the UI.
+- Local NPC visuals/animation are still early and not final-polish quality yet.
+- Player Plot mode still renders only the owned plot.
+- Neighborhood loading/rendering is still not implemented yet.
+- The current job/order system is now on the correct architectural path, but broader economy/logistics/business systems are still future work.

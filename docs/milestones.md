@@ -105,11 +105,12 @@ The project is now a working multiplayer 3D prototype with login, inspection, cl
 
 ---
 
-## Current Milestone
-
 ### M2 - Multi-Scale Shared World Foundation
 
-**Already implemented**
+**Goal**  
+Establish the first real owned-plot gameplay foundation on top of the shared world.
+
+**Completed**
 - shell data on plots
 - owned-plot detail data on claimed player plots
 - first Player Plot mode
@@ -118,403 +119,125 @@ The project is now a working multiplayer 3D prototype with login, inspection, cl
 - compact owner-only detail payloads (`cell_rows`)
 - player-plot camera parity using the existing camera rig
 - real rubble interaction:
-  - click rubble
+  - right click rubble
+  - release without meaningful drag opens a cursor popup
+  - `Clear` action from the popup
   - clear by object id
   - authoritative server update
   - animated removal on client
+- multi-step rubble clearing:
+  - rubble stores `clear_hits_remaining`
+  - each clear action reduces the remaining count
+  - final clear removes rubble and frees its footprint
 - local visual polish:
   - animated rubble removal
+  - smoke effect on final rubble removal
   - randomized rubble rotation/offset
   - randomized multi-texture ground shader
+  - procedural sky / world environment
+- local input/camera polish:
+  - Player Plot rubble interaction no longer reopens the world-side plot panel
+  - popup/menu flow no longer leaves the camera stuck rotating
+  - camera rotation now begins only after a small RMB drag threshold
 
-**Next**
-- neighborhood loading/rendering around the owned plot
-- reduced-detail nearby plot/resource rendering
-- then local interaction UX polish as needed
+**Result**
+M2 delivered the first real owned-plot gameplay foundation.
+The player can now:
+- connect/login
+- claim a plot
+- enter their owned plot
+- move around locally with the normal camera feel
+- interact with rubble
+- clear rubble through the authoritative server path
+- return back to the shared world
+
+**Deferred**
+Neighborhood rendering is still part of the long-term shared-world vision, but it is not the current next priority.
 
 **Still temporary / limited**
-- old debug clear path still exists
-- local NPC is still a placeholder
 - local mode currently renders only the owned plot
+- neighborhood loading/rendering is not implemented yet
+- broader local gameplay beyond rubble clearing is still early
 
 ---
 
-### M2 Design Intent
+## Current Milestone Direction
 
-The world should remain continuous and social.
+## Milestone 3 — Owned Plot NPCs, Identity, and Orders Foundation
 
-The intended player experience is:
+### Purpose
+Establish the first **complete NPC gameplay foundation** for owned plots, not just a hidden technical work loop.
 
-1. See the shared world at a macro scale
-2. Recognize neighboring cities by their visible shells/exteriors
-3. Enter a more local view centered on your own plot
-4. Continue seeing nearby surrounding plots/resource zones
-5. Interact fully only with your own plot
-6. Later see public outside NPC activity in nearby areas while interiors remain private
+### M3 now includes
+- server-authoritative NPC simulation
+- NPC identity data
+- persistent random names
+- role/job specialization
+- player-readable current activity
+- overhead labels
+- click-to-inspect Character Sheet
+- role-based order eligibility
+- first expandable order menu foundation
 
-This means M2 is not just about adding a larger playable area.  
-It is about establishing a **multi-scale rendering and data model** that supports both macro and local play.
+### M3 deliverables
 
----
+#### 1. NPC simulation foundation
+- job-based work loop remains authoritative on the server
+- NPCs only act on valid jobs/orders
+- role eligibility is enforced server-side
 
-### World Map Mode
+#### 2. NPC identity foundation
+- each NPC has a persistent name
+- each NPC has a role/job type
+- each NPC supports future traits/stats expansion
 
-**Purpose**
-- macro overview
-- navigation
-- claiming
-- seeing city shapes and neighboring development
-- understanding the broader structure of the shared world
+#### 3. NPC readability
+- current activity is visible to the player
+- overhead labels show at least:
+  - name
+  - current activity
+- Character Sheet shows:
+  - name
+  - role
+  - current activity
+  - current state
+  - current assignment summary
+  - placeholder areas for future traits/stats
 
-**Should render**
-- plot bases
-- ownership/state
-- city shells / exterior building silhouettes
-- resource zone shells/public exterior structure
-- broad roads/terrain markers later
+#### 4. Role specialization
+- at least one scavenger role
+- at least one non-scavenger role for testing
+- scavenging orders only use eligible NPCs
 
-**Should not render**
-- interiors
-- interior objects
-- fine local clutter
-- deep simulation details
-- most NPC detail
+#### 5. Order system expansion base
+- current Scavenge flow is restructured into the first expandable order menu foundation
+- future order types can be added without redoing the whole UI structure
 
-World Map mode should prioritize readability and scale over detail.
+#### 6. Stability rules
+- no inferred local GDScript variables in new gameplay/UI code
+- no one-off hardcoded role checks scattered across the codebase
+- no duplicated activity string logic in multiple places
 
----
-
-### Player Plot Mode
-
-**Purpose**
-- local city management
-- building
-- inspection
-- future scavenging and early survival tasks
-- future exterior/interior switching for the owned plot
-
-When entering Player Plot mode, the client should not render the entire world in high detail.  
-Instead, it should render a **local neighborhood window** centered on the player's owned plot.
-
-Recommended first implementation target:
-- **up to 7x7 plots centered on the owned plot**
-- smaller if the world does not contain a full 7x7 around that location yet
-
-**In this mode:**
-
-#### Owned plot
-Render:
-- full exterior detail
-- local objects
-- rubble/debris
-- shack/starter structure
-- interactables
-- owned NPCs
-- later interior entry/switching
-
-#### Nearby other player plots
-Render:
-- shell/exterior only (the outer walls of a building)
-- public outside structure
-- no interior details
-- no interior objects
-- no inside-only NPCs (only NPCs that are tagged as outside)
-
-#### Nearby resource zones
-Render:
-- public exterior/resource content
-- world objects visible from outside
-- later public/shared activity
-
-This keeps the local view socially connected while preserving privacy and performance.
+### Exit criteria
+M3 is complete when the player can:
+- identify an NPC by name
+- see that NPC’s role/job type
+- understand what the NPC is currently doing
+- inspect them via Character Sheet
+- verify that only eligible NPCs respond to scavenging orders
+- see that the order system is ready to grow beyond one button
 
 ---
 
-### Public vs Private Visibility Rule
-
-This should become a foundational rule for future milestones.
-
-**Public / visible to nearby players**
-- plot shell / exterior silhouette
-- outside structures
-- outside props intended to be visible
-- NPCs physically outside in public/shared space
-- NPCs outside cities, on streets, or in resource zones
-
-**Private / not visible to outsiders**
-- interiors
-- interior furniture/objects
-- interior-only simulation details
-- NPCs located inside player buildings/interiors
-
-For the owner, more detail is visible on their own plot.  
-For other players, only public/exterior-facing information should be shown.
-
-This rule should influence:
-- data modeling
-- rendering
-- protocol design
-- culling/interest management later
-- gameplay expectations
-
----
-
-### M2 Technical Goals
-
-M2 should introduce the first structure for:
-
-1. **plot shell / summary data**
-2. **detailed owned-plot data**
-3. **neighborhood-based loading/rendering**
-4. **mode switching between World Map and Player Plot**
-5. **starter ruined owned plot state**
-6. **future outside/public actor visibility**
-
-This should be built in a way that supports later systems without requiring a rewrite.
-
----
-
-### M2 Deliverables
-
-**World / Data**
-- preserve the shared world as the main world model
-- introduce shell/exterior summary data for plots
-- introduce richer detailed data for owned/local plot content
-- support neighborhood-based data centered on a chosen plot
-- keep persistence compatible with future expansion
-
-**Client / Rendering**
-- World Map mode
-- Player Plot mode
-- local neighborhood rendering around owned plot
-- own plot rendered in higher detail
-- neighboring plots/resource zones rendered in reduced public detail
-- clear enter/exit flow between modes
-
-**Starter Local Experience**
-- ruined starter owned plot
-- blocked/unblocked space
-- rubble/debris placeholders
-- starter shack placeholder
-- starter NPC placeholder or marker
-- inspectable local elements
-
-**Architecture**
-- maintain modular client/server responsibilities
-- avoid turning the owned plot into a separate disconnected world
-- support future interiors without forcing them into M2
-- establish render/detail layers instead of one monolithic world renderer
-
----
-
-### Recommended First M2 Scope
-
-M2 should focus on structure, not content volume.
-
-Good first-scope priorities:
-- define the two-scale world model
-- add shell vs detailed plot data separation
-- add World Map vs Player Plot mode switching
-- add a local neighborhood render window
-- make the owned plot feel like a real place with a ruined starter state
-- keep neighboring plots visible in reduced detail
-
-This creates the correct container for future gameplay.
-
----
-
-### M2 Out of Scope
-
-Unless extremely cheap to add, M2 should avoid full implementation of:
-
-- full NPC AI/simulation
-- advanced pathfinding
-- production chains
-- full interiors
-- interior furniture systems
-- advanced build placement systems
-- detailed scavenging loops
-- resource extraction depth
-- animation-heavy systems
-- large-scale optimization work
-
-These can and should come later once the shared-world local-detail structure is in place.
-
----
-
-### Why M2 Matters
-
-If M2 is done correctly, it becomes the foundation for:
-
-- scavenging and early survival gameplay
-- NPC work and outside/public life
-- local city management
-- exterior vs interior mode switching
-- public visibility of neighboring city activity
-- future social and logistical systems
-- later streets, resource zones, and travel layers
-
-If this is skipped or simplified into isolated instances, the game risks losing the shared-world social identity that makes the concept strong.
-
----
-
-## Future Milestones
-
-The milestones below remain intentionally broader and may evolve as M2 clarifies architecture.
-
----
-
-## M3 - Early Plot Gameplay
-
-**Goal**  
-Turn the owned plot into the first real playable city space.
-
-**Likely focus**
-- clearing rubble (already completed, but needs refinement (selection highlighting, x amount of interactions before it's cleared etc))
-- first basic orders/actions
-- first starter NPC workflow
-- first public-vs-private visibility rules in practice
-- first real local object interactions
-
-**Notes**
-- should build directly on M2 neighborhood/local detail work
-- should not break the shared-world continuity established in M2
-
----
-
-## M4 - Exterior Building and City Skeleton
-
-**Goal**  
-Allow the owned plot to develop visible structure and begin to read like a real city.
-
-**Likely focus**
-- roads / pathways
-- exterior building placement
-- city shell growth visible to neighbors
-- public exterior props
-- improved shell rendering at map scale
-- stronger city identity from outside
-
-**Notes**
-- shell/exterior readability should remain important for both World Map and nearby local views
-
----
-
-## M5 - NPC Life and Work
-
-**Goal**  
-Introduce the first meaningful social/simulation layer.
-
-**Likely focus**
-- NPC roles
-- task assignment / work systems
-- movement in outside/public areas
-- visible public NPC activity
-- gradual support for NPCs existing both outside and inside structures
-
-**Notes**
-- outside vs inside visibility should remain a core rule
-- other players should not need full private NPC simulation from your interiors
-
----
-
-## M6 - Interiors and Private Spaces
-
-**Goal**  
-Make player buildings feel inhabited and meaningful beyond shell/exterior structure.
-
-**Likely focus**
-- interior mode for owned buildings
-- rooms
-- interior furniture and interactables
-- inside-only NPC behavior
-- privacy rules for interior state
-
-**Notes**
-- this should apply primarily to the owner's plot/buildings
-- other players should still only see shell/public-facing information unless special rules are added later
-
----
-
-## M7 - Resource Zones and Shared Outside Activity
-
-**Goal**  
-Expand public/shared world life beyond city plots.
-
-**Likely focus**
-- resource zones as shared/public spaces
-- outside NPC activity beyond city borders
-- travel and public work/extraction
-- visibility of friends/NPCs in the outside world
-- stronger connection between cities and surrounding land
-
-**Notes**
-- this milestone becomes much stronger if M2 already established neighborhood continuity and public actor visibility rules
-
----
-
-## M8 - Systems Depth and Emergent City Life
-
-**Goal**  
-Move from foundational mechanics into richer city simulation.
-
-**Likely focus**
-- logistics
-- indirect control
-- bureaucracy/coordination friction
-- production chains
-- social outcomes
-- more emergent city behavior
-
-**Notes**
-- this is where the long-term identity of the game should become clearer
-- systems should grow from the modular architecture set earlier, not from shortcuts
-
----
-
-## Ongoing Rules for All Milestones
-
-These principles should apply throughout the project:
-
-- keep server authority clear
-- keep client/server responsibilities modular
-- preserve shared-world continuity
-- distinguish shell, exterior, interior, public, and private data
-- avoid spaghetti architecture
-- prefer clear data ownership and protocol boundaries
-- build foundations before scale/content explosions
-- optimize later unless performance becomes a blocker
-- preserve the social readability of the world
-
----
-
-## Current Priority
-
-The current priority is still **M2 implementation progression**, but the immediate next steps have changed.
-
-The next implementation order should now be:
-
-1. **Player Plot camera parity**
-   - carry the current world-view camera feel into Player Plot mode
-   - let the player move around the owned plot more freely after entering
-   - keep the enter/exit transition, but stop treating local mode as a mostly fixed overview
-
-2. **Real rubble interaction**
-   - replace the temporary debug clear flow with real local interaction
-   - click rubble object
-   - clear it through the normal interaction path
-   - remove the rubble object
-   - free its occupied hidden cells
-
-3. **Neighborhood rendering after that**
-   - only after local camera feel and real rubble interaction are working
-   - then add nearby surrounding plots/resource zones in reduced public detail
-   - then continue building outward from the owned plot into a true local neighborhood window
-
-The project now has:
-- working M1 world flow
-- first owned-plot enter/exit mode
-- first real local object foundation
-- hidden-grid local plot logic under the player-facing scene
-
-So the next milestone work should focus on making the owned plot itself feel playable before expanding into neighborhood rendering.
+## Long-Term Direction Reminder
+
+Still valid future goals:
+- neighborhood/public local rendering
+- outside/public actor visibility
+- interior/private spaces
+- deeper local production/business chains
+- logistics/supply behavior
+- richer role/skill systems
+- nearby city/public-space readability
+
+But those should build on the stable NPC/order/data foundations now in place, not replace them with a new rushed milestone slice.

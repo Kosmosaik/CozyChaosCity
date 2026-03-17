@@ -5,157 +5,118 @@ export const EnvelopeSchema = z.object({
   v: z.number(),
   type: z.string(),
   req_id: z.string().optional(),
-  payload: z.any().optional(),
+  payload: z.unknown().optional(),
 });
 
 export type Envelope = z.infer<typeof EnvelopeSchema>;
 
 export type PlotType = "PLAYER" | "RESOURCE";
-
 export type PlotShellKind = "EMPTY" | "RUINED" | "BASIC_CITY";
+export type PlotDetailTerrain = "GROUND" | "RUBBLE";
+export type PlotDetailStarterObjectKind = "SHACK" | "NPC_MARKER" | "RUBBLE_4X4";
+export type PlotOrderKind = "SCAVENGING";
+export type PlotOrderTargetScope = "ALL";
+export type PlotNpcKind = "STARTER_WORKER";
+export type PlotNpcJobType = "SCAVENGER" | "LABORER";
+
+export type PlotNpcState =
+  | "idle"
+  | "moving_to_target"
+  | "working"
+  | "carrying_to_dropoff"
+  | "dropping_off"
+  | "returning";
+
+export type PlotNpcCarryKind = "SCRAP";
+
+export type PlotJobKind = "SCAVENGE_RUBBLE";
+export type PlotJobStatus =
+  | "queued"
+  | "reserved"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+  | "blocked";
 
 export type PlotShell = {
-  /**
-   * High-level public-facing shell/exterior summary for this plot.
-   * Intended for World Map mode and reduced-detail neighboring plot rendering.
-   */
   kind: PlotShellKind;
-
-  /**
-   * Free-form variant token so we can swap placeholder shell looks later
-   * without changing the overall data shape.
-   */
   variant: string;
-
-  /**
-   * Simple progression/stage number for shell growth over time.
-   * M2 starts at 0 and can expand this later.
-   */
   stage: number;
 };
 
-export type PlotDetailTerrain = "GROUND" | "RUBBLE";
-
 export type PlotDetailCell = {
-  /**
-   * Local coordinate inside the owned plot detail grid.
-   */
   x: number;
   y: number;
-
-  /**
-   * Whether this cell is currently blocked for basic use/building.
-   */
   blocked: boolean;
-
-  /**
-   * Whether this cell can be cleared through gameplay later.
-   * For now this is mainly intended for rubble cells.
-   */
   clearable: boolean;
-
-  /**
-   * Very early placeholder terrain classification for M2 starter-state data.
-   */
   terrain: PlotDetailTerrain;
 };
 
-export type PlotDetailStarterObjectKind = "SHACK" | "NPC_MARKER" | "RUBBLE_4X4";
-
 export type PlotDetailStarterObject = {
-  /**
-   * Stable local object id inside the plot detail model.
-   */
   id: string;
-
-  /**
-   * Very early placeholder starter object kind.
-   */
   kind: PlotDetailStarterObjectKind;
-
-  /**
-   * Local top-left coordinate inside the detail grid.
-   *
-   * Important:
-   * - x/y are no longer treated as "center of one cell"
-   * - x/y define the top-left anchor of the object's footprint
-   */
   x: number;
   y: number;
-
-  /**
-   * Optional footprint size in local cells/meters.
-   * Defaults to 1x1 when omitted.
-   *
-   * This lets us represent:
-   * - a 4x4 shack
-   * - later larger buildings
-   * - while keeping NPC markers or tiny props at 1x1
-   */
   footprint_w?: number;
   footprint_h?: number;
-
-    /**
-   * Remaining number of clear/work actions required before this object
-   * is fully removed from the plot.
-   *
-   * Only used for clearable authored objects such as rubble.
-   */
   clear_hits_remaining?: number;
 };
 
+export type PlotOrder = {
+  kind: PlotOrderKind;
+  target_scope: PlotOrderTargetScope;
+  issued_at_ms: number;
+};
+
+export type PlotJob = {
+  id: string;
+  kind: PlotJobKind;
+  target_object_id: string;
+  status: PlotJobStatus;
+  assigned_npc_id: string | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+};
+
+export type PlotDetailNpc = {
+  id: string;
+  kind: PlotNpcKind;
+  name: string;
+  job_type: PlotNpcJobType;
+  current_activity: string;
+  traits?: string[];
+  allowed_order_kinds?: PlotOrderKind[];
+  x: number;
+  y: number;
+  home_x: number;
+  home_y: number;
+  state: PlotNpcState;
+  assigned_order?: PlotOrderKind | null;
+  target_object_id?: string | null;
+  move_to_x?: number | null;
+  move_to_y?: number | null;
+  state_started_at_ms?: number | null;
+  state_ends_at_ms?: number | null;
+  carrying_kind?: PlotNpcCarryKind | null;
+};
+
 export type PlotDetail = {
-  /**
-   * Local owned-plot width in cells.
-   */
   width: number;
-
-  /**
-   * Local owned-plot height in cells.
-   */
   height: number;
-
-  /**
-   * Per-cell starter-state data for the owned plot.
-   */
   cells: PlotDetailCell[];
-
-  /**
-   * Placeholder starter objects such as shack and starter NPC marker.
-   */
   starter_objects: PlotDetailStarterObject[];
+  npcs?: PlotDetailNpc[];
+  jobs?: PlotJob[];
+  active_order?: PlotOrder | null;
 };
 
 export type Plot = {
-  /**
-   * Stable unique id. For M0.5 we derive it from coordinates: T_<x>_<y>
-   */
   id: string;
-
   type: PlotType;
-
-  /**
-   * Grid coordinate (integer)
-   */
   x: number;
   y: number;
-
-  /**
-   * player_id of the owner, or null if unclaimed.
-   * (RESOURCE plots should remain unclaimable; claimed_by should stay null.)
-   */
   claimed_by: string | null;
-
-  /**
-   * Public-facing shell/exterior summary.
-   * Optional for backward compatibility with older saves until normalization runs.
-   */
   shell?: PlotShell;
-
-  /**
-   * Richer owned-plot/local detail data used for Player Plot mode later.
-   * Optional because not every plot needs detail loaded/generated immediately.
-   */
   detail?: PlotDetail;
 };
 
@@ -171,7 +132,121 @@ export type WorldState = {
   players: Record<string, PlayerRecord>;
 };
 
-export function makeMsg(type: string, payload?: any, req_id?: string) {
-  // Server always responds using its protocol version.
+export type ClientPlotDetail = {
+  width: number;
+  height: number;
+  cell_rows: string[];
+  starter_objects: PlotDetailStarterObject[];
+  npcs: PlotDetailNpc[];
+  jobs: PlotJob[];
+  active_order: PlotOrder | null;
+};
+
+export type ClientPlot = {
+  id: string;
+  type: PlotType;
+  x: number;
+  y: number;
+  claimed_by: string | null;
+  shell?: PlotShell;
+  detail?: ClientPlotDetail;
+  owner_display_name: string;
+};
+
+export type ClientWorldState = {
+  version: number;
+  plots: ClientPlot[];
+};
+
+export const HelloPayloadSchema = z
+  .object({
+    player_id: z.string().min(1).optional(),
+    secret: z.string().min(1).optional(),
+    display_name: z.string().min(1).max(32).optional(),
+  })
+  .superRefine((payload, ctx) => {
+    const hasCreds =
+      typeof payload.player_id === "string" &&
+      typeof payload.secret === "string";
+    const hasDisplayName = typeof payload.display_name === "string";
+
+    if (!hasCreds && !hasDisplayName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "hello payload must include either {player_id, secret} or {display_name}",
+      });
+    }
+  });
+
+export const RequestWorldPayloadSchema = z.object({}).passthrough();
+
+export const ClientPingPayloadSchema = z
+  .object({
+    client_ms: z.number().optional(),
+  })
+  .passthrough();
+
+export const ClaimPlotPayloadSchema = z.object({
+  plot_id: z.string().min(1),
+});
+
+export const ClearPlotObjectPayloadSchema = z.object({
+  plot_id: z.string().min(1),
+  object_id: z.string().min(1),
+});
+
+export const IssuePlotOrderPayloadSchema = z.object({
+  plot_id: z.string().min(1),
+  order_kind: z.literal("SCAVENGING"),
+  target_scope: z.literal("ALL"),
+});
+
+export const HelloMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("hello"),
+  payload: HelloPayloadSchema,
+});
+
+export const RequestWorldMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("request_world"),
+  payload: RequestWorldPayloadSchema.optional(),
+});
+
+export const ClientPingMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("client_ping"),
+  payload: ClientPingPayloadSchema.optional(),
+});
+
+export const ClaimPlotMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("claim_plot"),
+  payload: ClaimPlotPayloadSchema,
+});
+
+export const ClearPlotObjectMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("clear_plot_object"),
+  payload: ClearPlotObjectPayloadSchema,
+});
+
+export const IssuePlotOrderMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("issue_plot_order"),
+  payload: IssuePlotOrderPayloadSchema,
+});
+
+export const ClientMessageSchema = z.discriminatedUnion("type", [
+  HelloMessageSchema,
+  RequestWorldMessageSchema,
+  ClientPingMessageSchema,
+  ClaimPlotMessageSchema,
+  ClearPlotObjectMessageSchema,
+  IssuePlotOrderMessageSchema,
+]);
+
+export type ClientMessage = z.infer<typeof ClientMessageSchema>;
+
+export function makeMsg<TPayload = unknown>(
+  type: string,
+  payload?: TPayload,
+  req_id?: string
+) {
   return JSON.stringify({ v: CONFIG.protocolVersion, type, req_id, payload });
 }

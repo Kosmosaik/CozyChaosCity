@@ -1,6 +1,8 @@
 extends Node
 class_name NetClient
 
+const WireAdapter = preload("res://scripts/net/WireAdapters.gd")
+
 # -------------------------
 # Signals (events HUD listens to)
 # -------------------------
@@ -16,6 +18,8 @@ signal plot_updated(plot: Dictionary)
 signal world_patch_received(patch: Dictionary)
 signal claim_result_received(result: Dictionary)
 signal clear_plot_object_result_received(result: Dictionary)
+signal issue_plot_order_result_received(result: Dictionary)
+
 
 signal latency_updated(ms: int)
 signal presence_updated(online: Array) # array of {player_id, display_name}
@@ -26,7 +30,7 @@ signal presence_updated(online: Array) # array of {player_id, display_name}
 # Default: what the shipped game will auto-connect to (your public IP for now).
 # Example: "ws://83.12.34.56:27015"
 const DEFAULT_SERVER_URL := "ws://90.225.57.62:27015"
-const PROTOCOL_VERSION := 2
+const PROTOCOL_VERSION := 3
 
 # Optional local override:
 # If this file exists, its contents will be used as the server URL.
@@ -116,6 +120,17 @@ func clear_plot_object(plot_id: String, object_id: String) -> void:
 		},
 		_next_req_id()
 	)
+	
+func issue_plot_order(plot_id: String, order_kind: String, target_scope: String) -> void:
+	_send(
+		"issue_plot_order",
+		{
+			"plot_id": plot_id,
+			"order_kind": order_kind,
+			"target_scope": target_scope,
+		},
+		_next_req_id()
+	)
 
 func _resolve_server_url() -> String:
 	# Local override for you (LAN testing) without typing in-game.
@@ -150,9 +165,13 @@ func _poll_ws() -> void:
 
 		# If we already have stored credentials for this profile, authenticate.
 		# Otherwise, register a new identity using display_name.
-		var payload := {}
+		var payload: Dictionary = {}
 		if player_id != "" and secret != "":
-			payload = { "player_id": player_id, "secret": secret }
+			payload = {
+				"player_id": player_id,
+				"secret": secret,
+				"display_name": display_name,
+			}
 		else:
 			payload = { "display_name": display_name }
 
@@ -169,101 +188,6 @@ func _poll_ws() -> void:
 		var pkt = _ws.get_packet()
 		var txt = pkt.get_string_from_utf8()
 		_handle_message(txt)
-
-func _normalize_detail_from_wire(detail: Dictionary) -> Dictionary:
-	# Convert compact wire detail into the richer client-side shape
-	# the rest of the current M2 code already expects.
-	#
-	# Wire format:
-	# - width
-	# - height
-	# - cell_rows: ["RRRGG...", ...]
-	# - starter_objects
-	#
-	# Client runtime format:
-	# - width
-	# - height
-	# - cells: [{x,y,blocked,clearable,terrain}, ...]
-	# - starter_objects
-	var normalized := detail.duplicate(true)
-
-	if normalized.has("cells"):
-		return normalized
-
-	var raw_rows = normalized.get("cell_rows", null)
-	if typeof(raw_rows) != TYPE_ARRAY:
-		return normalized
-
-	var width = int(normalized.get("width", 0))
-	var height = int(normalized.get("height", 0))
-	var cells: Array = []
-
-	for y in range(min(height, raw_rows.size())):
-		var row_text := str(raw_rows[y])
-
-		for x in range(min(width, row_text.length())):
-			var ch := row_text.substr(x, 1)
-
-			if ch == "R":
-				cells.append({
-					"x": x,
-					"y": y,
-					"blocked": true,
-					"clearable": true,
-					"terrain": "RUBBLE",
-				})
-			else:
-				cells.append({
-					"x": x,
-					"y": y,
-					"blocked": false,
-					"clearable": false,
-					"terrain": "GROUND",
-				})
-
-	normalized["cells"] = cells
-	return normalized
-
-func _normalize_plot_from_wire(plot: Dictionary) -> Dictionary:
-	var normalized := plot.duplicate(true)
-
-	var raw_detail = normalized.get("detail", null)
-	if typeof(raw_detail) == TYPE_DICTIONARY and not raw_detail.is_empty():
-		normalized["detail"] = _normalize_detail_from_wire(raw_detail)
-
-	return normalized
-
-func _normalize_world_from_wire(world: Dictionary) -> Dictionary:
-	var normalized := world.duplicate(true)
-
-	var raw_plots = normalized.get("plots", null)
-	if typeof(raw_plots) != TYPE_ARRAY:
-		return normalized
-
-	var plots: Array = []
-	for raw_plot in raw_plots:
-		if typeof(raw_plot) == TYPE_DICTIONARY:
-			plots.append(_normalize_plot_from_wire(raw_plot))
-		else:
-			plots.append(raw_plot)
-
-	normalized["plots"] = plots
-	return normalized
-
-func _normalize_patch_from_wire(patch: Dictionary) -> Dictionary:
-	var normalized := patch.duplicate(true)
-
-	var raw_added = normalized.get("added", null)
-	if typeof(raw_added) == TYPE_ARRAY:
-		var added: Array = []
-		for raw_plot in raw_added:
-			if typeof(raw_plot) == TYPE_DICTIONARY:
-				added.append(_normalize_plot_from_wire(raw_plot))
-			else:
-				added.append(raw_plot)
-		normalized["added"] = added
-
-	return normalized
 
 func _handle_message(txt: String) -> void:
 	var msg = JSON.parse_string(txt)
@@ -298,16 +222,15 @@ func _handle_message(txt: String) -> void:
 			_emit_status("Welcome '%s' (%s)" % [display_name, player_id])
 
 			# Ask for world snapshot (safe even if server also sends it)
-			request_world()
 
 		"world_state":
 			# payload: { world: { version, plots: [...] } }
 			var world_payload: Dictionary = payload.get("world", {})
-			emit_signal("world_state_received", _normalize_world_from_wire(world_payload))
+			emit_signal("world_state_received", WireAdapter.normalize_world_from_wire(world_payload))
 
 		"plot_update":
 			# payload: { plot: {...}, owner_display_name?: "Alice" }
-			var p: Dictionary = _normalize_plot_from_wire(payload.get("plot", {}))
+			var p: Dictionary = WireAdapter.normalize_plot_from_wire(payload.get("plot", {}))
 
 			# If server provided a name, store it on the plot dict.
 			# This makes PlotView able to show the correct owner name even if
@@ -318,7 +241,7 @@ func _handle_message(txt: String) -> void:
 			emit_signal("plot_updated", p)
 
 		"world_patch":
-			emit_signal("world_patch_received", _normalize_patch_from_wire(payload))
+			emit_signal("world_patch_received", WireAdapter.normalize_patch_from_wire(payload))
 
 		"claim_result":
 			emit_signal("claim_result_received", payload)
@@ -333,7 +256,14 @@ func _handle_message(txt: String) -> void:
 			# payload: { online: [ {player_id, display_name}, ... ] }
 			_online_players = payload.get("online", [])
 			emit_signal("presence_updated", _online_players)
-
+			
+		"issue_plot_order_result":
+			emit_signal("issue_plot_order_result_received", payload)
+			
+		"error":
+			var reason := str(payload.get("reason", "unknown"))
+			_emit_status("Server error: %s" % reason)
+			
 		"server_pong":
 			# Compute RTT using the request id of the pong (if present)
 			var rid = str(msg.get("req_id", ""))

@@ -82,7 +82,7 @@ func apply_plot_update(plot: Dictionary) -> void:
 	_apply_or_spawn_plot(plot)
 
 func _apply_or_spawn_plot(plot: Dictionary) -> void:
-	var plot_id := str(plot.get("id", ""))
+	var plot_id : String = str(plot.get("id", ""))
 	if plot_id == "":
 		return
 
@@ -99,6 +99,7 @@ func _apply_or_spawn_plot(plot: Dictionary) -> void:
 		_tiles_by_plot_id[plot_id] = tile
 
 	# Apply the latest authoritative plot data each time so visuals stay correct.
+	tile.set_tile_footprint_size(TILE_SPACING)
 	tile.apply_plot(plot, _my_player_id)
 	tile.position = _grid_to_world(int(plot.get("x", 0)), int(plot.get("y", 0)))
 
@@ -128,7 +129,7 @@ func _refresh_all_tile_visuals() -> void:
 			
 func _refresh_selection_and_hover() -> void:
 	for plot_id in _tiles_by_plot_id.keys():
-		var tile := _tiles_by_plot_id[plot_id] as PlotTile3D
+		var tile : PlotTile3D = _tiles_by_plot_id[plot_id] as PlotTile3D
 		if not is_instance_valid(tile):
 			continue
 

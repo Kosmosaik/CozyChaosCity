@@ -1,16 +1,39 @@
+# -----------------------------
+# OS / editor
+# -----------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# -----------------------------
+# Node
+# -----------------------------
+**/node_modules/
+**/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# -----------------------------
+# Runtime / save data
+# -----------------------------
+server/data/
+server/*.log
+server/*.tmp
+
+# -----------------------------
 # Godot
+# -----------------------------
 client/.godot/
 client/.import/
 client/export/
 client/*.tmp
-client/.mono/
-client/.vs/
+client/**/*.tmp
 
-# Node
-server/node_modules/
-server/dist/
-server/*.log
-
-# OS junk
-.DS_Store
-Thumbs.db
+# -----------------------------
+# Archives
+# -----------------------------
+*.zip
+*.7z
+*.rar

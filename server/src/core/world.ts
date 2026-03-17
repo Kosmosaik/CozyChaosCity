@@ -2,11 +2,14 @@ import {
   Plot,
   PlotDetail,
   PlotDetailCell,
+  PlotDetailNpc,
   PlotDetailStarterObject,
   PlotShell,
   PlotType,
   WorldState,
 } from "../net/protocol";
+import { makeNpcName } from "./npc_names";
+
 
 /**
  * M0.5 Pattern Rule
@@ -29,18 +32,49 @@ export function plotIdFor(x: number, y: number): string {
   return `T_${x}_${y}`;
 }
 
-function makeStarterPlotDetail(): PlotDetail {
+function makeStarterNpcNameSeed(plotId: string, npcId: string): string {
+  // Names should be stable once created, but not repeated on every new plot.
+  // Using plot id + npc id keeps the seed deterministic and persistent while
+  // still producing different names across different claimed plots.
+  return `${plotId}:${npcId}`;
+}
+
+export function makeStarterNpc(
+  plotId: string,
+  id: string,
+  x: number,
+  y: number,
+  jobType: "SCAVENGER" | "LABORER"
+): PlotDetailNpc {
+  const allowedOrderKinds: ("SCAVENGING")[] =
+    jobType === "SCAVENGER" ? ["SCAVENGING"] : [];
+
+  return {
+    id,
+    kind: "STARTER_WORKER",
+    name: makeNpcName(makeStarterNpcNameSeed(plotId, id)),
+    job_type: jobType,
+    current_activity: "Idle",
+    traits: [],
+    allowed_order_kinds: allowedOrderKinds,
+    x,
+    y,
+    home_x: x,
+    home_y: y,
+    state: "idle",
+    assigned_order: null,
+    target_object_id: null,
+    move_to_x: null,
+    move_to_y: null,
+    state_started_at_ms: null,
+    state_ends_at_ms: null,
+    carrying_kind: null,
+  };
+}
+
+function makeStarterPlotDetail(plotId: string): PlotDetail {
   const cells: PlotDetailCell[] = [];
   const starterObjects: PlotDetailStarterObject[] = [];
-
-  /**
-   * Starter layout rules:
-   * - local plot is 40x40 cells/meters
-   * - center contains a clear starter area
-   * - shack is a 4x4 placed object
-   * - rubble is now represented as real 4x4 local objects
-   * - the hidden cell grid still carries blocked/clearable terrain logic underneath
-   */
 
   const clearAreaMinX = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
   const clearAreaMinY = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
@@ -68,8 +102,6 @@ function makeStarterPlotDetail(): PlotDetail {
     }
   }
 
-  // Add 4x4 rubble objects everywhere outside the central clear area.
-  // Because the layout sizes are divisible by 4, this produces a clean object grid.
   for (let y = 0; y < STARTER_DETAIL_SIZE; y += STARTER_RUBBLE_SIZE) {
     for (let x = 0; x < STARTER_DETAIL_SIZE; x += STARTER_RUBBLE_SIZE) {
       const chunkInsideClearArea =
@@ -94,30 +126,29 @@ function makeStarterPlotDetail(): PlotDetail {
     }
   }
 
-  starterObjects.push(
-    {
-      id: "starter_shack",
-      kind: "SHACK",
-      x: shackX,
-      y: shackY,
-      footprint_w: STARTER_SHACK_SIZE,
-      footprint_h: STARTER_SHACK_SIZE,
-    },
-    {
-      id: "starter_npc",
-      kind: "NPC_MARKER",
-      x: shackX + STARTER_SHACK_SIZE + 1,
-      y: shackY + STARTER_SHACK_SIZE - 1,
-      footprint_w: 1,
-      footprint_h: 1,
-    }
-  );
+  starterObjects.push({
+    id: "starter_shack",
+    kind: "SHACK",
+    x: shackX,
+    y: shackY,
+    footprint_w: STARTER_SHACK_SIZE,
+    footprint_h: STARTER_SHACK_SIZE,
+  });
+
+  const starterNpcX = shackX + STARTER_SHACK_SIZE + 1;
+  const starterNpcY = shackY + STARTER_SHACK_SIZE - 1;
 
   return {
     width: STARTER_DETAIL_SIZE,
     height: STARTER_DETAIL_SIZE,
     cells,
     starter_objects: starterObjects,
+    npcs: [
+      makeStarterNpc(plotId, "starter_worker_1", starterNpcX, starterNpcY, "SCAVENGER"),
+      makeStarterNpc(plotId, "starter_worker_2", starterNpcX, starterNpcY + 2, "LABORER"),
+    ],
+    jobs: [],
+    active_order: null,
   };
 }
 
@@ -169,7 +200,7 @@ export function ensureClaimedPlayerPlotInitialized(plot: Plot): boolean {
     return false;
   }
 
-  plot.detail = makeStarterPlotDetail();
+  plot.detail = makeStarterPlotDetail(plot.id);
 
   // Once a player plot becomes initialized for owned local play,
   // its public shell should no longer read as completely empty.
@@ -334,6 +365,119 @@ function ensureStarterRubbleObjectClearHits(detail: PlotDetail): boolean {
 
   return changed;
 }
+
+function normalizeStarterNpc(
+  plotId: string,
+  npc: PlotDetailNpc,
+  fallbackJobType: "SCAVENGER" | "LABORER"
+): boolean {
+  let changed = false;
+
+  if (typeof npc.name !== "string" || npc.name.length === 0) {
+    npc.name = makeNpcName(makeStarterNpcNameSeed(plotId, npc.id));
+    changed = true;
+  }
+
+  if (npc.job_type !== "SCAVENGER" && npc.job_type !== "LABORER") {
+    npc.job_type = fallbackJobType;
+    changed = true;
+  }
+
+  if (
+    typeof npc.current_activity !== "string" ||
+    npc.current_activity.length === 0
+  ) {
+    npc.current_activity = npc.state === "idle" ? "Idle" : "Busy";
+    changed = true;
+  }
+
+  if (!Array.isArray(npc.traits)) {
+    npc.traits = [];
+    changed = true;
+  }
+
+  const expectedAllowedOrderKinds: ("SCAVENGING")[] =
+    npc.job_type === "SCAVENGER" ? ["SCAVENGING"] : [];
+
+  const hasMatchingAllowedOrders =
+    Array.isArray(npc.allowed_order_kinds) &&
+    npc.allowed_order_kinds.length === expectedAllowedOrderKinds.length &&
+    npc.allowed_order_kinds.every(
+      (kind, index) => kind === expectedAllowedOrderKinds[index]
+    );
+
+  if (!hasMatchingAllowedOrders) {
+    npc.allowed_order_kinds = expectedAllowedOrderKinds;
+    changed = true;
+  }
+
+  return changed;
+}
+
+function ensureStarterNpcData(plot: Plot): boolean {
+  const detail = plot.detail;
+  if (!detail) {
+    return false;
+  }
+
+  let changed = false;
+
+  if (!Array.isArray(detail.npcs)) {
+    detail.npcs = [];
+    changed = true;
+  }
+
+  if (!Array.isArray((detail as any).jobs)) {
+    (detail as any).jobs = [];
+    changed = true;
+  }
+
+  let fallbackX = 0;
+  let fallbackY = 0;
+
+  const oldMarker = detail.starter_objects.find((obj) => obj.kind === "NPC_MARKER");
+  if (oldMarker) {
+    fallbackX = oldMarker.x;
+    fallbackY = oldMarker.y;
+    detail.starter_objects = detail.starter_objects.filter(
+      (obj) => obj.id !== oldMarker.id
+    );
+    changed = true;
+  } else {
+    const shack = detail.starter_objects.find((obj) => obj.kind === "SHACK");
+    if (shack) {
+      const shackW = shack.footprint_w ?? 1;
+      const shackH = shack.footprint_h ?? 1;
+      fallbackX = shack.x + shackW + 1;
+      fallbackY = shack.y + shackH - 1;
+    }
+  }
+
+  if (detail.npcs.length === 0) {
+    detail.npcs.push(
+      makeStarterNpc(plot.id, "starter_worker_1", fallbackX, fallbackY, "SCAVENGER")
+    );
+    detail.npcs.push(
+      makeStarterNpc(plot.id, "starter_worker_2", fallbackX, fallbackY + 2, "LABORER")
+    );
+    changed = true;
+  }
+
+  for (let index = 0; index < detail.npcs.length; index += 1) {
+    const fallbackJobType = index === 0 ? "SCAVENGER" : "LABORER";
+    if (normalizeStarterNpc(plot.id, detail.npcs[index], fallbackJobType)) {
+      changed = true;
+    }
+  }
+
+  if (typeof detail.active_order === "undefined") {
+    detail.active_order = null;
+    changed = true;
+  }
+
+  return changed;
+}
+
 
 export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailCell | null {
   const detail = plot.detail;
@@ -649,6 +793,9 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
     }
     if (ensureStarterRubbleObjectClearHits(plot.detail)) {
       migratedRubbleClearHits += 1;
+      changed = true;
+    }
+    if (ensureStarterNpcData(plot)) {
       changed = true;
     }
   }

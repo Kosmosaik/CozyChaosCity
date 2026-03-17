@@ -2,138 +2,232 @@
 
 These rules are **mandatory** for any GPT assistant helping develop this project.
 
+The goal is not just to make the next feature work.  
+The goal is to build new content in a way that stays stable, modular, and extensible so the project does **not** need constant refactoring/restructuring every milestone.
+
 ---
 
-## 1) Never guess. Always use the project files.
+## 1) Never guess. Always use the real project files.
 
 - **Do not assume** what a file contains, what the project structure looks like, or how something is implemented.
-- **Always read the actual project files first** (from the latest uploaded `.zip` / attachments) before proposing changes.
-- If changes has been made via GPT Assistant instructions, combine it with the .zip content and make the instructions the latest version unless the user explicitly requests otherwise.
-- If a file is not available to you in attachments, **ask for it or for the specific file content**, rather than inventing details.
+- **Always read the actual project files first** from the latest uploaded `.zip` / attachments before proposing changes.
+- If changes were already made through GPT instructions in the same session, combine those changes with the latest uploaded project state unless the user explicitly says otherwise.
+- If a file is not available, **ask for the file or its contents** instead of inventing details.
 
 ---
 
-## 2) Give exact placement instructions (no vague “find somewhere” language).
+## 2) Every change must respect the long-term architecture.
 
-When you provide code edits, you must specify **exactly** where they go:
+When proposing a change, do not stop at “can this work right now?”
 
-- Use **file paths** (e.g., `client/scripts/net/NetClient.gd`)
-- Provide **line numbers** whenever possible
-- Or provide **precise anchors**:
-  - “Insert this block immediately **after** the line: `...`”
-  - “Replace the block from `...` to `...` with:”
-  - “Delete lines X–Y containing:”
-- Avoid vague directions like:
-  - “Find where you keep state variables”
-  - “Somewhere in _ready()”
-  - “Near the top”
-  - “Around the handler”
+You must also ask:
 
----
+- does this fit the current architecture?
+- will this still be clean after 2–3 more related features?
+- does this create a future bottleneck or god-file?
+- does this mix responsibilities that should stay separate?
+- does this keep server authority where it belongs?
+- does this preserve private vs public data boundaries?
 
-## 3) Keep code modular. No spaghetti.
-
-- Prefer small, focused modules and helper functions.
-- One responsibility per file / function when practical.
-- Avoid “temporary” hacks unless truly necessary—if you do one, you must:
-  - label it clearly
-  - explain why it’s temporary
-  - explain what the intended future replacement is
-- Code better now for the future, so we don't have to refactor later.
+If the answer is weak, redesign the change before presenting it.
 
 ---
 
-## 4) Whole script vs. patch rules
+## 3) Stability first. No rushed slices that box the project in.
 
-- **If a new script/file is created:** provide the **entire file** in one block and explain what it does.
-- **If modifying an existing file:** provide **only the minimal diff** (exact replacement / insertion), with exact location.
+Do **not** add content in a way that forces later rewrites.
 
----
+Avoid:
+- feature slices that hardcode one current case in a way that blocks future expansion
+- logic that only works for one NPC / one building / one order / one object type unless the abstraction clearly supports growth
+- stuffing more responsibilities into already-heavy files
+- mixing domain state, wire payloads, and presentation state
+- client-side fake behavior for systems that should be authoritative on the server
 
-## 5) Comments are expected (educational style).
+Prefer:
+- small but durable abstractions
+- explicit data boundaries
+- focused modules
+- extensible enums/types/data models
+- architecture that can support “more of the same kind” later
 
-- Add clear, educational comments in code explaining:
-  - what the block does
-  - why it exists
-  - any edge cases
-- Prefer comments that help a future developer understand intent.
+The rule is:
 
----
-
-## 6) Explain each step in the chat (what + why + how to verify)
-
-For each change, the assistant must explain:
-
-1. **What problem we’re solving**
-2. **What we’re changing**
-3. **Exactly where to edit**
-4. **Why this fixes the problem**
-5. **How to test/verify** the change (local test steps)
+> Build a small real foundation, not a fast fake shortcut.
 
 ---
 
-## 7) UI workflow preference (Godot)
+## 4) Give exact placement instructions. No vague patch guidance.
 
-- Prefer **building static UI** (HUD labels, containers) in the **Godot editor**.
-- Use UI-by-code only when:
-  - the UI is dynamic (lists, generated rows)
-  - it’s debug-only
-  - or it must be created at runtime for a strong reason
-- If UI changes are needed, provide **Godot editor instructions** first:
-  - which `.tscn` to open
-  - which node to right-click
-  - what node to add and how to rename it
-  - what properties to change
-  - what node path the scripts will use (e.g., `TopBar/HBoxContainer/LatencyLabel`)
+When providing code edits, you must specify **exactly** where they go:
 
----
-
-## 8) Networking / protocol changes must be consistent
-
-- When changing message formats, versions, or payloads:
-  - update both server and client
-  - keep payloads backward-safe when possible
-  - include robust fallbacks (e.g., server provides `owner_display_name` to avoid stale client caches)
+- use **file paths**
+- provide **line numbers** whenever possible
+- or provide **precise anchors**
+  - “Insert immediately after: `...`”
+  - “Replace the whole function `...` with:”
+  - “Delete this exact block:”
+- avoid vague directions like:
+  - “find where you store state”
+  - “somewhere in `_ready()`”
+  - “near the top”
+  - “around the handler”
 
 ---
 
-## 9) Safety & stability first
+## 5) Whole-file vs patch rules
 
-- Avoid changes that cause spikes (CPU/bandwidth) or unbounded growth.
-- Prefer constant-cost expansions and bounded updates.
-- When in doubt, choose the approach that is simplest to reason about and test.
-
----
-
-## 10) Output style: keep it practical
-
-- Use a numbered checklist format like:
-  - “Step 1: Edit file X — replace lines A–B”
-  - “Step 2: Delete block containing …”
-  - “Step 3: Run server and verify …”
-- Keep code blocks clean and copy/paste friendly.
+- **If creating a new file:** provide the **entire file**
+- **If modifying an existing file:** provide the **smallest exact patch** that correctly performs the change
+- Do not rewrite whole existing files unless a full replacement is truly the cleanest option
 
 ---
 
-## 11) Don’t proceed blindly
+## 6) Keep code modular. No spaghetti.
 
-If anything required is missing (files, paths, versions, node names):
+- Prefer small, focused modules and helper functions
+- One clear responsibility per file / function when practical
+- Keep transport, domain logic, persistence, rendering, and UI responsibilities separated
+- Avoid growing god-files further
+- If a file is already becoming too central, propose a split before adding more to it
 
-- **Stop and request the missing input**, or
-- provide two safe branches (“If your file contains X, do this; if it contains Y, do that”) **only if both are grounded**.
-
----
-
-## 12) “Great answer” standard to follow
-
-The assistant’s answer should look like the recent successful fix:
-
-- It referenced the **actual files**
-- It identified the root cause from code
-- It provided **exact line deletions/replacements**
-- It included a clear test checklist
-- It avoided vague placement instructions
+Examples of boundaries that should stay separate:
+- server domain state vs client-facing DTOs
+- world simulation vs websocket transport
+- static local objects vs NPC actors
+- client rendering vs gameplay authority
+- UI flow vs world controller logic
 
 ---
 
-**Project expectation:** This assistant is a collaborator writing production-quality, modular code, with exact step-by-step instructions suitable for a solo developer following along.
+## 7) Never use inferred local variable types in GDScript.
+
+This rule is mandatory for this project.
+
+Use:
+
+```gdscript
+var plot_id: String = str(plot.get("id", ""))
+var tween: Tween = create_tween()
+var result: Dictionary = space_state.intersect_ray(query)
+```
+
+Do **not** rely on:
+
+```gdscript
+var plot_id := ...
+var tween := ...
+var result := ...
+```
+
+Reason:
+- this project treats warnings seriously
+- Godot may infer `Variant`
+- `Variant` inference causes avoidable warnings/errors
+- explicit types are safer and easier to maintain
+
+When in doubt, declare the type explicitly.
+
+---
+
+## 8) Comments are expected. Teach the future maintainer.
+
+Add comments that explain:
+
+- what the block does
+- why it exists
+- why the structure is futureproof
+- any important edge case or ownership rule
+
+Prefer comments that help a future developer continue the system correctly.
+
+Avoid useless comments that only restate obvious syntax.
+
+---
+
+## 9) Respect server authority and data safety.
+
+Do not leak internal/private server data to the client.
+
+Important rules:
+- never expose player secrets/tokens in world snapshots
+- do not send raw server state if the client only needs a filtered DTO
+- keep public, owner-only, and server-only data clearly separated
+- protocol changes must be mirrored on both client and server intentionally
+
+---
+
+## 10) Keep the protocol explicit.
+
+Do not mix:
+- domain state
+- persisted state
+- wire payload shape
+- client view model
+
+When changing networking:
+- update the protocol/types/schemas explicitly
+- keep runtime validation in place
+- update client decoding/adapters intentionally
+- document the message/payload change when needed
+
+---
+
+## 11) Add tests/tooling when architecture changes.
+
+If a change affects important foundations, include or update:
+- `typecheck`
+- tests
+- lint
+
+For server-side architectural changes, prefer to leave the project in a state where:
+
+```bash
+npm run typecheck
+npm run test
+npm run lint
+```
+
+all pass.
+
+If the change is important enough to break the project if it regresses, it is important enough to deserve a test.
+
+---
+
+## 12) Explain tradeoffs honestly.
+
+When suggesting a solution:
+- say what is urgent
+- say what is foundation work
+- say what can wait
+- say what is still temporary if anything remains temporary
+
+Do not pretend a rushed workaround is “futureproof.”
+
+If something is a compromise, label it clearly.
+
+---
+
+## 13) Match the active project direction.
+
+Current direction:
+- M2 owned-plot foundation exists
+- neighborhood rendering is deferred
+- the project is now building on the more stable M3 NPC/order foundation
+- future work should continue from durable server-authoritative gameplay systems, not throwaway milestone hacks
+
+Do not steer the project back toward an outdated milestone priority unless the user explicitly asks for that.
+
+---
+
+## 14) Preferred development mindset for this project
+
+When adding anything new, think like this:
+
+1. what is the smallest real version of this system?
+2. how do I keep it modular?
+3. how do I keep it extensible?
+4. how do I avoid rewriting it in two milestones?
+5. how do I keep client, server, data, and UI roles cleanly separated?
+
+That is the standard expected for future assistants.

@@ -8,6 +8,8 @@ class_name GameWorld3D
 signal plot_selected(plot: Dictionary, is_claimable: bool)
 signal view_mode_changed(mode_name: String, active_plot_id: String)
 signal local_rubble_context_requested(plot_id: String, object_id: String, screen_position: Vector2)
+signal local_npc_selected(npc_data: Dictionary)
+signal local_npc_selection_cleared()
 
 @onready var camera_rig: CameraRigBasic = $CameraRig
 @onready var camera_3d: Camera3D = $CameraRig/YawPivot/PitchPivot/Camera3D
@@ -15,7 +17,6 @@ signal local_rubble_context_requested(plot_id: String, object_id: String, screen
 @onready var tiles_root: Node3D = $TilesRoot
 @onready var owned_plot_root: Node3D = $OwnedPlotRoot
 @onready var transition_audio_player: AudioStreamPlayer = $TransitionAudioPlayer
-@onready var ground: MeshInstance3D = $Ground
 
 var my_player_id: String = ""
 var world_state: Dictionary = {}
@@ -37,6 +38,7 @@ var _saved_world_yaw_degrees: float = 0.0
 
 var selected_plot_id: String = ""
 var hovered_plot_id: String = ""
+var selected_local_npc_id: String = ""
 
 func set_my_player_id(player_id: String) -> void:
 	# Stores the authenticated player id so tile visuals can know
@@ -67,15 +69,15 @@ func set_world(world: Dictionary) -> void:
 
 func apply_plot_update(plot: Dictionary) -> void:
 	# Update one plot inside our local world cache.
-	var plot_id := str(plot.get("id", ""))
+	var plot_id : String = str(plot.get("id", ""))
 	if plot_id == "":
 		return
 
-	var plot_copy := plot.duplicate(true)
+	var plot_copy : Dictionary = plot.duplicate(true)
 	plots_by_id[plot_id] = plot_copy
 
 	var plots: Array = world_state.get("plots", [])
-	var replaced := false
+	var replaced : bool = false
 
 	for i in range(plots.size()):
 		var existing: Dictionary = plots[i]
@@ -100,6 +102,8 @@ func apply_plot_update(plot: Dictionary) -> void:
 		and owned_plot_renderer != null
 	):
 		owned_plot_renderer.refresh_plot_detail(plot_copy)
+		owned_plot_renderer.set_selected_npc_id(selected_local_npc_id)
+		_emit_local_npc_selection_state()
 		
 	# If the selected plot changed on the server, refresh the popup/HUD state.
 	if selected_plot_id == plot_id:
@@ -131,7 +135,7 @@ func _is_plot_claimable(plot: Dictionary) -> bool:
 		return false
 
 	var raw_claimed_by = plot.get("claimed_by", null)
-	var claimed_by := "" if raw_claimed_by == null else str(raw_claimed_by)
+	var claimed_by : String = "" if raw_claimed_by == null else str(raw_claimed_by)
 	return claimed_by == ""
 
 func refresh_selected_plot_ui() -> void:
@@ -191,7 +195,7 @@ func enter_player_plot_mode(plot_id: String) -> bool:
 		return false
 
 	var raw_claimed_by = plot.get("claimed_by", null)
-	var claimed_by := "" if raw_claimed_by == null else str(raw_claimed_by)
+	var claimed_by : String = "" if raw_claimed_by == null else str(raw_claimed_by)
 	if claimed_by == "" or claimed_by != my_player_id:
 		return false
 
@@ -206,6 +210,7 @@ func enter_player_plot_mode(plot_id: String) -> bool:
 
 	current_view_mode = "PLAYER_PLOT"
 	active_player_plot_id = plot_id
+	selected_local_npc_id = ""
 	_is_view_transition_running = true
 
 	# Stop normal world interaction while entering local mode.
@@ -226,21 +231,22 @@ func enter_player_plot_mode(plot_id: String) -> bool:
 		int(plot.get("y", 0))
 	)
 	owned_plot_renderer.show_plot_detail(plot)
+	owned_plot_renderer.set_selected_npc_id("")
 	owned_plot_root.visible = true
 	tiles_root.visible = false
 
 	_play_transition_swoosh()
 
-	var detail_width := int(detail.get("width", 0))
-	var detail_height := int(detail.get("height", 0))
-	var local_plot_span := float(max(detail_width, detail_height))
+	var detail_width : int = int(detail.get("width", 0))
+	var detail_height : int = int(detail.get("height", 0))
+	var local_plot_span : float = float(max(detail_width, detail_height))
 	_apply_player_plot_camera_bounds(detail)
 
 	# Fit the camera to the actual local plot size instead of the old mini test board.
 	# This keeps Player Plot mode usable as we move to real meter-based lots.
 	var target_zoom_distance = max(local_plot_span * 0.95, 18.0)
 
-	var tween := camera_rig.tween_to_state(
+	var tween : Tween = camera_rig.tween_to_state(
 		_grid_to_world(int(plot.get("x", 0)), int(plot.get("y", 0))),
 		target_zoom_distance,
 		-62.0,
@@ -257,6 +263,8 @@ func exit_player_plot_mode() -> bool:
 
 	if current_view_mode != "PLAYER_PLOT":
 		return false
+		
+	_clear_local_npc_selection()
 
 	_is_view_transition_running = true
 	camera_rig.set_controls_locked(true)
@@ -273,7 +281,7 @@ func exit_player_plot_mode() -> bool:
 
 	_play_transition_swoosh()
 
-	var tween := camera_rig.tween_to_state(
+	var tween : Tween = camera_rig.tween_to_state(
 		_saved_world_camera_position,
 		_saved_world_zoom_distance,
 		_saved_world_pitch_degrees,
@@ -285,6 +293,88 @@ func exit_player_plot_mode() -> bool:
 
 func get_view_mode() -> String:
 	return current_view_mode
+
+func get_camera_3d() -> Camera3D:
+	return camera_3d
+
+func get_owned_plot_renderer() -> OwnedPlotDetailRenderer3D:
+	return owned_plot_renderer
+	
+func get_active_plot_npc_by_id(npc_id: String) -> Dictionary:
+	if current_view_mode != "PLAYER_PLOT":
+		return {}
+
+	if active_player_plot_id == "":
+		return {}
+
+	if npc_id == "":
+		return {}
+
+	var active_plot: Dictionary = plots_by_id.get(active_player_plot_id, {})
+	if active_plot.is_empty():
+		return {}
+
+	var detail_value: Variant = active_plot.get("detail", null)
+	if typeof(detail_value) != TYPE_DICTIONARY:
+		return {}
+
+	var detail: Dictionary = detail_value as Dictionary
+	var npcs_value: Variant = detail.get("npcs", [])
+	if typeof(npcs_value) != TYPE_ARRAY:
+		return {}
+
+	var npcs: Array = npcs_value as Array
+	for npc_value in npcs:
+		if typeof(npc_value) != TYPE_DICTIONARY:
+			continue
+
+		var npc: Dictionary = npc_value as Dictionary
+		if str(npc.get("id", "")) == npc_id:
+			return npc.duplicate(true)
+
+	return {}
+
+func _clear_local_npc_selection() -> void:
+	selected_local_npc_id = ""
+
+	if owned_plot_renderer != null:
+		owned_plot_renderer.set_selected_npc_id("")
+
+	local_npc_selection_cleared.emit()
+
+func _emit_local_npc_selection_state() -> void:
+	if selected_local_npc_id == "":
+		local_npc_selection_cleared.emit()
+		return
+
+	var npc: Dictionary = get_active_plot_npc_by_id(selected_local_npc_id)
+	if npc.is_empty():
+		_clear_local_npc_selection()
+		return
+
+	local_npc_selected.emit(npc)
+
+func _on_local_npc_clicked(npc_id: String, _screen_position: Vector2) -> void:
+	# GameWorld3D owns selection state so HUD and renderer do not become
+	# accidental sources of truth.
+	if current_view_mode != "PLAYER_PLOT":
+		return
+
+	if npc_id == "":
+		_clear_local_npc_selection()
+		return
+
+	var npc: Dictionary = get_active_plot_npc_by_id(npc_id)
+	if npc.is_empty():
+		_clear_local_npc_selection()
+		return
+
+	selected_local_npc_id = npc_id
+
+	if owned_plot_renderer != null:
+		owned_plot_renderer.set_selected_npc_id(selected_local_npc_id)
+
+	local_npc_selected.emit(npc)
 	
 func _on_local_rubble_context_requested(object_id: String, screen_position: Vector2) -> void:
 	# Forward the local-object interaction upward without coupling GameWorld3D
@@ -307,16 +397,16 @@ func _apply_player_plot_camera_bounds(detail: Dictionary) -> void:
 	if camera_rig == null:
 		return
 
-	var detail_width := int(detail.get("width", 0))
-	var detail_height := int(detail.get("height", 0))
+	var detail_width : int = int(detail.get("width", 0))
+	var detail_height : int = int(detail.get("height", 0))
 	if detail_width <= 0 or detail_height <= 0:
 		return
 
-	var half_width := (float(detail_width) * OwnedPlotDetailRenderer3D.CELL_SIZE_METERS) * 0.5
-	var half_height := (float(detail_height) * OwnedPlotDetailRenderer3D.CELL_SIZE_METERS) * 0.5
-	var padding := 20.0
+	var half_width : float = (float(detail_width) * OwnedPlotDetailRenderer3D.CELL_SIZE_METERS) * 0.5
+	var half_height : float = (float(detail_height) * OwnedPlotDetailRenderer3D.CELL_SIZE_METERS) * 0.5
+	var padding : float = 20.0
 
-	var center := owned_plot_root.global_position
+	var center : Vector3 = owned_plot_root.global_position
 	camera_rig.set_move_bounds(
 		center.x - half_width - padding,
 		center.x + half_width + padding,
@@ -337,6 +427,8 @@ func _on_enter_player_plot_mode_finished() -> void:
 func _on_exit_player_plot_mode_finished() -> void:
 	current_view_mode = "WORLD"
 	active_player_plot_id = ""
+	if owned_plot_renderer != null:
+		owned_plot_renderer.clear()
 	_is_view_transition_running = false
 
 	camera_rig.set_controls_locked(false)
@@ -381,10 +473,14 @@ func set_world_enabled(enabled: bool) -> void:
 
 		current_view_mode = "WORLD"
 		active_player_plot_id = ""
+		_clear_local_npc_selection()
 		_is_view_transition_running = false
 
 		tiles_root.visible = true
 		owned_plot_root.visible = false
+
+		if owned_plot_renderer != null:
+			owned_plot_renderer.clear()
 
 		if camera_rig != null:
 			camera_rig.set_controls_locked(false)
@@ -419,7 +515,7 @@ func _rebuild_plot_index() -> void:
 		if typeof(p) != TYPE_DICTIONARY:
 			continue
 
-		var plot_id := str(p.get("id", ""))
+		var plot_id : String = str(p.get("id", ""))
 		if plot_id == "":
 			continue
 
@@ -443,12 +539,14 @@ func _ready() -> void:
 	tile_picker.setup(camera_3d)
 	tile_picker.tile_hovered.connect(_on_tile_hovered)
 	tile_picker.tile_clicked.connect(_on_tile_clicked)
+	
 	local_plot_interactor = LocalPlotInteractor3D.new()
 	local_plot_interactor.name = "LocalPlotInteractor3D"
 	local_plot_interactor.setup(camera_3d)
 	local_plot_interactor.set_enabled(false)
 	add_child(local_plot_interactor)
 	local_plot_interactor.rubble_context_requested.connect(_on_local_rubble_context_requested)
+	local_plot_interactor.npc_clicked.connect(_on_local_npc_clicked)
 
 	# If HUD/NetClient already delivered world data before _ready finished,
 	# render that cached snapshot now.

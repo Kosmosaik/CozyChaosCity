@@ -1,0 +1,112 @@
+[gd_scene format=3 uid="uid://d08tg3ybm6yf1"]
+
+[ext_resource type="Script" uid="uid://dms0v3322au8d" path="res://scripts/ui/NpcCharacterSheet.gd" id="1_npc_sheet_script"]
+
+[node name="NpcCharacterSheet" type="PanelContainer" unique_id=591091172]
+offset_left = 1094.0
+offset_top = 48.0
+offset_right = 1350.0
+offset_bottom = 350.0
+script = ExtResource("1_npc_sheet_script")
+
+[node name="MarginContainer" type="MarginContainer" parent="." unique_id=226492421]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer" unique_id=1551796880]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TitleLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=1644729248]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Character Sheet"
+
+[node name="InfoGrid" type="GridContainer" parent="MarginContainer/VBoxContainer" unique_id=1093425183]
+layout_mode = 2
+columns = 2
+
+[node name="NameLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1005170226]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Name:"
+
+[node name="NameValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=453046843]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="RoleLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=702887528]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Role:"
+
+[node name="RoleValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1236415610]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="ActivityLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=686035]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Activity:"
+
+[node name="ActivityValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1201627560]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="StateLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=486234598]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "State:"
+
+[node name="StateValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1406310624]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="AssignmentLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=2114942129]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Order:"
+
+[node name="AssignmentValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1956623503]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="TargetLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=690085868]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Target:"
+
+[node name="TargetValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=186322388]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="TraitsHeaderLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=2126006872]
+layout_mode = 2
+text = "Traits"
+
+[node name="TraitsValueLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=354670752]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "No traits yet."
+autowrap_mode = 3
+
+[node name="FutureStatsHeaderLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=1809370336]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Future:"
+
+[node name="FutureStatsValueLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=711470187]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.37799093, 0.31005007, 1)
+theme_override_font_sizes/font_size = 11
+text = "Skills / stats will be added in a later phase."
+autowrap_mode = 3

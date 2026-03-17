@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://bcrc87xx7x5qc"]
+
+[node name="NpcOverheadLabel" type="Control" unique_id=1286774647]
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1369865004]
+layout_mode = 0
+theme_override_constants/separation = 0
+
+[node name="NameLabel" type="Label" parent="VBoxContainer" unique_id=2043130115]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7642161, 0.7602514, 3.85046e-07, 1)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 15
+text = "NPC"
+horizontal_alignment = 1
+
+[node name="ActivityLabel" type="Label" parent="VBoxContainer" unique_id=1872892402]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.99999994, 0.5926546, 0.99729663, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = "Idle"
+horizontal_alignment = 1
