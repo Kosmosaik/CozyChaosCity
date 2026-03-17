@@ -1,4 +1,15 @@
-import { Plot, PlotType, WorldState } from "../net/protocol";
+import {
+  Plot,
+  PlotDetail,
+  PlotDetailCell,
+  PlotDetailNpc,
+  PlotDetailStarterObject,
+  PlotShell,
+  PlotType,
+  WorldState,
+} from "../net/protocol";
+import { makeNpcName } from "./npc_names";
+
 
 /**
  * M0.5 Pattern Rule
@@ -21,14 +32,542 @@ export function plotIdFor(x: number, y: number): string {
   return `T_${x}_${y}`;
 }
 
+function makeStarterNpcNameSeed(plotId: string, npcId: string): string {
+  // Names should be stable once created, but not repeated on every new plot.
+  // Using plot id + npc id keeps the seed deterministic and persistent while
+  // still producing different names across different claimed plots.
+  return `${plotId}:${npcId}`;
+}
+
+export function makeStarterNpc(
+  plotId: string,
+  id: string,
+  x: number,
+  y: number,
+  jobType: "SCAVENGER" | "LABORER"
+): PlotDetailNpc {
+  const allowedOrderKinds: ("SCAVENGING")[] =
+    jobType === "SCAVENGER" ? ["SCAVENGING"] : [];
+
+  return {
+    id,
+    kind: "STARTER_WORKER",
+    name: makeNpcName(makeStarterNpcNameSeed(plotId, id)),
+    job_type: jobType,
+    current_activity: "Idle",
+    traits: [],
+    allowed_order_kinds: allowedOrderKinds,
+    x,
+    y,
+    home_x: x,
+    home_y: y,
+    state: "idle",
+    assigned_order: null,
+    target_object_id: null,
+    move_to_x: null,
+    move_to_y: null,
+    state_started_at_ms: null,
+    state_ends_at_ms: null,
+    carrying_kind: null,
+  };
+}
+
+function makeStarterPlotDetail(plotId: string): PlotDetail {
+  const cells: PlotDetailCell[] = [];
+  const starterObjects: PlotDetailStarterObject[] = [];
+
+  const clearAreaMinX = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
+  const clearAreaMinY = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
+  const clearAreaMaxX = clearAreaMinX + STARTER_CLEAR_AREA_SIZE - 1;
+  const clearAreaMaxY = clearAreaMinY + STARTER_CLEAR_AREA_SIZE - 1;
+
+  const shackX = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
+  const shackY = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
+
+  for (let y = 0; y < STARTER_DETAIL_SIZE; y++) {
+    for (let x = 0; x < STARTER_DETAIL_SIZE; x++) {
+      const insideStarterClearArea =
+        x >= clearAreaMinX &&
+        x <= clearAreaMaxX &&
+        y >= clearAreaMinY &&
+        y <= clearAreaMaxY;
+
+      cells.push({
+        x,
+        y,
+        blocked: !insideStarterClearArea,
+        clearable: !insideStarterClearArea,
+        terrain: insideStarterClearArea ? "GROUND" : "RUBBLE",
+      });
+    }
+  }
+
+  for (let y = 0; y < STARTER_DETAIL_SIZE; y += STARTER_RUBBLE_SIZE) {
+    for (let x = 0; x < STARTER_DETAIL_SIZE; x += STARTER_RUBBLE_SIZE) {
+      const chunkInsideClearArea =
+        x >= clearAreaMinX &&
+        (x + STARTER_RUBBLE_SIZE - 1) <= clearAreaMaxX &&
+        y >= clearAreaMinY &&
+        (y + STARTER_RUBBLE_SIZE - 1) <= clearAreaMaxY;
+
+      if (chunkInsideClearArea) {
+        continue;
+      }
+
+      starterObjects.push({
+        id: `starter_rubble_${x}_${y}`,
+        kind: "RUBBLE_4X4",
+        x,
+        y,
+        footprint_w: STARTER_RUBBLE_SIZE,
+        footprint_h: STARTER_RUBBLE_SIZE,
+        clear_hits_remaining: STARTER_RUBBLE_CLEAR_HITS,
+      });
+    }
+  }
+
+  starterObjects.push({
+    id: "starter_shack",
+    kind: "SHACK",
+    x: shackX,
+    y: shackY,
+    footprint_w: STARTER_SHACK_SIZE,
+    footprint_h: STARTER_SHACK_SIZE,
+  });
+
+  const starterNpcX = shackX + STARTER_SHACK_SIZE + 1;
+  const starterNpcY = shackY + STARTER_SHACK_SIZE - 1;
+
+  return {
+    width: STARTER_DETAIL_SIZE,
+    height: STARTER_DETAIL_SIZE,
+    cells,
+    starter_objects: starterObjects,
+    npcs: [
+      makeStarterNpc(plotId, "starter_worker_1", starterNpcX, starterNpcY, "SCAVENGER"),
+      makeStarterNpc(plotId, "starter_worker_2", starterNpcX, starterNpcY + 2, "LABORER"),
+    ],
+    jobs: [],
+    active_order: null,
+  };
+}
+
+function makeDefaultShell(plotType: PlotType): PlotShell {
+  if (plotType === "PLAYER") {
+    return {
+      // Public shell summary for player plots in World Map mode / reduced-detail views later.
+      kind: "EMPTY",
+      variant: "player_plot_default",
+      stage: 0,
+    };
+  }
+
+  return {
+    // Public shell summary for resource plots.
+    // Later this can branch into forest/quarry/ruin/etc variants.
+    kind: "EMPTY",
+    variant: "resource_plot_default",
+    stage: 0,
+  };
+}
+
 function makePlot(x: number, y: number): Plot {
+  const type = plotTypeAt(x, y);
+
   return {
     id: plotIdFor(x, y),
-    type: plotTypeAt(x, y),
+    type,
     x,
     y,
     claimed_by: null,
+
+    // Public-facing macro shell data for M2.
+    shell: makeDefaultShell(type),
+
+    // Owned/local detailed plot data is generated later when needed.
+    detail: undefined,
   };
+}
+
+export function ensureClaimedPlayerPlotInitialized(plot: Plot): boolean {
+  // Only PLAYER plots should ever receive owned/local starter detail.
+  if (plot.type !== "PLAYER") {
+    return false;
+  }
+
+  // If detail already exists, do not overwrite it.
+  if (plot.detail) {
+    return false;
+  }
+
+  plot.detail = makeStarterPlotDetail(plot.id);
+
+  // Once a player plot becomes initialized for owned local play,
+  // its public shell should no longer read as completely empty.
+  plot.shell = {
+    kind: "RUINED",
+    variant: "player_plot_ruined",
+    stage: 0,
+  };
+
+  return true;
+}
+
+function objectOccupiesCell(
+  obj: PlotDetailStarterObject,
+  x: number,
+  y: number
+): boolean {
+  const footprintW = obj.footprint_w ?? 1;
+  const footprintH = obj.footprint_h ?? 1;
+
+  return (
+    x >= obj.x &&
+    x < obj.x + footprintW &&
+    y >= obj.y &&
+    y < obj.y + footprintH
+  );
+}
+
+function getRubbleObjectAtCell(plot: Plot, x: number, y: number): PlotDetailStarterObject | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  for (const obj of detail.starter_objects) {
+    if (obj.kind !== "RUBBLE_4X4") {
+      continue;
+    }
+
+    if (objectOccupiesCell(obj, x, y)) {
+      return obj;
+    }
+  }
+
+  return null;
+}
+
+function getRubbleObjectById(plot: Plot, objectId: string): PlotDetailStarterObject | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  for (const obj of detail.starter_objects) {
+    if (obj.kind !== "RUBBLE_4X4") {
+      continue;
+    }
+
+    if (obj.id === objectId) {
+      return obj;
+    }
+  }
+
+  return null;
+}
+
+function clearRubbleObjectFootprint(
+  plot: Plot,
+  rubbleObject: PlotDetailStarterObject
+): boolean {
+  const detail = plot.detail;
+  if (!detail) {
+    return false;
+  }
+
+  detail.starter_objects = detail.starter_objects.filter((obj) => obj.id !== rubbleObject.id);
+
+  const footprintW = rubbleObject.footprint_w ?? 1;
+  const footprintH = rubbleObject.footprint_h ?? 1;
+
+  for (let cy = rubbleObject.y; cy < rubbleObject.y + footprintH; cy++) {
+    for (let cx = rubbleObject.x; cx < rubbleObject.x + footprintW; cx++) {
+      const cell = getPlotDetailCell(plot, cx, cy);
+      if (!cell) {
+        continue;
+      }
+
+      cell.terrain = "GROUND";
+      cell.blocked = false;
+      cell.clearable = false;
+    }
+  }
+
+  return true;
+}
+
+function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
+  // Backward-safe migration helper:
+  // if an older claimed plot has rubble cells but no rubble objects yet,
+  // reconstruct the starter rubble object layout from the current cell data.
+  const hasRubbleObjects = detail.starter_objects.some((obj) => obj.kind === "RUBBLE_4X4");
+  if (hasRubbleObjects) {
+    return false;
+  }
+
+  let changed = false;
+
+  for (let y = 0; y < detail.height; y += STARTER_RUBBLE_SIZE) {
+    for (let x = 0; x < detail.width; x += STARTER_RUBBLE_SIZE) {
+      let fullRubbleChunk = true;
+
+      for (let cy = y; cy < y + STARTER_RUBBLE_SIZE; cy++) {
+        for (let cx = x; cx < x + STARTER_RUBBLE_SIZE; cx++) {
+          const cell = detail.cells.find((c) => c.x === cx && c.y === cy);
+          if (!cell || cell.terrain !== "RUBBLE") {
+            fullRubbleChunk = false;
+            break;
+          }
+        }
+
+        if (!fullRubbleChunk) {
+          break;
+        }
+      }
+
+      if (!fullRubbleChunk) {
+        continue;
+      }
+
+      detail.starter_objects.push({
+        id: `starter_rubble_${x}_${y}`,
+        kind: "RUBBLE_4X4",
+        x,
+        y,
+        footprint_w: STARTER_RUBBLE_SIZE,
+        footprint_h: STARTER_RUBBLE_SIZE,
+        clear_hits_remaining: STARTER_RUBBLE_CLEAR_HITS,
+      });
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function ensureStarterRubbleObjectClearHits(detail: PlotDetail): boolean {
+  let changed = false;
+
+  for (const obj of detail.starter_objects) {
+    if (obj.kind !== "RUBBLE_4X4") {
+      continue;
+    }
+
+    if (
+      typeof obj.clear_hits_remaining !== "number" ||
+      obj.clear_hits_remaining <= 0
+    ) {
+      obj.clear_hits_remaining = STARTER_RUBBLE_CLEAR_HITS;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+function normalizeStarterNpc(
+  plotId: string,
+  npc: PlotDetailNpc,
+  fallbackJobType: "SCAVENGER" | "LABORER"
+): boolean {
+  let changed = false;
+
+  if (typeof npc.name !== "string" || npc.name.length === 0) {
+    npc.name = makeNpcName(makeStarterNpcNameSeed(plotId, npc.id));
+    changed = true;
+  }
+
+  if (npc.job_type !== "SCAVENGER" && npc.job_type !== "LABORER") {
+    npc.job_type = fallbackJobType;
+    changed = true;
+  }
+
+  if (
+    typeof npc.current_activity !== "string" ||
+    npc.current_activity.length === 0
+  ) {
+    npc.current_activity = npc.state === "idle" ? "Idle" : "Busy";
+    changed = true;
+  }
+
+  if (!Array.isArray(npc.traits)) {
+    npc.traits = [];
+    changed = true;
+  }
+
+  const expectedAllowedOrderKinds: ("SCAVENGING")[] =
+    npc.job_type === "SCAVENGER" ? ["SCAVENGING"] : [];
+
+  const hasMatchingAllowedOrders =
+    Array.isArray(npc.allowed_order_kinds) &&
+    npc.allowed_order_kinds.length === expectedAllowedOrderKinds.length &&
+    npc.allowed_order_kinds.every(
+      (kind, index) => kind === expectedAllowedOrderKinds[index]
+    );
+
+  if (!hasMatchingAllowedOrders) {
+    npc.allowed_order_kinds = expectedAllowedOrderKinds;
+    changed = true;
+  }
+
+  return changed;
+}
+
+function ensureStarterNpcData(plot: Plot): boolean {
+  const detail = plot.detail;
+  if (!detail) {
+    return false;
+  }
+
+  let changed = false;
+
+  if (!Array.isArray(detail.npcs)) {
+    detail.npcs = [];
+    changed = true;
+  }
+
+  if (!Array.isArray((detail as any).jobs)) {
+    (detail as any).jobs = [];
+    changed = true;
+  }
+
+  let fallbackX = 0;
+  let fallbackY = 0;
+
+  const oldMarker = detail.starter_objects.find((obj) => obj.kind === "NPC_MARKER");
+  if (oldMarker) {
+    fallbackX = oldMarker.x;
+    fallbackY = oldMarker.y;
+    detail.starter_objects = detail.starter_objects.filter(
+      (obj) => obj.id !== oldMarker.id
+    );
+    changed = true;
+  } else {
+    const shack = detail.starter_objects.find((obj) => obj.kind === "SHACK");
+    if (shack) {
+      const shackW = shack.footprint_w ?? 1;
+      const shackH = shack.footprint_h ?? 1;
+      fallbackX = shack.x + shackW + 1;
+      fallbackY = shack.y + shackH - 1;
+    }
+  }
+
+  if (detail.npcs.length === 0) {
+    detail.npcs.push(
+      makeStarterNpc(plot.id, "starter_worker_1", fallbackX, fallbackY, "SCAVENGER")
+    );
+    detail.npcs.push(
+      makeStarterNpc(plot.id, "starter_worker_2", fallbackX, fallbackY + 2, "LABORER")
+    );
+    changed = true;
+  }
+
+  for (let index = 0; index < detail.npcs.length; index += 1) {
+    const fallbackJobType = index === 0 ? "SCAVENGER" : "LABORER";
+    if (normalizeStarterNpc(plot.id, detail.npcs[index], fallbackJobType)) {
+      changed = true;
+    }
+  }
+
+  if (typeof detail.active_order === "undefined") {
+    detail.active_order = null;
+    changed = true;
+  }
+
+  return changed;
+}
+
+
+export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailCell | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  // Reject coordinates outside the local plot bounds early.
+  if (x < 0 || y < 0 || x >= detail.width || y >= detail.height) {
+    return null;
+  }
+
+  // Cells are currently stored as a flat array, so we do a simple search.
+  // This is perfectly fine for M2-scale starter data and keeps persistence simple.
+  const cell = detail.cells.find(c => c.x === x && c.y === y);
+  return cell ?? null;
+}
+
+export function applyClearActionToPlotObject(
+  plot: Plot,
+  objectId: string
+): { changed: boolean; cleared: boolean; hitsRemaining: number } {
+  const rubbleObject = getRubbleObjectById(plot, objectId);
+  if (!rubbleObject) {
+    return { changed: false, cleared: false, hitsRemaining: -1 };
+  }
+
+  const currentHitsRemaining =
+    typeof rubbleObject.clear_hits_remaining === "number" && rubbleObject.clear_hits_remaining > 0
+      ? rubbleObject.clear_hits_remaining
+      : STARTER_RUBBLE_CLEAR_HITS;
+
+  if (currentHitsRemaining > 1) {
+    rubbleObject.clear_hits_remaining = currentHitsRemaining - 1;
+    return {
+      changed: true,
+      cleared: false,
+      hitsRemaining: rubbleObject.clear_hits_remaining,
+    };
+  }
+
+  const cleared = clearRubbleObjectFootprint(plot, rubbleObject);
+  return {
+    changed: cleared,
+    cleared,
+    hitsRemaining: 0,
+  };
+}
+
+export function isPlotDetailCellClearable(plot: Plot, x: number, y: number): boolean {
+  const cell = getPlotDetailCell(plot, x, y);
+  if (!cell) {
+    return false;
+  }
+
+  // For the current M2 starter model, a cell is only clearable if the cell
+  // explicitly says so. This keeps future gameplay checks simple and centralized.
+  return cell.clearable;
+}
+
+export function clearPlotDetailCell(plot: Plot, x: number, y: number): boolean {
+  const detail = plot.detail;
+  if (!detail) {
+    return false;
+  }
+
+  // Preferred path:
+  // if this cell belongs to a placed 4x4 rubble object, remove that object
+  // and free the whole occupied footprint.
+  const rubbleObject = getRubbleObjectAtCell(plot, x, y);
+  if (rubbleObject) {
+    return clearRubbleObjectFootprint(plot, rubbleObject);
+  }
+
+  // Backward-safe fallback:
+  // if no rubble object exists yet, fall back to the older per-cell clear behavior.
+  const cell = getPlotDetailCell(plot, x, y);
+  if (!cell) {
+    return false;
+  }
+
+  if (!cell.clearable) {
+    return false;
+  }
+
+  cell.terrain = "GROUND";
+  cell.blocked = false;
+  cell.clearable = false;
+
+  return true;
 }
 
 /**
@@ -108,6 +647,11 @@ export function fillRectMissing(world: WorldState, rect: { minX: number; maxX: n
 
 // --- Module expansion helpers (constant-size expansions) ---
 const MODULE_SIZE = 3;
+const STARTER_DETAIL_SIZE = 40;
+const STARTER_CLEAR_AREA_SIZE = 8;
+const STARTER_SHACK_SIZE = 4;
+const STARTER_RUBBLE_SIZE = 4;
+const STARTER_RUBBLE_CLEAR_HITS = 3;
 
 function moduleKey(mx: number, my: number): string {
   return `M_${mx}_${my}`;
@@ -233,6 +777,39 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
   if (added.length > 0) {
     world.version += 1;
     changed = true;
+  }
+
+  let migratedRubbleObjects = 0;
+  let migratedRubbleClearHits = 0;
+
+  for (const plot of world.plots) {
+    if (!plot.detail) {
+      continue;
+    }
+
+    if (ensureStarterRubbleObjects(plot.detail)) {
+      migratedRubbleObjects += 1;
+      changed = true;
+    }
+    if (ensureStarterRubbleObjectClearHits(plot.detail)) {
+      migratedRubbleClearHits += 1;
+      changed = true;
+    }
+    if (ensureStarterNpcData(plot)) {
+      changed = true;
+    }
+  }
+
+  if (migratedRubbleObjects > 0 || migratedRubbleClearHits > 0) {
+    return {
+      changed,
+      reason:
+        `Migrated rubble local data for ${migratedRubbleObjects} claimed plot(s)` +
+        ` and initialized clear-hit state for ${migratedRubbleClearHits} claimed plot(s).`,
+    };
+  }
+
+  if (added.length > 0) {
     return { changed, reason: `Filled ${added.length} missing tiles inside existing bounds.` };
   }
 

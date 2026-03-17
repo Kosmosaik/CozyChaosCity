@@ -1,6 +1,8 @@
 extends Node
 class_name NetClient
 
+const WireAdapter = preload("res://scripts/net/WireAdapters.gd")
+
 # -------------------------
 # Signals (events HUD listens to)
 # -------------------------
@@ -15,6 +17,9 @@ signal world_state_received(world: Dictionary)
 signal plot_updated(plot: Dictionary)
 signal world_patch_received(patch: Dictionary)
 signal claim_result_received(result: Dictionary)
+signal clear_plot_object_result_received(result: Dictionary)
+signal issue_plot_order_result_received(result: Dictionary)
+
 
 signal latency_updated(ms: int)
 signal presence_updated(online: Array) # array of {player_id, display_name}
@@ -25,7 +30,7 @@ signal presence_updated(online: Array) # array of {player_id, display_name}
 # Default: what the shipped game will auto-connect to (your public IP for now).
 # Example: "ws://83.12.34.56:27015"
 const DEFAULT_SERVER_URL := "ws://90.225.57.62:27015"
-const PROTOCOL_VERSION := 2
+const PROTOCOL_VERSION := 3
 
 # Optional local override:
 # If this file exists, its contents will be used as the server URL.
@@ -103,6 +108,29 @@ func request_world() -> void:
 
 func claim_plot(plot_id: String) -> void:
 	_send("claim_plot", { "plot_id": plot_id }, _next_req_id())
+	
+func clear_plot_object(plot_id: String, object_id: String) -> void:
+	# Real M2 local interaction:
+	# ask the server to clear one specific starter object on the owned plot.
+	_send(
+		"clear_plot_object",
+		{
+			"plot_id": plot_id,
+			"object_id": object_id,
+		},
+		_next_req_id()
+	)
+	
+func issue_plot_order(plot_id: String, order_kind: String, target_scope: String) -> void:
+	_send(
+		"issue_plot_order",
+		{
+			"plot_id": plot_id,
+			"order_kind": order_kind,
+			"target_scope": target_scope,
+		},
+		_next_req_id()
+	)
 
 func _resolve_server_url() -> String:
 	# Local override for you (LAN testing) without typing in-game.
@@ -137,9 +165,13 @@ func _poll_ws() -> void:
 
 		# If we already have stored credentials for this profile, authenticate.
 		# Otherwise, register a new identity using display_name.
-		var payload := {}
+		var payload: Dictionary = {}
 		if player_id != "" and secret != "":
-			payload = { "player_id": player_id, "secret": secret }
+			payload = {
+				"player_id": player_id,
+				"secret": secret,
+				"display_name": display_name,
+			}
 		else:
 			payload = { "display_name": display_name }
 
@@ -190,15 +222,15 @@ func _handle_message(txt: String) -> void:
 			_emit_status("Welcome '%s' (%s)" % [display_name, player_id])
 
 			# Ask for world snapshot (safe even if server also sends it)
-			request_world()
 
 		"world_state":
 			# payload: { world: { version, plots: [...] } }
-			emit_signal("world_state_received", payload.get("world", {}))
+			var world_payload: Dictionary = payload.get("world", {})
+			emit_signal("world_state_received", WireAdapter.normalize_world_from_wire(world_payload))
 
 		"plot_update":
 			# payload: { plot: {...}, owner_display_name?: "Alice" }
-			var p: Dictionary = payload.get("plot", {})
+			var p: Dictionary = WireAdapter.normalize_plot_from_wire(payload.get("plot", {}))
 
 			# If server provided a name, store it on the plot dict.
 			# This makes PlotView able to show the correct owner name even if
@@ -209,10 +241,13 @@ func _handle_message(txt: String) -> void:
 			emit_signal("plot_updated", p)
 
 		"world_patch":
-			emit_signal("world_patch_received", payload)
+			emit_signal("world_patch_received", WireAdapter.normalize_patch_from_wire(payload))
 
 		"claim_result":
 			emit_signal("claim_result_received", payload)
+
+		"clear_plot_object_result":
+			emit_signal("clear_plot_object_result_received", payload)
 
 		"error":
 			_emit_status("Server error: %s" % str(payload))
@@ -221,7 +256,14 @@ func _handle_message(txt: String) -> void:
 			# payload: { online: [ {player_id, display_name}, ... ] }
 			_online_players = payload.get("online", [])
 			emit_signal("presence_updated", _online_players)
-
+			
+		"issue_plot_order_result":
+			emit_signal("issue_plot_order_result_received", payload)
+			
+		"error":
+			var reason := str(payload.get("reason", "unknown"))
+			_emit_status("Server error: %s" % reason)
+			
 		"server_pong":
 			# Compute RTT using the request id of the pong (if present)
 			var rid = str(msg.get("req_id", ""))

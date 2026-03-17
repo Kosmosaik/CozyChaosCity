@@ -26,12 +26,12 @@ class_name CameraRigBasic
 @export var mouse_pitch_sensitivity: float = 0.20
 
 @export var min_zoom_distance: float = 4.0
-@export var max_zoom_distance: float = 30.0
-@export var zoom_step: float = 1.5
+@export var max_zoom_distance: float = 80.0
+@export var zoom_step: float = 1.6
 @export var initial_zoom_distance: float = 14.0
 
-@export var min_pitch_degrees: float = -80.0
-@export var max_pitch_degrees: float = -25.0
+@export var min_pitch_degrees: float = -90.0
+@export var max_pitch_degrees: float = -15.0
 @export var initial_pitch_degrees: float = -45.0
 
 @onready var yaw_pivot: Node3D = $YawPivot
@@ -41,6 +41,121 @@ class_name CameraRigBasic
 var _zoom_distance: float = 14.0
 var _pitch_degrees: float = -45.0
 var _is_rotating_with_mouse: bool = false
+# Small RMB drag threshold before camera rotation begins.
+#
+# Why:
+# - Prevent tiny accidental mouse movement from nudging the camera
+#   while the player is trying to right-click rubble.
+# - Rotation only starts once the drag is clearly intentional.
+const RMB_ROTATE_START_DRAG_DISTANCE: float = 10.0
+
+var _is_rmb_rotate_armed: bool = false
+var _right_mouse_press_screen_position: Vector2 = Vector2.ZERO
+var _controls_locked: bool = false
+var _active_tween: Tween = null
+
+# Optional movement bounds used by local plot mode.
+# World mode leaves these disabled so macro camera behavior stays unchanged.
+var _move_bounds_enabled: bool = false
+var _move_bounds_min: Vector2 = Vector2.ZERO
+var _move_bounds_max: Vector2 = Vector2.ZERO
+
+func set_controls_locked(locked: bool) -> void:
+	# Used by mode transitions so the player cannot pan/rotate/zoom
+	# while the camera is tweening between world and local-plot views.
+	_controls_locked = locked
+
+	if locked:
+		cancel_mouse_rotate()
+		
+func cancel_mouse_rotate() -> void:
+	# Force-stop all RMB rotation state.
+	#
+	# Why this exists:
+	# - Some UI flows (like PopupMenu) can consume the release/dismiss input.
+	# - The camera now has both an "armed" state and an active rotate state.
+	# - UI callers need one reliable way to fully reset both.
+	_is_rotating_with_mouse = false
+	_is_rmb_rotate_armed = false
+	_right_mouse_press_screen_position = Vector2.ZERO
+
+func get_zoom_distance() -> float:
+	return _zoom_distance
+
+func get_pitch_degrees() -> float:
+	return _pitch_degrees
+	
+func get_yaw_degrees() -> float:
+	if yaw_pivot == null:
+		return 0.0
+
+	return yaw_pivot.rotation_degrees.y
+
+func set_yaw_degrees(yaw_degrees: float) -> void:
+	if yaw_pivot == null:
+		return
+
+	yaw_pivot.rotation_degrees.y = yaw_degrees
+
+func set_move_bounds(min_x: float, max_x: float, min_z: float, max_z: float) -> void:
+	# Local plot mode can constrain the rig to a bounded area while
+	# reusing the same movement/zoom/rotation logic as world mode.
+	_move_bounds_enabled = true
+	_move_bounds_min = Vector2(minf(min_x, max_x), minf(min_z, max_z))
+	_move_bounds_max = Vector2(maxf(min_x, max_x), maxf(min_z, max_z))
+	_clamp_global_position_to_bounds()
+
+func clear_move_bounds() -> void:
+	# World mode should remain unbounded.
+	_move_bounds_enabled = false
+
+func _clamp_global_position_to_bounds() -> void:
+	if not _move_bounds_enabled:
+		return
+
+	global_position.x = clamp(global_position.x, _move_bounds_min.x, _move_bounds_max.x)
+	global_position.z = clamp(global_position.z, _move_bounds_min.y, _move_bounds_max.y)
+
+func tween_to_state(
+	target_position: Vector3,
+	target_zoom_distance: float,
+	target_pitch_degrees: float,
+	duration: float = 0.35
+) -> Tween:
+	# Kill any previous transition so only one camera tween is active at a time.
+	if _active_tween != null and is_instance_valid(_active_tween):
+		_active_tween.kill()
+
+	var clamped_zoom = clamp(target_zoom_distance, min_zoom_distance, max_zoom_distance)
+	var clamped_pitch = clamp(target_pitch_degrees, min_pitch_degrees, max_pitch_degrees)
+
+	_active_tween = create_tween()
+	_active_tween.set_trans(Tween.TRANS_SINE)
+	_active_tween.set_ease(Tween.EASE_IN_OUT)
+
+	_active_tween.parallel().tween_property(self, "global_position", target_position, duration)
+	_active_tween.parallel().tween_method(
+		Callable(self, "_set_zoom_distance_from_tween"),
+		_zoom_distance,
+		clamped_zoom,
+		duration
+	)
+	_active_tween.parallel().tween_method(
+		Callable(self, "_set_pitch_degrees_from_tween"),
+		_pitch_degrees,
+		clamped_pitch,
+		duration
+	)
+
+	return _active_tween
+
+func _set_zoom_distance_from_tween(value: float) -> void:
+	_zoom_distance = value
+	_apply_zoom()
+
+func _set_pitch_degrees_from_tween(value: float) -> void:
+	_pitch_degrees = value
+	_apply_pitch()
 
 func _ready() -> void:
 	# Validate the expected scene structure early so setup mistakes fail clearly.
@@ -69,59 +184,83 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Use _unhandled_input so UI gets first chance to consume input.
 	# Camera controls only react to input that the UI did not already handle.
 
+	if _controls_locked:
+		return
+
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			_is_rotating_with_mouse = event.pressed
-			if event.pressed:
+		var mouse_button_event :InputEventMouseButton = event as InputEventMouseButton
+
+		if mouse_button_event.button_index == MOUSE_BUTTON_RIGHT:
+			if mouse_button_event.pressed:
+				# Arm possible camera rotation, but do not begin rotating yet.
+				# This prevents tiny click jitter from moving the camera.
+				_is_rmb_rotate_armed = true
+				_is_rotating_with_mouse = false
+				_right_mouse_press_screen_position = mouse_button_event.position
 				get_viewport().set_input_as_handled()
+			else:
+				# Releasing RMB should always clear both armed and active states.
+				cancel_mouse_rotate()
 			return
 
-		if event.pressed:
-			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-				_zoom_toward_mouse(-zoom_step, event.position)
+		if mouse_button_event.pressed:
+			if mouse_button_event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				_zoom_toward_mouse(-zoom_step, mouse_button_event.position)
 				get_viewport().set_input_as_handled()
 				return
-			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				_zoom_toward_mouse(zoom_step, event.position)
+			elif mouse_button_event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_zoom_toward_mouse(zoom_step, mouse_button_event.position)
 				get_viewport().set_input_as_handled()
 				return
 
-	if event is InputEventMouseMotion and _is_rotating_with_mouse:
-		# Horizontal mouse drag = yaw
-		# Vertical mouse drag = pitch/tilt
-		yaw_pivot.rotate_y(deg_to_rad(-event.relative.x * mouse_yaw_sensitivity))
+	if event is InputEventMouseMotion:
+		var mouse_motion_event: InputEventMouseMotion = event as InputEventMouseMotion
 
-		_pitch_degrees = clamp(
-			_pitch_degrees - (event.relative.y * mouse_pitch_sensitivity),
-			min_pitch_degrees,
-			max_pitch_degrees
-		)
-		_apply_pitch()
+		# If RMB is armed but not yet rotating, only begin rotation after
+		# a small threshold so accidental hand wobble does not twitch the camera.
+		if _is_rmb_rotate_armed and not _is_rotating_with_mouse:
+			if mouse_motion_event.position.distance_to(_right_mouse_press_screen_position) >= RMB_ROTATE_START_DRAG_DISTANCE:
+				_is_rotating_with_mouse = true
 
-		get_viewport().set_input_as_handled()
+		if _is_rotating_with_mouse:
+			# Horizontal mouse drag = yaw
+			# Vertical mouse drag = pitch/tilt
+			yaw_pivot.rotate_y(deg_to_rad(-mouse_motion_event.relative.x * mouse_yaw_sensitivity))
+
+			_pitch_degrees = clamp(
+				_pitch_degrees - (mouse_motion_event.relative.y * mouse_pitch_sensitivity),
+				min_pitch_degrees,
+				max_pitch_degrees
+			)
+			_apply_pitch()
+
+			get_viewport().set_input_as_handled()
 
 func _handle_movement(delta: float) -> void:
-	var input_dir := Input.get_vector("camera_left", "camera_right", "camera_down", "camera_up")
+	if _controls_locked:
+		return
+	var input_dir: Vector2 = Input.get_vector("camera_left", "camera_right", "camera_down", "camera_up")
 	if input_dir == Vector2.ZERO:
 		return
 
 	# Scale move speed with zoom so travelling across the map feels faster when
 	# zoomed out and more precise when zoomed in.
-	var zoom_ratio := _zoom_distance / initial_zoom_distance
-	var move_speed := base_move_speed * zoom_ratio
+	var zoom_ratio : float = _zoom_distance / initial_zoom_distance
+	var move_speed : float = base_move_speed * zoom_ratio
 
 	# Move relative to the yaw pivot so "forward" follows the camera's facing
 	# direction on the ground plane, which is the typical city-builder feel.
-	var forward := -yaw_pivot.global_basis.z
+	var forward : Vector3 = -yaw_pivot.global_basis.z
 	forward.y = 0.0
 	forward = forward.normalized()
 
-	var right := yaw_pivot.global_basis.x
+	var right : Vector3 = yaw_pivot.global_basis.x
 	right.y = 0.0
 	right = right.normalized()
 
-	var move_vector := (right * input_dir.x) + (forward * input_dir.y)
+	var move_vector : Vector3 = (right * input_dir.x) + (forward * input_dir.y)
 	global_position += move_vector * move_speed * delta
+	_clamp_global_position_to_bounds()
 
 func _zoom_toward_mouse(delta_zoom: float, mouse_screen_pos: Vector2) -> void:
 	# Find the ground point currently under the mouse before zooming.
@@ -138,14 +277,16 @@ func _zoom_toward_mouse(delta_zoom: float, mouse_screen_pos: Vector2) -> void:
 	if before_point != null and after_point != null:
 		global_position += before_point - after_point
 
+	_clamp_global_position_to_bounds()
+
 func _get_mouse_world_on_ground(mouse_screen_pos: Vector2):
 	# Project the mouse position into a 3D ray from the active camera.
-	var ray_origin := camera_3d.project_ray_origin(mouse_screen_pos)
-	var ray_direction := camera_3d.project_ray_normal(mouse_screen_pos)
+	var ray_origin : Vector3 = camera_3d.project_ray_origin(mouse_screen_pos)
+	var ray_direction : Vector3 = camera_3d.project_ray_normal(mouse_screen_pos)
 
 	# Our current world is flat, so zoom anchoring can use the ground plane y = 0.
 	# Plane(Vector3.UP, 0.0) means all points where y == 0.
-	var ground_plane := Plane(Vector3.UP, 0.0)
+	var ground_plane : Plane = Plane(Vector3.UP, 0.0)
 	return ground_plane.intersects_ray(ray_origin, ray_direction)
 
 func _apply_zoom() -> void:

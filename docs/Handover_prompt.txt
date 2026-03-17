@@ -1,0 +1,82 @@
+You are continuing work on the Cozy Chaos City project.
+
+Important:
+- Read the .zip in Project source recursively before making suggestions.
+- Start by reading these files carefully:
+  - docs/GPT_Assistant_Rules.md
+  - CHANGELOG.md
+  - docs/milestones.md
+  - docs/M2_implementation_plan.md
+  - docs/TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md
+- Follow docs/GPT_Assistant_Rules.md strictly.
+- Use the actual current files from the repo, not assumptions.
+- Give exact file paths and exact insertion/replacement anchors.
+- Keep code modular and avoid spaghetti.
+- For new files, provide the full file.
+- For existing files, provide minimal patches only.
+- Explain what each change does, where it goes, why it works, and how to test it.
+- Use Godot editor instructions first when static UI/scene changes are needed.
+- Keep server/client protocol changes synchronized.
+
+Current confirmed state from the repo:
+- M1 is complete and working.
+- M2 is in progress.
+- A first real Player Plot mode is working.
+- The player can:
+  - connect/login
+  - view the world
+  - claim a plot
+  - enter their owned plot
+  - leave back to the world
+- Camera enter/exit transition exists and works.
+- Transition sound hook exists.
+- Local owned-plot rendering exists.
+- Hidden local cells still exist for logic.
+- Ground is player-facing presentation, while the hidden grid is for logic/snap/blocking.
+- Rubble is represented as real local 4x4 objects.
+- Real rubble interaction is implemented:
+  - click rubble
+  - send clear request by object id
+  - server validates and clears authoritatively
+  - updated plot detail is broadcast back
+  - removed rubble animates out on the client
+- Player Plot camera parity is implemented:
+  - local mode now uses free camera movement after enter
+  - movement bounds exist
+  - world camera state is restored on exit
+- Local visual polish was added:
+  - rubble random Y rotation
+  - rubble slight random X/Z offset
+  - randomized multi-texture ground shader for the plot ground
+- Local detail is owner-only and compacted on the wire for stability.
+- The current NPC in local view is still a placeholder marker.
+
+Current priority order:
+1. Neighborhood loading/rendering
+2. Then interaction UX polish as needed
+3. Placeholder replacement / later local feature expansion after that
+
+Very important:
+- Neighborhood is now the next step.
+- Do not write as if camera parity or real rubble interaction are still upcoming.
+- Do not revert to the old debug clear path as the primary implementation.
+- The old debug clear path still exists, but it is temporary leftover behavior.
+
+Next implementation goal:
+- load and render the surrounding neighborhood around the owned plot
+- keep the owned plot as the high-detail center
+- add nearby surrounding plots/resource areas in reduced/public detail
+- do not break the current enter/exit transition
+- do not break the current owned-plot interaction path
+- do not expose owner-only local detail for non-owned plots
+
+What I want from you first:
+1. Summarize the current repo state from the actual files.
+2. Confirm exactly what has already been implemented.
+3. Identify the cleanest way to add neighborhood loading/rendering without breaking the current owned-plot loop.
+4. Then prepare the implementation for that neighborhood step only.
+
+Do not skip the repo-reading step.
+Do not invent files or project state.
+Base everything on the actual repo.
+Keep the summary short before moving into the implementation plan.
