@@ -19,7 +19,11 @@ import {
   validatePlayer,
 } from "./core/players";
 import { getOnlinePlayers } from "./core/presence";
-import { issueScavengingOrder, tickNpcSimulation } from "./core/npc";
+import {
+  cancelActivePlotOrder,
+  issueScavengingOrder,
+  tickNpcSimulation,
+} from "./core/npc";
 import { JsonWorldRepository } from "./storage/persist";
 import { buildClientPlot, buildClientWorld } from "./core/client_view";
 
@@ -231,7 +235,11 @@ function handleClearPlotObject(ws: any, st: ConnState, msg: any) {
 }
 
 function handleIssuePlotOrder(ws: any, st: ConnState, msg: any) {
-  const { plot_id: plotId } = msg.payload;
+  const {
+    plot_id: plotId,
+    order_kind: orderKind,
+    target_scope: targetScope,
+  } = msg.payload;
   const plot = world.plots.find((p) => p.id === plotId);
 
   if (!plot) {
@@ -255,7 +263,7 @@ function handleIssuePlotOrder(ws: any, st: ConnState, msg: any) {
     return;
   }
 
-  const result = issueScavengingOrder(plot, Date.now());
+  const result = issueScavengingOrder(plot, Date.now(), orderKind, targetScope);
   if (!result.ok) {
     ws.send(
       makeMsg(
@@ -278,8 +286,64 @@ function handleIssuePlotOrder(ws: any, st: ConnState, msg: any) {
       {
         ok: true,
         plot_id: plotId,
-        order_kind: "SCAVENGING",
-        target_scope: "ALL",
+        order_kind: orderKind,
+        target_scope: targetScope,
+      },
+      msg.req_id
+    )
+  );
+}
+
+function handleCancelPlotOrder(ws: any, st: ConnState, msg: any) {
+  const { plot_id: plotId } = msg.payload;
+  const plot = world.plots.find((p) => p.id === plotId);
+
+  if (!plot) {
+    ws.send(
+      makeMsg("cancel_plot_order_result", { ok: false, reason: "plot_not_found" }, msg.req_id)
+    );
+    return;
+  }
+
+  if (plot.type !== "PLAYER") {
+    ws.send(
+      makeMsg("cancel_plot_order_result", { ok: false, reason: "not_player_plot" }, msg.req_id)
+    );
+    return;
+  }
+
+  if (plot.claimed_by !== st.player_id) {
+    ws.send(
+      makeMsg("cancel_plot_order_result", { ok: false, reason: "not_plot_owner" }, msg.req_id)
+    );
+    return;
+  }
+
+  const result = cancelActivePlotOrder(plot, Date.now());
+  if (!result.ok) {
+    ws.send(
+      makeMsg(
+        "cancel_plot_order_result",
+        { ok: false, reason: result.reason ?? "order_rejected" },
+        msg.req_id
+      )
+    );
+    return;
+  }
+
+  world.version += 1;
+  queueSave();
+
+  broadcastPlotUpdate(plot);
+
+  ws.send(
+    makeMsg(
+      "cancel_plot_order_result",
+      {
+        ok: true,
+        plot_id: plotId,
+        cancelled_order_kind: result.cancelled_order_kind,
+        cancelled_target_scope: result.cancelled_target_scope,
       },
       msg.req_id
     )
@@ -351,6 +415,10 @@ wss.on("connection", (ws) => {
 
       case "issue_plot_order":
         handleIssuePlotOrder(ws, st, msg);
+        return;
+
+      case "cancel_plot_order":
+        handleCancelPlotOrder(ws, st, msg);
         return;
     }
   });

@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://desg5grpn44bf" path="res://scripts/ui/NpcOverheadLabelsLayer.gd" id="8_npc_overhead_script"]
 [ext_resource type="PackedScene" uid="uid://vvmit6bw1b3y" path="res://scenes/ui/BottomActionBar.tscn" id="9_gpiub"]
 [ext_resource type="PackedScene" uid="uid://45l3hes12ooc" path="res://scenes/ui/OrdersMenuPanel.tscn" id="10_amv7k"]
+[ext_resource type="Script" uid="uid://bjsibfuomhswo" path="res://scripts/ui/PlotDebugOverlay.gd" id="11_amv7k"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8sq4i"]
 bg_color = Color(0.43137255, 0.32941177, 0.28627452, 0.8862745)
@@ -280,3 +281,26 @@ offset_bottom = -3.0
 layout_mode = 1
 offset_top = -207.0
 offset_bottom = -106.0
+
+[node name="PlotDebugOverlay" type="PanelContainer" parent="." unique_id=1850748805]
+visible = false
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 1
+offset_left = 16.0
+offset_top = 48.0
+offset_right = 276.0
+offset_bottom = 180.0
+script = ExtResource("11_amv7k")
+
+[node name="MarginContainer" type="MarginContainer" parent="PlotDebugOverlay" unique_id=2084575545]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="DebugLabel" type="Label" parent="PlotDebugOverlay/MarginContainer" unique_id=1540479945]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "f huwf ewhu9 fewhuf weh9 few hf9we hjf9ew jfiwe jfiew jf0iwe jf0ew jf0iwe fjwe fwejifw jfiewjifew jifwe jifwejifoewjiofweiofweijfw ifjwe ioe"
+autowrap_mode = 3

@@ -14,8 +14,8 @@ export type PlotType = "PLAYER" | "RESOURCE";
 export type PlotShellKind = "EMPTY" | "RUINED" | "BASIC_CITY";
 export type PlotDetailTerrain = "GROUND" | "RUBBLE";
 export type PlotDetailStarterObjectKind = "SHACK" | "NPC_MARKER" | "RUBBLE_4X4";
-export type PlotOrderKind = "SCAVENGING";
-export type PlotOrderTargetScope = "ALL";
+export type PlotOrderKind = "SCAVENGING" | "SCAVENGING_SINGLE";
+export type PlotOrderTargetScope = "ALL" | "SINGLE";
 export type PlotNpcKind = "STARTER_WORKER";
 export type PlotNpcJobType = "SCAVENGER" | "LABORER";
 
@@ -71,6 +71,8 @@ export type PlotOrder = {
 export type PlotJob = {
   id: string;
   kind: PlotJobKind;
+  source_order_kind: PlotOrderKind;
+  source_target_scope: PlotOrderTargetScope;
   target_object_id: string;
   status: PlotJobStatus;
   assigned_npc_id: string | null;
@@ -196,10 +198,31 @@ export const ClearPlotObjectPayloadSchema = z.object({
   object_id: z.string().min(1),
 });
 
-export const IssuePlotOrderPayloadSchema = z.object({
+export const IssuePlotOrderPayloadSchema = z
+  .object({
+    plot_id: z.string().min(1),
+    order_kind: z.enum(["SCAVENGING", "SCAVENGING_SINGLE"]),
+    target_scope: z.enum(["ALL", "SINGLE"]),
+  })
+  .superRefine((payload, ctx) => {
+    const isAllPair =
+      payload.order_kind === "SCAVENGING" &&
+      payload.target_scope === "ALL";
+
+    const isSinglePair =
+      payload.order_kind === "SCAVENGING_SINGLE" &&
+      payload.target_scope === "SINGLE";
+
+    if (!isAllPair && !isSinglePair) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "order_kind and target_scope do not form a valid order pair",
+      });
+    }
+  });
+
+export const CancelPlotOrderPayloadSchema = z.object({
   plot_id: z.string().min(1),
-  order_kind: z.literal("SCAVENGING"),
-  target_scope: z.literal("ALL"),
 });
 
 export const HelloMessageSchema = EnvelopeSchema.extend({
@@ -232,6 +255,11 @@ export const IssuePlotOrderMessageSchema = EnvelopeSchema.extend({
   payload: IssuePlotOrderPayloadSchema,
 });
 
+export const CancelPlotOrderMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("cancel_plot_order"),
+  payload: CancelPlotOrderPayloadSchema,
+});
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   HelloMessageSchema,
   RequestWorldMessageSchema,
@@ -239,6 +267,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   ClaimPlotMessageSchema,
   ClearPlotObjectMessageSchema,
   IssuePlotOrderMessageSchema,
+  CancelPlotOrderMessageSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;

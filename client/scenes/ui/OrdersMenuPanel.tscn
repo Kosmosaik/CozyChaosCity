@@ -64,7 +64,7 @@ autowrap_mode = 2
 
 [node name="HBoxContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer" unique_id=1749206309]
 layout_mode = 2
-theme_override_constants/separation = 150
+theme_override_constants/separation = 8
 
 [node name="OrdersList" type="VBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=1190382922]
 layout_mode = 2
@@ -75,6 +75,7 @@ layout_mode = 2
 
 [node name="InfoGrid" type="GridContainer" parent="MarginContainer/VBoxContainer/HBoxContainer" unique_id=56035401]
 layout_mode = 2
+size_flags_vertical = 0
 columns = 2
 
 [node name="ActiveOrderLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid" unique_id=1337399913]
@@ -82,9 +83,26 @@ custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 size_flags_vertical = 3
 text = "Active:"
+vertical_alignment = 1
 
-[node name="ActiveOrderValueLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid" unique_id=1563935660]
+[node name="ActiveOrderRow" type="HBoxContainer" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid" unique_id=566383793]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ActiveOrderValueLabel" type="Label" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid/ActiveOrderRow" unique_id=1563935660]
 custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 1
 text = "None"
+vertical_alignment = 1
+
+[node name="CancelActiveOrderButton" type="Button" parent="MarginContainer/VBoxContainer/HBoxContainer/InfoGrid/ActiveOrderRow" unique_id=819002969]
+visible = false
+layout_mode = 2
+tooltip_text = "Cance active order"
+theme_override_colors/font_color = Color(0.8495599, 3.2969565e-06, 1.540184e-06, 1)
+theme_override_colors/font_pressed_color = Color(0.8509804, 0, 0, 1)
+theme_override_colors/font_hover_color = Color(0.8509804, 0, 0, 1)
+text = "X"
+flat = true

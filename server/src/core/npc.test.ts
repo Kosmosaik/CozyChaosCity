@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { issueScavengingOrder, tickNpcSimulation } from "./npc";
+import {
+  cancelActivePlotOrder,
+  issueScavengingOrder,
+  tickNpcSimulation,
+} from "./npc";
 import { ensureClaimedPlayerPlotInitialized, normalizeWorldForM0_5 } from "./world";
 import type { Plot, PlotDetail, PlotDetailNpc, WorldState } from "../net/protocol";
 
@@ -157,7 +161,72 @@ describe("npc job system", () => {
     expect(npc?.name).toBeTruthy();
     expect(npc?.job_type).toBe("SCAVENGER");
     expect(npc?.current_activity).toBe("Idle");
-    expect(npc?.allowed_order_kinds).toEqual(["SCAVENGING"]);
+    expect(npc?.allowed_order_kinds).toEqual([
+      "SCAVENGING",
+      "SCAVENGING_SINGLE",
+    ]);
+  });
+
+    it("creates one job for the single-target scavenging order", () => {
+    const plot = makeClaimedPlayerPlot();
+
+    const issue = issueScavengingOrder(
+      plot,
+      1000,
+      "SCAVENGING_SINGLE",
+      "SINGLE"
+    );
+    expect(issue.ok).toBe(true);
+
+    const jobs = plot.detail?.jobs ?? [];
+    expect(jobs.length).toBe(1);
+    expect(jobs[0]?.source_order_kind).toBe("SCAVENGING_SINGLE");
+    expect(jobs[0]?.source_target_scope).toBe("SINGLE");
+
+    expect(plot.detail?.active_order).toEqual({
+      kind: "SCAVENGING_SINGLE",
+      target_scope: "SINGLE",
+      issued_at_ms: 1000,
+    });
+
+    const scavenger = (plot.detail?.npcs ?? []).find(
+      (npc) => npc.job_type === "SCAVENGER"
+    );
+    expect(scavenger?.assigned_order).toBe("SCAVENGING_SINGLE");
+  });
+
+  it("cancels the active scavenging order and releases assigned scavengers", () => {
+    const plot = makeClaimedPlayerPlot();
+
+    const issue = issueScavengingOrder(plot, 1000, "SCAVENGING", "ALL");
+    expect(issue.ok).toBe(true);
+    expect(plot.detail?.active_order).toEqual({
+      kind: "SCAVENGING",
+      target_scope: "ALL",
+      issued_at_ms: 1000,
+    });
+
+    const cancel = cancelActivePlotOrder(plot, 1200);
+    expect(cancel.ok).toBe(true);
+    expect(cancel.cancelled_order_kind).toBe("SCAVENGING");
+    expect(cancel.cancelled_target_scope).toBe("ALL");
+
+    expect(plot.detail?.active_order).toBeNull();
+
+    const jobs = plot.detail?.jobs ?? [];
+    expect(
+      jobs.every(
+        (job) =>
+          job.status === "cancelled" || job.status === "completed"
+      )
+    ).toBe(true);
+
+    const scavenger = (plot.detail?.npcs ?? []).find(
+      (npc) => npc.job_type === "SCAVENGER"
+    );
+    expect(scavenger?.assigned_order).toBeNull();
+    expect(scavenger?.target_object_id).toBeNull();
+    expect(["idle", "returning"]).toContain(scavenger?.state ?? "");
   });
 
   it("updates activity text as the scavenger progresses through states", () => {

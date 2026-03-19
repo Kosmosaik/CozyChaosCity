@@ -19,6 +19,7 @@ signal world_patch_received(patch: Dictionary)
 signal claim_result_received(result: Dictionary)
 signal clear_plot_object_result_received(result: Dictionary)
 signal issue_plot_order_result_received(result: Dictionary)
+signal cancel_plot_order_result_received(result: Dictionary)
 
 
 signal latency_updated(ms: int)
@@ -128,6 +129,15 @@ func issue_plot_order(plot_id: String, order_kind: String, target_scope: String)
 			"plot_id": plot_id,
 			"order_kind": order_kind,
 			"target_scope": target_scope,
+		},
+		_next_req_id()
+	)
+	
+func cancel_plot_order(plot_id: String) -> void:
+	_send(
+		"cancel_plot_order",
+		{
+			"plot_id": plot_id,
 		},
 		_next_req_id()
 	)
@@ -259,6 +269,9 @@ func _handle_message(txt: String) -> void:
 			
 		"issue_plot_order_result":
 			emit_signal("issue_plot_order_result_received", payload)
+			
+		"cancel_plot_order_result":
+			emit_signal("cancel_plot_order_result_received", payload)
 			
 		"error":
 			var reason := str(payload.get("reason", "unknown"))

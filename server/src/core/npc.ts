@@ -2,9 +2,11 @@ import {
   Plot,
   PlotDetail,
   PlotDetailNpc,
+  PlotDetailStarterObject,
   PlotJob,
   PlotOrder,
   PlotOrderKind,
+  PlotOrderTargetScope,
 } from "../net/protocol";
 import { applyClearActionToPlotObject } from "./world";
 
@@ -22,6 +24,9 @@ const ACTIVITY_BY_STATE: Record<PlotDetailNpc["state"], string> = {
   returning: "Returning",
 };
 
+const DEFAULT_SCAVENGE_ORDER_KIND: PlotOrderKind = "SCAVENGING";
+const DEFAULT_SCAVENGE_TARGET_SCOPE: PlotOrderTargetScope = "ALL";
+
 function updateNpcActivity(npc: PlotDetailNpc) {
   npc.current_activity = ACTIVITY_BY_STATE[npc.state];
 }
@@ -30,6 +35,13 @@ function canNpcTakeOrder(npc: PlotDetailNpc, orderKind: PlotOrderKind): boolean 
   return (
     Array.isArray(npc.allowed_order_kinds) &&
     npc.allowed_order_kinds.includes(orderKind)
+  );
+}
+
+function canNpcTakeScavengeJobs(npc: PlotDetailNpc): boolean {
+  return (
+    canNpcTakeOrder(npc, "SCAVENGING") ||
+    canNpcTakeOrder(npc, "SCAVENGING_SINGLE")
   );
 }
 
@@ -121,11 +133,12 @@ function makeJobId(objectId: string): string {
 
 function syncActiveOrder(detail: PlotDetail) {
   const jobs = getJobs(detail);
-  const activeJobs = jobs.filter((job) =>
-    job.status === "queued" ||
-    job.status === "reserved" ||
-    job.status === "in_progress" ||
-    job.status === "blocked"
+  const activeJobs = jobs.filter(
+    (job) =>
+      job.status === "queued" ||
+      job.status === "reserved" ||
+      job.status === "in_progress" ||
+      job.status === "blocked"
   );
 
   if (activeJobs.length === 0) {
@@ -138,8 +151,8 @@ function syncActiveOrder(detail: PlotDetail) {
   );
 
   const order: PlotOrder = {
-    kind: "SCAVENGING",
-    target_scope: "ALL",
+    kind: oldest.source_order_kind ?? DEFAULT_SCAVENGE_ORDER_KIND,
+    target_scope: oldest.source_target_scope ?? DEFAULT_SCAVENGE_TARGET_SCOPE,
     issued_at_ms: oldest.created_at_ms,
   };
 
@@ -158,7 +171,52 @@ function hasActiveScavengeJobs(detail: PlotDetail): boolean {
   );
 }
 
-function ensureScavengeJobs(plot: Plot, nowMs: number): number {
+function isCancelableJobStatus(status: PlotJob["status"]): boolean {
+  return (
+    status === "queued" ||
+    status === "reserved" ||
+    status === "in_progress" ||
+    status === "blocked"
+  );
+}
+
+function getObjectCenterCell(
+  object: PlotDetailStarterObject
+): { x: number; y: number } {
+  const w = object.footprint_w ?? 1;
+  const h = object.footprint_h ?? 1;
+
+  return {
+    x: object.x + Math.floor(w / 2),
+    y: object.y + Math.floor(h / 2),
+  };
+}
+
+function createScavengeJob(
+  rubble: PlotDetailStarterObject,
+  nowMs: number,
+  orderKind: PlotOrderKind,
+  targetScope: PlotOrderTargetScope
+): PlotJob {
+  return {
+    id: makeJobId(rubble.id),
+    kind: "SCAVENGE_RUBBLE",
+    source_order_kind: orderKind,
+    source_target_scope: targetScope,
+    target_object_id: rubble.id,
+    status: "queued",
+    assigned_npc_id: null,
+    created_at_ms: nowMs,
+    updated_at_ms: nowMs,
+  };
+}
+
+function ensureScavengeJobsForAll(
+  plot: Plot,
+  nowMs: number,
+  orderKind: PlotOrderKind,
+  targetScope: PlotOrderTargetScope
+): number {
   const detail = getDetail(plot);
   if (!detail) return 0;
 
@@ -179,20 +237,77 @@ function ensureScavengeJobs(plot: Plot, nowMs: number): number {
       continue;
     }
 
-    jobs.push({
-      id: jobId,
-      kind: "SCAVENGE_RUBBLE",
-      target_object_id: rubble.id,
-      status: "queued",
-      assigned_npc_id: null,
-      created_at_ms: nowMs,
-      updated_at_ms: nowMs,
-    });
+    jobs.push(createScavengeJob(rubble, nowMs, orderKind, targetScope));
     created += 1;
   }
 
   syncActiveOrder(detail);
   return created;
+}
+
+function ensureScavengeJobForSingle(
+  plot: Plot,
+  nowMs: number,
+  orderKind: PlotOrderKind,
+  targetScope: PlotOrderTargetScope
+): number {
+  const detail = getDetail(plot);
+  if (!detail) return 0;
+
+  const jobs = getJobs(detail);
+  const rubbleObjects = getRubbleObjects(plot);
+  const eligibleNpcs = getEligibleNpcsForOrder(detail, orderKind);
+
+  if (eligibleNpcs.length === 0 || rubbleObjects.length === 0) {
+    return 0;
+  }
+
+  let bestRubble: PlotDetailStarterObject | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const rubble of rubbleObjects) {
+    const jobId = makeJobId(rubble.id);
+    const existing = jobs.find(
+      (job) =>
+        job.id === jobId &&
+        job.status !== "completed" &&
+        job.status !== "cancelled"
+    );
+    if (existing) {
+      continue;
+    }
+
+    const target = getObjectCenterCell(rubble);
+
+    let nearestNpcDistance = Number.POSITIVE_INFINITY;
+    for (const npc of eligibleNpcs) {
+      const dist = manhattanDistance(npc.x, npc.y, target.x, target.y);
+      if (dist < nearestNpcDistance) {
+        nearestNpcDistance = dist;
+      }
+    }
+
+    if (
+      bestRubble === null ||
+      nearestNpcDistance < bestDistance ||
+      (
+        nearestNpcDistance === bestDistance &&
+        rubble.id.localeCompare(bestRubble.id) < 0
+      )
+    ) {
+      bestRubble = rubble;
+      bestDistance = nearestNpcDistance;
+    }
+  }
+
+  if (!bestRubble) {
+    syncActiveOrder(detail);
+    return 0;
+  }
+
+  jobs.push(createScavengeJob(bestRubble, nowMs, orderKind, targetScope));
+  syncActiveOrder(detail);
+  return 1;
 }
 
 function findJobTargetCell(plot: Plot, job: PlotJob): { x: number; y: number } | null {
@@ -219,7 +334,7 @@ function assignNextJob(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
 
   const jobs = getJobs(detail);
 
-  if (!canNpcTakeOrder(npc, "SCAVENGING")) {
+  if (!canNpcTakeScavengeJobs(npc)) {
     npc.assigned_order = null;
     npc.target_object_id = null;
 
@@ -293,7 +408,7 @@ function assignNextJob(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
   nextJob.assigned_npc_id = npc.id;
   nextJob.updated_at_ms = nowMs;
 
-  npc.assigned_order = "SCAVENGING";
+  npc.assigned_order = nextJob.source_order_kind;
   npc.target_object_id = nextJob.target_object_id;
   npc.carrying_kind = null;
 
@@ -314,16 +429,118 @@ function findAssignedJob(detail: PlotDetail, npc: PlotDetailNpc): PlotJob | null
   );
 }
 
-export function issueScavengingOrder(
+export function cancelActivePlotOrder(
   plot: Plot,
   nowMs: number
+): {
+  ok: boolean;
+  reason?: string;
+  cancelled_order_kind?: PlotOrderKind;
+  cancelled_target_scope?: PlotOrderTargetScope;
+} {
+  const detail = getDetail(plot);
+  if (!detail) {
+    return { ok: false, reason: "plot_detail_missing" };
+  }
+
+  const activeOrder = detail.active_order;
+  if (!activeOrder) {
+    return { ok: false, reason: "no_active_order" };
+  }
+
+  const jobs = getJobs(detail);
+  const cancelledTargetIds = new Set<string>();
+  let cancelledAny = false;
+
+  const remainingJobs: PlotJob[] = [];
+
+  for (const job of jobs) {
+    const matchesActiveOrder =
+      job.source_order_kind === activeOrder.kind &&
+      job.source_target_scope === activeOrder.target_scope;
+
+    if (matchesActiveOrder && isCancelableJobStatus(job.status)) {
+      cancelledAny = true;
+      cancelledTargetIds.add(job.target_object_id);
+      continue; // REMOVE job
+    }
+
+    remainingJobs.push(job);
+  }
+
+  // Replace jobs array in-place (important for references)
+  jobs.length = 0;
+  for (const job of remainingJobs) {
+    jobs.push(job);
+  }
+
+  for (const npc of detail.npcs ?? []) {
+    const job = findAssignedJob(detail, npc);
+
+    const isAssignedToActiveOrder =
+      job &&
+      job.source_order_kind === activeOrder.kind &&
+      job.source_target_scope === activeOrder.target_scope;
+
+    const isAssignedToCancelledTarget =
+      typeof npc.target_object_id === "string" &&
+      cancelledTargetIds.has(npc.target_object_id);
+
+    if (!isAssignedToActiveOrder && !isAssignedToCancelledTarget) {
+      continue;
+    }
+
+    // Fully reset NPC assignment
+    npc.assigned_order = null;
+    npc.target_object_id = null;
+    npc.carrying_kind = null;
+
+    // Always safely transition NPC state
+    if (npc.x === npc.home_x && npc.y === npc.home_y) {
+      npc.state = "idle";
+      npc.state_started_at_ms = null;
+      npc.state_ends_at_ms = null;
+      clearMovementFields(npc);
+      updateNpcActivity(npc);
+    } else {
+      beginMove(npc, "returning", npc.home_x, npc.home_y, nowMs);
+    }
+  }
+
+  syncActiveOrder(detail);
+
+  return {
+    ok: cancelledAny,
+    reason: cancelledAny ? undefined : "no_active_order",
+    cancelled_order_kind: activeOrder.kind,
+    cancelled_target_scope: activeOrder.target_scope,
+  };
+}
+
+export function issueScavengingOrder(
+  plot: Plot,
+  nowMs: number,
+  orderKind: PlotOrderKind = "SCAVENGING",
+  targetScope: PlotOrderTargetScope = "ALL"
 ): { ok: boolean; reason?: string } {
   const detail = getDetail(plot);
   if (!detail) {
     return { ok: false, reason: "plot_detail_missing" };
   }
 
-  if (getEligibleNpcsForOrder(detail, "SCAVENGING").length === 0) {
+  const isAllOrder =
+    orderKind === "SCAVENGING" &&
+    targetScope === "ALL";
+
+  const isSingleOrder =
+    orderKind === "SCAVENGING_SINGLE" &&
+    targetScope === "SINGLE";
+
+  if (!isAllOrder && !isSingleOrder) {
+    return { ok: false, reason: "invalid_order" };
+  }
+
+  if (getEligibleNpcsForOrder(detail, orderKind).length === 0) {
     return { ok: false, reason: "no_eligible_npc" };
   }
 
@@ -335,13 +552,16 @@ export function issueScavengingOrder(
     return { ok: false, reason: "order_already_active" };
   }
 
-  const created = ensureScavengeJobs(plot, nowMs);
+  const created = isSingleOrder
+    ? ensureScavengeJobForSingle(plot, nowMs, orderKind, targetScope)
+    : ensureScavengeJobsForAll(plot, nowMs, orderKind, targetScope);
+
   if (created === 0) {
     return { ok: false, reason: "nothing_to_scavenge" };
   }
 
   for (const npc of detail.npcs ?? []) {
-    if (npc.state === "idle" && canNpcTakeOrder(npc, "SCAVENGING")) {
+    if (npc.state === "idle" && canNpcTakeScavengeJobs(npc)) {
       assignNextJob(plot, npc, nowMs);
     }
   }

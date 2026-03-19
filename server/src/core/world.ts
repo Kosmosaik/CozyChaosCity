@@ -46,8 +46,8 @@ export function makeStarterNpc(
   y: number,
   jobType: "SCAVENGER" | "LABORER"
 ): PlotDetailNpc {
-  const allowedOrderKinds: ("SCAVENGING")[] =
-    jobType === "SCAVENGER" ? ["SCAVENGING"] : [];
+  const allowedOrderKinds: ("SCAVENGING" | "SCAVENGING_SINGLE")[] =
+    jobType === "SCAVENGER" ? ["SCAVENGING", "SCAVENGING_SINGLE"] : [];
 
   return {
     id,
@@ -396,8 +396,10 @@ function normalizeStarterNpc(
     changed = true;
   }
 
-  const expectedAllowedOrderKinds: ("SCAVENGING")[] =
-    npc.job_type === "SCAVENGER" ? ["SCAVENGING"] : [];
+  const expectedAllowedOrderKinds: ("SCAVENGING" | "SCAVENGING_SINGLE")[] =
+    npc.job_type === "SCAVENGER"
+      ? ["SCAVENGING", "SCAVENGING_SINGLE"]
+      : [];
 
   const hasMatchingAllowedOrders =
     Array.isArray(npc.allowed_order_kinds) &&
