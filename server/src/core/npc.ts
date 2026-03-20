@@ -10,10 +10,10 @@ import {
 } from "../net/protocol";
 import { applyClearActionToPlotObject } from "./world";
 
-const MOVE_MS_PER_CELL = 180;
+const MOVE_MS_PER_CELL = 310;
 const MIN_MOVE_MS = 450;
-const WORK_MS = 1400;
-const DROP_MS = 700;
+const WORK_MS = 9000;
+const DROP_MS = 800;
 
 const ACTIVITY_BY_STATE: Record<PlotDetailNpc["state"], string> = {
   idle: "Idle",
@@ -180,16 +180,53 @@ function isCancelableJobStatus(status: PlotJob["status"]): boolean {
   );
 }
 
-function getObjectCenterCell(
-  object: PlotDetailStarterObject
+function getObjectEdgeWorkCell(
+  object: PlotDetailStarterObject,
+  fromX: number,
+  fromY: number
 ): { x: number; y: number } {
   const w = object.footprint_w ?? 1;
   const h = object.footprint_h ?? 1;
 
-  return {
-    x: object.x + Math.floor(w / 2),
-    y: object.y + Math.floor(h / 2),
-  };
+  const minX = object.x;
+  const maxX = object.x + w - 1;
+  const minY = object.y;
+  const maxY = object.y + h - 1;
+
+  // Clamp the approach point to the object's footprint first.
+  // This gives us the closest point on or inside the rectangle.
+  const clampedX = Math.max(minX, Math.min(fromX, maxX));
+  const clampedY = Math.max(minY, Math.min(fromY, maxY));
+
+  // If the NPC approaches from outside the footprint, the clamped point will
+  // already land on the nearest edge cell, which is what we want.
+  if (fromX < minX || fromX > maxX || fromY < minY || fromY > maxY) {
+    return {
+      x: clampedX,
+      y: clampedY,
+    };
+  }
+
+  // If the source point is already inside the footprint, pick the nearest edge
+  // explicitly so we never send the NPC to the center.
+  const distLeft = fromX - minX;
+  const distRight = maxX - fromX;
+  const distTop = fromY - minY;
+  const distBottom = maxY - fromY;
+
+  const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+  if (minDist === distLeft) {
+    return { x: minX, y: clampedY };
+  }
+  if (minDist === distRight) {
+    return { x: maxX, y: clampedY };
+  }
+  if (minDist === distTop) {
+    return { x: clampedX, y: minY };
+  }
+
+  return { x: clampedX, y: maxY };
 }
 
 function createScavengeJob(
@@ -277,10 +314,9 @@ function ensureScavengeJobForSingle(
       continue;
     }
 
-    const target = getObjectCenterCell(rubble);
-
     let nearestNpcDistance = Number.POSITIVE_INFINITY;
     for (const npc of eligibleNpcs) {
+      const target = getObjectEdgeWorkCell(rubble, npc.x, npc.y);
       const dist = manhattanDistance(npc.x, npc.y, target.x, target.y);
       if (dist < nearestNpcDistance) {
         nearestNpcDistance = dist;
@@ -310,7 +346,12 @@ function ensureScavengeJobForSingle(
   return 1;
 }
 
-function findJobTargetCell(plot: Plot, job: PlotJob): { x: number; y: number } | null {
+function findJobTargetCell(
+  plot: Plot,
+  job: PlotJob,
+  fromX: number,
+  fromY: number
+): { x: number; y: number } | null {
   const detail = getDetail(plot);
   if (!detail) return null;
 
@@ -319,13 +360,7 @@ function findJobTargetCell(plot: Plot, job: PlotJob): { x: number; y: number } |
   );
   if (!rubble) return null;
 
-  const w = rubble.footprint_w ?? 1;
-  const h = rubble.footprint_h ?? 1;
-
-  return {
-    x: rubble.x + Math.floor(w / 2),
-    y: rubble.y + Math.floor(h / 2),
-  };
+  return getObjectEdgeWorkCell(rubble, fromX, fromY);
 }
 
 function assignNextJob(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
@@ -359,7 +394,7 @@ function assignNextJob(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
   let nextJobDistance = Number.POSITIVE_INFINITY;
 
   for (const candidateJob of queuedJobs) {
-    const target = findJobTargetCell(plot, candidateJob);
+    const target = findJobTargetCell(plot, candidateJob, npc.x, npc.y);
     if (!target) {
       continue;
     }
@@ -395,7 +430,7 @@ function assignNextJob(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
     return true;
   }
 
-  const target = findJobTargetCell(plot, nextJob);
+  const target = findJobTargetCell(plot, nextJob, npc.x, npc.y);
   if (!target) {
     nextJob.status = "cancelled";
     nextJob.updated_at_ms = nowMs;

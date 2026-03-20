@@ -2,6 +2,10 @@
 
 ## Milestone 3 — NPC Foundation, Identity, Readability, and Order Expansion
 
+### Status
+M3 foundation is now complete enough for the current project flow.
+The plan remains useful as a reference, but the repo has already delivered the major foundation items below.
+
 ### M3 Goal
 
 M3 should no longer be treated as only “the first NPC work loop.”
@@ -247,6 +251,15 @@ Prepare for future order categories like:
 
 For M3, only supported orders need to be enabled, but the menu foundation should be ready.
 
+**Current repo state**
+- This is now implemented as a dedicated bottom-bar Orders menu plus `OrdersMenuPanel`.
+- Order definitions are no longer hardcoded directly inside the HUD flow.
+- Current real order actions are:
+  - `Scavenge All`
+  - `Scavenge One`
+- Active-order cancellation is now exposed as a dedicated inline cancel control beside the active-order label, not as a noisy list row.
+- `Scavenge All` is still considered temporary convenience UI until targeted selection/area-order flow replaces it later.
+
 ---
 
 ### M3.10 — Multi-NPC Testing Foundation
@@ -297,6 +310,12 @@ Also recommended:
 - disable or visually mute unavailable order actions when possible
 - show role mismatch clearly in Character Sheet and/or order UI
 
+**Current repo state**
+- The noisy “Another order is already active” / “This order is already active” list labels were intentionally removed from the menu.
+- Active-order cancellation is now presented as a compact inline `X` beside the active-order value.
+- The current lightweight `PlotDebugOverlay` (F3) is available for development-time visibility into live jobs, NPC states, rubble count, and active order.
+- The debug overlay is a temporary development tool, not a final player-facing UI feature.
+
 ---
 
 ## Suggested M3 Implementation Order
@@ -326,6 +345,10 @@ Also recommended:
 11. add rejection/eligibility feedback to UI
 12. verify role-specific order behavior with at least two role types
 
+**Current repo state**
+- Phase C is now implemented.
+- The current repo has a bottom-bar Orders button, a dedicated `OrdersMenuPanel`, typed order-menu entries, centralized order definitions, real `Scavenge One` / `Scavenge All` issue flow, and server-authoritative cancel support.
+
 ### Phase D — Validation and polish
 13. verify persistence for:
    - name
@@ -335,6 +358,11 @@ Also recommended:
 14. verify Character Sheet correctness during active jobs
 15. verify overhead label stability during enter/leave plot
 16. ensure all new GDScript uses explicit local variable types
+17. validate the temporary debug overlay against the live job/NPC state during order testing
+
+### Completion note
+The repo now satisfies the intended M3 foundation outcome.
+The next meaningful step should be targeted order-selection flow rather than more one-off order-menu content.
 
 ---
 
@@ -382,3 +410,4 @@ var result: Dictionary = ...
 var tween: Tween = ...
 var state: String = ...
 var duration_sec: float = ...
+```

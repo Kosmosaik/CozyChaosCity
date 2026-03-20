@@ -37,6 +37,7 @@ const PLOT_GROUND_SHADER: Shader = preload("res://shaders/plot_ground_random_5.g
 # Real authored local objects should be spawned from wrapper scenes, not raw GLBs directly.
 const SHACK_SCENE: PackedScene = preload("res://scenes/local_objects/StarterShack.tscn")
 const RUBBLE_SCENE: PackedScene = preload("res://scenes/local_objects/Rubble4x4.tscn")
+const NPC_ACTOR_SCENE: PackedScene = preload("res://scenes/actors/OwnedPlotNpcActor3D.tscn")
 
 # Tuning values kept here so asset placement can be adjusted without touching layout logic.
 const SHACK_ASSET_SCALE: Vector3 = Vector3.ONE
@@ -47,7 +48,6 @@ const RUBBLE_ASSET_SCALE: Vector3 = Vector3.ONE
 const RUBBLE_ASSET_Y_OFFSET: float = 0.02
 const RUBBLE_ASSET_Y_ROTATION_DEGREES: float = 0.0
 
-const NPC_SCENE: PackedScene = preload("res://assets/NPC/NPC_Idle.glb")
 const NPC_CLICK_BODY_HEIGHT: float = 1.75
 const NPC_CLICK_BODY_RADIUS: float = 0.45
 
@@ -118,6 +118,12 @@ func _apply_npc_selection_state_to_node(
 	npc_node: Node3D,
 	is_selected: bool
 ) -> void:
+	# Selection stays renderer-owned, but the actor scene owns how that selection
+	# is shown visually. This keeps future model swaps out of the renderer.
+	if npc_node.has_method("set_selected"):
+		npc_node.call("set_selected", is_selected)
+		return
+
 	var selection_ring: MeshInstance3D = npc_node.get_node_or_null("SelectionRing") as MeshInstance3D
 	if selection_ring != null:
 		selection_ring.visible = is_selected
@@ -149,6 +155,13 @@ func _attach_npc_label_anchor(
 	npc_node.set_meta("label_anchor_path", npc_node.get_path_to(label_anchor))
 
 func _get_npc_label_world_position(npc_node: Node3D) -> Vector3:
+	# The actor scene owns the best label anchor because it knows the visual
+	# skeleton/model details. We keep the old fallback for safety.
+	if npc_node.has_method("get_label_world_position"):
+		var label_world_position_value: Variant = npc_node.call("get_label_world_position")
+		if typeof(label_world_position_value) == TYPE_VECTOR3:
+			return label_world_position_value as Vector3
+
 	var anchor_path_value: Variant = npc_node.get_meta("label_anchor_path", NodePath(""))
 	if typeof(anchor_path_value) == TYPE_NODE_PATH:
 		var anchor_node: Node3D = npc_node.get_node_or_null(anchor_path_value) as Node3D
@@ -603,94 +616,16 @@ func _sync_npcs(detail: Dictionary, width: int, height: int) -> void:
 	_rendered_npc_nodes_by_id = next_rendered_npc_nodes_by_id
 
 func _make_npc_actor() -> Node3D:
-	var node: Node3D = Node3D.new()
-	node.name = "NPC_temp"
+	# NPC visuals now come from a dedicated actor scene so the plot renderer no
+	# longer needs to know about model internals, animation players, or anchors.
+	if NPC_ACTOR_SCENE == null:
+		return null
 
-	# The click body is separate from the visual so:
-	# - selection uses stable physics picking
-	# - visuals can change later without breaking interaction
-	# - future hover/right-click interactions can reuse the same actor root
-	var click_body: StaticBody3D = StaticBody3D.new()
-	click_body.name = "ClickBody"
-	click_body.input_ray_pickable = true
-	click_body.add_to_group("owned_plot_npc_click_body")
+	var instance: Node = NPC_ACTOR_SCENE.instantiate()
+	if instance is Node3D:
+		return instance as Node3D
 
-	var collision_shape: CollisionShape3D = CollisionShape3D.new()
-	collision_shape.name = "CollisionShape3D"
-
-	var capsule_shape: CapsuleShape3D = CapsuleShape3D.new()
-	capsule_shape.radius = NPC_CLICK_BODY_RADIUS
-	capsule_shape.height = NPC_CLICK_BODY_HEIGHT
-
-	collision_shape.shape = capsule_shape
-	collision_shape.position.y = 0.9
-	click_body.add_child(collision_shape)
-	node.add_child(click_body)
-
-	var visual_root: Node3D = null
-
-	if NPC_SCENE != null:
-		var instance: Node = NPC_SCENE.instantiate()
-		if instance is Node3D:
-			var visual: Node3D = instance as Node3D
-			visual.name = "Visual"
-			visual.scale = Vector3(1.15, 1.15, 1.15)
-			visual.position.y = 0.02
-			node.add_child(visual)
-			visual_root = visual
-	else:
-		var mesh_instance: MeshInstance3D = MeshInstance3D.new()
-		mesh_instance.name = "Visual"
-
-		var mesh: CylinderMesh = CylinderMesh.new()
-		mesh.top_radius = 0.35
-		mesh.bottom_radius = 0.4
-		mesh.height = 1.7
-		mesh_instance.mesh = mesh
-		mesh_instance.position.y = 0.85
-
-		var material: StandardMaterial3D = StandardMaterial3D.new()
-		material.albedo_color = Color(0.24, 0.55, 0.78, 1.0)
-		mesh_instance.material_override = material
-		node.add_child(mesh_instance)
-		visual_root = mesh_instance
-
-	_attach_npc_label_anchor(node, visual_root)
-
-	var selection_ring: MeshInstance3D = MeshInstance3D.new()
-	selection_ring.name = "SelectionRing"
-
-	var selection_ring_mesh: CylinderMesh = CylinderMesh.new()
-	selection_ring_mesh.top_radius = NPC_SELECTION_RING_RADIUS_TOP
-	selection_ring_mesh.bottom_radius = NPC_SELECTION_RING_RADIUS_BOTTOM
-	selection_ring_mesh.height = NPC_SELECTION_RING_HEIGHT
-	selection_ring.mesh = selection_ring_mesh
-	selection_ring.position.y = NPC_SELECTION_RING_HEIGHT * 0.5
-	selection_ring.visible = false
-
-	var selection_ring_material: StandardMaterial3D = StandardMaterial3D.new()
-	selection_ring_material.albedo_color = Color(0.92, 0.80, 0.42, 0.95)
-	selection_ring_material.roughness = 0.35
-	selection_ring_material.emission_enabled = true
-	selection_ring_material.emission = Color(0.28, 0.22, 0.08, 1.0)
-	selection_ring.material_override = selection_ring_material
-	node.add_child(selection_ring)
-
-	var carry_visual: MeshInstance3D = MeshInstance3D.new()
-	carry_visual.name = "CarryVisual"
-
-	var carry_mesh: BoxMesh = BoxMesh.new()
-	carry_mesh.size = Vector3(0.35, 0.25, 0.35)
-	carry_visual.mesh = carry_mesh
-	carry_visual.position = Vector3(0.0, 1.3, -0.35)
-	carry_visual.visible = false
-
-	var carry_material: StandardMaterial3D = StandardMaterial3D.new()
-	carry_material.albedo_color = Color(0.68, 0.53, 0.28, 1.0)
-	carry_visual.material_override = carry_material
-	node.add_child(carry_visual)
-	
-	return node
+	return null
 
 func _apply_npc_snapshot_to_node(
 	npc_node: Node3D,
@@ -730,6 +665,17 @@ func _apply_npc_snapshot_to_node(
 			width,
 			height
 		)
+
+	var work_visual_target_position: Vector3 = Vector3.ZERO
+	var has_work_visual_target: bool = false
+
+	var target_object_id_value: Variant = npc_data.get("target_object_id", null)
+	if typeof(target_object_id_value) == TYPE_STRING:
+		var target_object_id: String = str(target_object_id_value)
+		var target_object_node: Node3D = _rendered_object_nodes_by_id.get(target_object_id, null) as Node3D
+		if target_object_node != null and is_instance_valid(target_object_node):
+			work_visual_target_position = target_object_node.position
+			has_work_visual_target = true
 
 	if snap_immediately:
 		npc_node.position = current_pos
@@ -771,10 +717,23 @@ func _apply_npc_snapshot_to_node(
 		_npc_move_signatures_by_id.erase(npc_id)
 		npc_node.position = current_pos
 
-	var carry_visual: MeshInstance3D = npc_node.get_node_or_null("CarryVisual") as MeshInstance3D
-	if carry_visual != null:
-		var carrying_kind: Variant = npc_data.get("carrying_kind", null)
-		carry_visual.visible = carrying_kind != null
+	# The actor scene owns animation selection, carry visual visibility, and
+	# facing updates because those are model/presentation concerns.
+	if npc_node.has_method("apply_snapshot"):
+		npc_node.call(
+			"apply_snapshot",
+			npc_data,
+			current_pos,
+			target_pos,
+			has_move_target,
+			work_visual_target_position,
+			has_work_visual_target
+		)
+	else:
+		var carry_visual: MeshInstance3D = npc_node.get_node_or_null("CarryVisual") as MeshInstance3D
+		if carry_visual != null:
+			var carrying_kind: Variant = npc_data.get("carrying_kind", null)
+			carry_visual.visible = carrying_kind != null
 
 	_apply_npc_selection_state_to_node(
 		npc_node,

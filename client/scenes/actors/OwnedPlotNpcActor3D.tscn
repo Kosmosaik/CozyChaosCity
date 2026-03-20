@@ -1,0 +1,45 @@
+[gd_scene format=3 uid="uid://bb32egbyia70n"]
+
+[ext_resource type="Script" uid="uid://sxsgp12bk2mi" path="res://scripts/world/actors/OwnedPlotNpcActor3D.gd" id="1_actor_script"]
+
+[sub_resource type="CapsuleShape3D" id="1_capsule_shape"]
+radius = 0.45
+height = 1.75
+
+[sub_resource type="StandardMaterial3D" id="3_selection_ring_material"]
+albedo_color = Color(0.92, 0.8, 0.42, 0.95)
+roughness = 0.35
+emission_enabled = true
+emission = Color(0.28, 0.22, 0.08, 1)
+
+[sub_resource type="CylinderMesh" id="2_selection_ring_mesh"]
+top_radius = 0.55
+bottom_radius = 0.72
+height = 0.05
+
+[sub_resource type="StandardMaterial3D" id="5_carry_material"]
+albedo_color = Color(0.68, 0.53, 0.28, 1)
+
+[sub_resource type="BoxMesh" id="4_carry_mesh"]
+size = Vector3(0.35, 0.25, 0.35)
+
+[node name="OwnedPlotNpcActor3D" type="Node3D" unique_id=402460339]
+script = ExtResource("1_actor_script")
+
+[node name="ClickBody" type="StaticBody3D" parent="." unique_id=456244528]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="ClickBody" unique_id=707827284]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("1_capsule_shape")
+
+[node name="VisualRoot" type="Node3D" parent="." unique_id=978467649]
+
+[node name="SelectionRing" type="MeshInstance3D" parent="." unique_id=84762001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, 0)
+material_override = SubResource("3_selection_ring_material")
+mesh = SubResource("2_selection_ring_mesh")
+
+[node name="CarryVisual" type="MeshInstance3D" parent="." unique_id=1151587917]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.42, 0.245)
+material_override = SubResource("5_carry_material")
+mesh = SubResource("4_carry_mesh")

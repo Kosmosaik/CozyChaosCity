@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b0oofd0plsiqf"
-path="res://.godot/imported/NPC_Idle.glb-59ffafd9cb71a9e1eb3b91cc10dfd3d3.scn"
+uid="uid://drchj7k4bu3ou"
+path="res://.godot/imported/NPC_Scavenger_Split.glb-ee4da221aa0bb80c2ebc20dbf07f4f1a.scn"
 
 [deps]
 
-source_file="res://assets/NPC/NPC_Idle.glb"
-dest_files=["res://.godot/imported/NPC_Idle.glb-59ffafd9cb71a9e1eb3b91cc10dfd3d3.scn"]
+source_file="res://assets/NPC/NPC_Scavenger_Split.glb"
+dest_files=["res://.godot/imported/NPC_Scavenger_Split.glb-ee4da221aa0bb80c2ebc20dbf07f4f1a.scn"]
 
 [params]
 
@@ -39,4 +39,4 @@ materials/extract_format=0
 materials/extract_path=""
 _subresources={}
 gltf/naming_version=2
-gltf/embedded_image_handling=3
+gltf/embedded_image_handling=1

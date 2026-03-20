@@ -163,7 +163,10 @@ Neighborhood rendering is still part of the long-term shared-world vision, but i
 
 ## Current Milestone Direction
 
-## Milestone 3 — Owned Plot NPCs, Identity, and Orders Foundation
+## Milestone 3 — Owned Plot NPCs, Identity, Orders, and Debug Foundation
+
+### Status
+M3 foundation is now complete enough for the current project flow.
 
 ### Purpose
 Establish the first **complete NPC gameplay foundation** for owned plots, not just a hidden technical work loop.
@@ -210,13 +213,20 @@ Establish the first **complete NPC gameplay foundation** for owned plots, not ju
 - scavenging orders only use eligible NPCs
 
 #### 5. Order system expansion base
-- current Scavenge flow is restructured into the first expandable order menu foundation
+- the old one-off Scavenge button flow has been replaced with a dedicated bottom-bar Orders menu
+- order menu entries are now built from dedicated order-definition data instead of being hardcoded directly inside the HUD flow
+- the current real order actions are:
+  - `Scavenge All`
+  - `Scavenge One`
+- active-order cancellation now exists through a dedicated inline cancel control beside the active-order label
 - future order types can be added without redoing the whole UI structure
 
 #### 6. Stability rules
 - no inferred local GDScript variables in new gameplay/UI code
 - no one-off hardcoded role checks scattered across the codebase
 - no duplicated activity string logic in multiple places
+- cancelled orders now remove active jobs instead of keeping duplicate reusable job ids alive in plot state
+- a lightweight developer-only plot debug overlay exists for validating live job/NPC state while the system grows
 
 ### Exit criteria
 M3 is complete when the player can:
@@ -225,7 +235,22 @@ M3 is complete when the player can:
 - understand what the NPC is currently doing
 - inspect them via Character Sheet
 - verify that only eligible NPCs respond to scavenging orders
-- see that the order system is ready to grow beyond one button
+- use the Orders menu instead of a one-off button
+- cancel the currently active plot order cleanly
+- inspect live plot job/NPC state through the debug overlay when needed
+
+### Current result
+The repo now meets the M3 foundation goal:
+- NPC simulation, names, readable activity, Character Sheet, and overhead labels are in place
+- role-based eligibility is in place
+- modular Orders UI foundation is in place
+- `Scavenge One` and `Scavenge All` both exist as real server-authoritative orders
+- active-order cancellation is implemented server-side and exposed cleanly in the UI
+- a lightweight F3 debug overlay exists for live job/NPC validation
+
+### Next recommended direction after M3
+The next order-related step should not be more menu polish first.
+It should be the first **targeted order-selection flow**, so the player can choose a rubble target or marked area instead of depending on the temporary `Scavenge All` convenience action.
 
 ---
 

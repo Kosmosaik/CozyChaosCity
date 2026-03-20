@@ -443,3 +443,35 @@ This project is in early development. Version numbers are informal for now.
 - Player Plot mode still renders only the owned plot.
 - Neighborhood loading/rendering is still not implemented yet.
 - The current job/order system is now on the correct architectural path, but broader economy/logistics/business systems are still future work.
+
+---
+
+## v0.0.11 - M3 Orders Foundation & Debug Overlay
+
+### Orders System
+- Introduced new modular Orders panel in bottom UI
+- Added Scavenge One and Scavenge All as order actions
+- Active order now displayed clearly in UI
+- Cancel Active Order moved to inline X button
+- Removed redundant error messages from UI
+- Orders list now supports future expansion
+
+### Server / Simulation
+- Fixed critical issue where cancelled jobs were retained
+- Jobs are now properly removed on cancel
+- Prevents duplicate job IDs and unstable state
+- Improved NPC cleanup when cancelling orders
+
+### UI / Stability
+- Fixed order panel resizing and layout expansion issues
+- Fixed button hover and click inconsistencies
+- Improved layout structure for scalability
+
+### Debug Tools
+- Added Plot Debug Overlay (toggle with F3)
+- Displays:
+  - Active order
+  - Job counts by status
+  - NPC counts by state
+  - Rubble targets
+- Overlay updates in real-time
