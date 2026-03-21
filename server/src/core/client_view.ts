@@ -7,6 +7,8 @@ import type {
   WorldState,
 } from "../net/protocol";
 
+import { DEV_METRICS } from "./dev_metrics";
+
 export function encodePlotDetailForClient(detail: PlotDetail): ClientPlotDetail {
   const cellByKey = new Map<string, PlotDetail["cells"][number]>();
   for (const cell of detail.cells) {
@@ -39,33 +41,43 @@ export function buildClientPlot(
   plot: Plot,
   viewerPlayerId: string | null
 ): ClientPlot {
-  const claimedBy = plot.claimed_by;
-  const ownerRec = claimedBy ? world.players[claimedBy] : null;
-  const includeDetail =
-    viewerPlayerId !== null &&
-    claimedBy === viewerPlayerId &&
-    plot.detail !== undefined;
+  return DEV_METRICS.measure("build_client_plot_ms", () => {
+    // Client plot DTO creation is on the hot path for both world snapshots and
+    // incremental plot updates. Measuring it here tells us when filtering and
+    // owned-detail encoding starts becoming expensive.
+    const claimedBy = plot.claimed_by;
+    const ownerRec = claimedBy ? world.players[claimedBy] : null;
+    const includeDetail =
+      viewerPlayerId !== null &&
+      claimedBy === viewerPlayerId &&
+      plot.detail !== undefined;
 
-  return {
-    id: plot.id,
-    type: plot.type,
-    x: plot.x,
-    y: plot.y,
-    claimed_by: plot.claimed_by,
-    shell: plot.shell,
-    detail: includeDetail && plot.detail
-      ? encodePlotDetailForClient(plot.detail)
-      : undefined,
-    owner_display_name: ownerRec?.display_name ?? "",
-  };
+    return {
+      id: plot.id,
+      type: plot.type,
+      x: plot.x,
+      y: plot.y,
+      claimed_by: plot.claimed_by,
+      shell: plot.shell,
+      detail:
+        includeDetail && plot.detail
+          ? encodePlotDetailForClient(plot.detail)
+          : undefined,
+      owner_display_name: ownerRec?.display_name ?? "",
+    };
+  });
 }
 
 export function buildClientWorld(
   world: WorldState,
   viewerPlayerId: string | null
 ): ClientWorldState {
-  return {
-    version: world.version,
-    plots: world.plots.map((plot) => buildClientPlot(world, plot, viewerPlayerId)),
-  };
+  return DEV_METRICS.measure("build_client_world_ms", () => {
+    // World snapshot building is broader than a single plot update, so we keep
+    // a separate metric for the full snapshot cost as the world grows.
+    return {
+      version: world.version,
+      plots: world.plots.map((plot) => buildClientPlot(world, plot, viewerPlayerId)),
+    };
+  });
 }

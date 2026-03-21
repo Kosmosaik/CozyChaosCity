@@ -475,3 +475,54 @@ This project is in early development. Version numbers are informal for now.
   - NPC counts by state
   - Rubble targets
 - Overlay updates in real-time
+
+---
+## [0.0.12] — 2026-03-21 — Post-M3 Hardening Pass Part 1 (Timing Sync + Visual Wrapper + Dev Metrics + NetClient Cleanup)
+
+### Added
+- Server-side developer metrics foundation:
+  - `server/src/core/dev_metrics.ts`
+  - `server/src/core/dev_metrics.test.ts`
+- Timed network payload support:
+  - `world_state`, `plot_update`, and `world_patch` now include `server_time_ms`
+  - `server_pong` now returns `server_time_ms`
+- Canonical NPC visual wrapper:
+  - `client/scenes/actors/NpcVisual.tscn`
+  - `client/scripts/world/actors/NpcVisual.gd`
+- Server-local ignore rules:
+  - `server/.gitignore`
+
+### Changed
+- NPC movement presentation no longer depends on the client wall clock:
+  - client wire adapters now preserve snapshot timing metadata
+  - the owned-plot renderer reconstructs movement progress from server-authored timestamps plus local monotonic receive time
+- NPC actor presentation now depends on the project-owned `NpcVisual` wrapper instead of raw imported model assumptions for:
+  - animation player lookup
+  - label anchor resolution
+  - model-space transform ownership
+- NPC working-state facing is now reconstructed deterministically from the rubble work target when re-entering the plot.
+- NetClient connection flow is now cleaner for playtesting:
+  - validates `server_url.txt` overrides
+  - resets socket/runtime state before reconnect attempts
+  - clears stale latency/presence on disconnect
+  - removes the duplicate `"error"` branch
+- Server tooling scripts now call ESLint/Vitest through direct node entrypoints instead of relying on copied `.bin` shims.
+- Server config now exposes dev-metrics flags:
+  - `CCC_ENABLE_DEV_METRICS`
+  - `CCC_DEV_METRICS_REPORT_INTERVAL_MS`
+- Client world/plot DTO shaping and JSON persistence now emit timing metrics during dev runs.
+
+### Fixed
+- Fixed the stale NPC test expectation by advancing to the actual `state_ends_at_ms` boundary instead of a magic timestamp.
+- Fixed NPC facing changing on plot re-entry while working on rubble.
+- Fixed a missing `_connect_ws(...)` path during the NetClient cleanup pass.
+- Fixed one major visual correctness issue where reconnect/re-entry could restart movement presentation from an incorrect position.
+- Fixed one class of zip/archive tooling failures where copied server bin shims were not executable.
+
+### Notes / Known limitations
+- JSON persistence is still the current save backend; the new metrics confirm that clone/write cost is the first real scaling pressure, not NPC simulation.
+- Dev metrics are still a developer-only aid, not a final player-facing benchmark system.
+- The current uploaded repo still contains noisy archive content (`.git`, `node_modules`, `.godot`, temp files), so clean handoff hygiene is still an active workflow issue.
+- The current repo README in the uploaded zip is truncated; restore the corrected README before finalizing the branch.
+
+---

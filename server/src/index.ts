@@ -1,10 +1,17 @@
 import { WebSocketServer } from "ws";
 import { CONFIG } from "./core/config";
+import { DEV_METRICS } from "./core/dev_metrics";
+
 import {
   ClientMessageSchema,
   makeMsg,
+  ServerPongPayload,
+  TimedPlotUpdatePayload,
+  TimedWorldPatchPayload,
+  TimedWorldStatePayload,
   WorldState,
 } from "./net/protocol";
+
 import {
   applyClearActionToPlotObject,
   countFreePlayerPlots,
@@ -57,7 +64,15 @@ function broadcast(msg: string) {
 function sendWorld(ws: any) {
   const st = conns.get(ws);
   const viewerPlayerId = st?.player_id ?? null;
-  ws.send(makeMsg("world_state", { world: buildClientWorld(world, viewerPlayerId) }));
+  const payload: TimedWorldStatePayload = {
+    world: buildClientWorld(world, viewerPlayerId),
+    server_time_ms: Date.now(),
+  };
+
+  // Every world snapshot carries the server time it was authored at.
+  // The client can then estimate current server time without trusting the
+  // player's machine wall clock.
+  ws.send(makeMsg("world_state", payload));
 }
 
 function sendPresenceState(ws: any) {
@@ -69,18 +84,23 @@ function broadcastPresenceState() {
 }
 
 function broadcastPlotUpdate(plot: WorldState["plots"][number]) {
+  const serverTimeMs = Date.now();
+
   for (const client of wss.clients) {
     if (client.readyState !== client.OPEN) continue;
 
     const clientState = conns.get(client);
     const plotForClient = buildClientPlot(world, plot, clientState?.player_id ?? null);
 
-    client.send(
-      makeMsg("plot_update", {
-        plot: plotForClient,
-        owner_display_name: plotForClient.owner_display_name,
-      })
-    );
+    const payload: TimedPlotUpdatePayload = {
+      plot: plotForClient,
+      owner_display_name: plotForClient.owner_display_name,
+      server_time_ms: serverTimeMs,
+    };
+
+    // Reuse one timestamp for the whole broadcast so all clients receive the
+    // same authoritative snapshot time for this update.
+    client.send(makeMsg("plot_update", payload));
   }
 }
 
@@ -164,14 +184,15 @@ function handleClaimPlot(ws: any, st: ConnState, msg: any) {
         if (client.readyState !== client.OPEN) continue;
         const clientState = conns.get(client);
 
-        client.send(
-          makeMsg("world_patch", {
-            added: added.map((plot) =>
-              buildClientPlot(world, plot, clientState?.player_id ?? null)
-            ),
-            world_version: world.version,
-          })
-        );
+        const payload: TimedWorldPatchPayload = {
+          added: added.map((plot) =>
+            buildClientPlot(world, plot, clientState?.player_id ?? null)
+          ),
+          world_version: world.version,
+          server_time_ms: Date.now(),
+        };
+
+        client.send(makeMsg("world_patch", payload));
       }
     }
   }
@@ -401,9 +422,16 @@ wss.on("connection", (ws) => {
         sendWorld(ws);
         return;
 
-      case "client_ping":
-        ws.send(makeMsg("server_pong", {}, msg.req_id));
+      case "client_ping": {
+        const payload: ServerPongPayload = {
+          server_time_ms: Date.now(),
+        };
+
+        // We are not using this pong timestamp yet for global clock sync,
+        // but sending it now keeps the protocol ready for that future step.
+        ws.send(makeMsg("server_pong", payload, msg.req_id));
         return;
+      }
 
       case "claim_plot":
         handleClaimPlot(ws, st, msg);
@@ -432,17 +460,27 @@ wss.on("connection", (ws) => {
 const NPC_TICK_INTERVAL_MS = 250;
 
 setInterval(() => {
-  const changedPlots = tickNpcSimulation(world, Date.now());
-  if (changedPlots.length === 0) {
-    return;
-  }
+  DEV_METRICS.measure("npc_tick_loop_ms", () => {
+    // Keep one metric for the whole tick loop and one for the raw simulation
+    // call itself. That gives us a quick read on whether future cost is in the
+    // simulation, save path, or outbound update work around it.
+    const changedPlots = DEV_METRICS.measure("npc_simulation_ms", () =>
+      tickNpcSimulation(world, Date.now())
+    );
 
-  world.version += 1;
-  queueSave();
+    if (changedPlots.length === 0) {
+      return;
+    }
 
-  for (const plot of changedPlots) {
-    broadcastPlotUpdate(plot);
-  }
+    world.version += 1;
+    queueSave();
+
+    for (const plot of changedPlots) {
+      broadcastPlotUpdate(plot);
+    }
+  });
+
+  DEV_METRICS.maybeReport();
 }, NPC_TICK_INTERVAL_MS);
 
 setInterval(() => {

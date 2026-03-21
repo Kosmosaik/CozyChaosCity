@@ -160,6 +160,27 @@ export type ClientWorldState = {
   plots: ClientPlot[];
 };
 
+export type TimedWorldStatePayload = {
+  world: ClientWorldState;
+  server_time_ms: number;
+};
+
+export type TimedPlotUpdatePayload = {
+  plot: ClientPlot;
+  owner_display_name: string;
+  server_time_ms: number;
+};
+
+export type TimedWorldPatchPayload = {
+  added: ClientPlot[];
+  world_version: number;
+  server_time_ms: number;
+};
+
+export type ServerPongPayload = {
+  server_time_ms: number;
+};
+
 export const HelloPayloadSchema = z
   .object({
     player_id: z.string().min(1).optional(),

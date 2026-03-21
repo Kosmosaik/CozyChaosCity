@@ -8,9 +8,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\"",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "lint": "node ./node_modules/eslint/bin/eslint.js \"src/**/*.ts\"",
+    "test": "node ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ./node_modules/vitest/vitest.mjs"
   },
   "dependencies": {
     "ws": "^8.19.0",

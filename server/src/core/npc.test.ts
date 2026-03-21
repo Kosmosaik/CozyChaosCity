@@ -245,7 +245,10 @@ describe("npc job system", () => {
     tickNpcSimulation({ plots: [plot] }, 5000);
     expect(scavenger.current_activity).toBe("Clearing rubble");
 
-    tickNpcSimulation({ plots: [plot] }, 7000);
+    const workingEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof workingEndsAtMs).toBe("number");
+
+    tickNpcSimulation({ plots: [plot] }, workingEndsAtMs as number);
     expect(scavenger.current_activity).toBe("Carrying scrap");
   });
 });

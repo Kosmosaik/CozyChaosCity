@@ -1,10 +1,16 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import { DEV_METRICS } from "../core/dev_metrics";
 import type { WorldState } from "../net/protocol";
 
 function cloneWorld(world: WorldState): WorldState {
-  return JSON.parse(JSON.stringify(world)) as WorldState;
+  return DEV_METRICS.measure("persist_clone_world_ms", () => {
+    // JSON persistence currently snapshots the whole world.
+    // Measuring the clone cost now will tell us when this approach starts
+    // becoming a real bottleneck and needs a more advanced persistence layer.
+    return JSON.parse(JSON.stringify(world)) as WorldState;
+  });
 }
 
 export class JsonWorldRepository {
@@ -51,23 +57,30 @@ export class JsonWorldRepository {
       return;
     }
 
-    this.isSaving = true;
-    const snapshot = this.pendingSnapshot;
-    this.pendingSnapshot = null;
+    await DEV_METRICS.measureAsync("persist_flush_ms", async () => {
+      this.isSaving = true;
+      const snapshot = this.pendingSnapshot;
+      this.pendingSnapshot = null;
 
-    try {
-      const dir = path.dirname(this.filePath);
-      await fsp.mkdir(dir, { recursive: true });
+      try {
+        const dir = path.dirname(this.filePath);
+        await fsp.mkdir(dir, { recursive: true });
 
-      const tmp = `${this.filePath}.tmp`;
-      await fsp.writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf-8");
-      await fsp.rename(tmp, this.filePath);
-    } finally {
-      this.isSaving = false;
+        const tmp = `${this.filePath}.tmp`;
 
-      if (this.pendingSnapshot) {
-        void this.flush();
+        await DEV_METRICS.measureAsync("persist_write_snapshot_ms", async () => {
+          // Keep write timing separate from total flush timing so we can tell
+          // whether cost is mostly cloning/queueing or the actual disk write.
+          await fsp.writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf-8");
+          await fsp.rename(tmp, this.filePath);
+        });
+      } finally {
+        this.isSaving = false;
+
+        if (this.pendingSnapshot) {
+          void this.flush();
+        }
       }
-    }
+    });
   }
 }

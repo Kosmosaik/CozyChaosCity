@@ -1,0 +1,8 @@
+# Local install / build output
+node_modules/
+dist/
+
+# Runtime data / logs
+data/
+*.log
+*.tmp

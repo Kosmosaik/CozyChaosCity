@@ -5,6 +5,7 @@
 ### Status
 M3 foundation is now complete enough for the current project flow.
 The plan remains useful as a reference, but the repo has already delivered the major foundation items below.
+A first post-M3 hardening/playtest pass is now also implemented on top of that foundation.
 
 ### M3 Goal
 
@@ -348,6 +349,11 @@ Also recommended:
 **Current repo state**
 - Phase C is now implemented.
 - The current repo has a bottom-bar Orders button, a dedicated `OrdersMenuPanel`, typed order-menu entries, centralized order definitions, real `Scavenge One` / `Scavenge All` issue flow, and server-authoritative cancel support.
+- A first post-M3 hardening pass is also implemented:
+  - NPC movement presentation now uses server-authored snapshot timing instead of client wall-clock timing
+  - NPC visuals now route through a project-owned `NpcVisual` wrapper scene
+  - lightweight server dev metrics now exist for tick/build/save timing
+  - NetClient connection handling is cleaner for playtesting and reconnect attempts
 
 ### Phase D — Validation and polish
 13. verify persistence for:
@@ -362,7 +368,14 @@ Also recommended:
 
 ### Completion note
 The repo now satisfies the intended M3 foundation outcome.
-The next meaningful step should be targeted order-selection flow rather than more one-off order-menu content.
+The immediate next step should be selective hardening/playtest follow-up rather than broad new order content.
+
+That means:
+- use the new dev metrics during friend testing
+- finish only the remaining small cleanup items that testing proves are worth it
+- keep new behavior out of the known hotspot files where possible
+
+After that, the next meaningful gameplay step should be targeted order-selection flow rather than more one-off order-menu content.
 
 ---
 

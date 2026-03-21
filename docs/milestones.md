@@ -167,6 +167,7 @@ Neighborhood rendering is still part of the long-term shared-world vision, but i
 
 ### Status
 M3 foundation is now complete enough for the current project flow.
+A first post-M3 hardening/playtest pass is now also implemented on top of that foundation.
 
 ### Purpose
 Establish the first **complete NPC gameplay foundation** for owned plots, not just a hidden technical work loop.
@@ -247,10 +248,20 @@ The repo now meets the M3 foundation goal:
 - `Scavenge One` and `Scavenge All` both exist as real server-authoritative orders
 - active-order cancellation is implemented server-side and exposed cleanly in the UI
 - a lightweight F3 debug overlay exists for live job/NPC validation
+- NPC movement presentation now uses server-authored snapshot timing instead of client wall-clock time
+- NPC visuals now route through the project-owned `NpcVisual` wrapper scene instead of depending directly on raw imported model structure
+- lightweight server dev metrics now exist for tick cost, client payload building, and JSON persistence timing
+- NetClient connection handling is more reliable for friend playtesting through cleaner override validation and socket reset flow
 
 ### Next recommended direction after M3
-The next order-related step should not be more menu polish first.
-It should be the first **targeted order-selection flow**, so the player can choose a rubble target or marked area instead of depending on the temporary `Scavenge All` convenience action.
+The immediate next priority is selective hardening plus friend-playtest validation, not broader order expansion first.
+
+That means:
+- keep using the new dev metrics during larger playtests
+- finish the remaining small A5 cleanup items only if testing reveals pain points
+- avoid growing the known hotspot files further
+
+After that, the next gameplay-facing step should be the first **targeted order-selection flow**, so the player can choose a rubble target or marked area instead of depending on the temporary `Scavenge All` convenience action.
 
 ---
 

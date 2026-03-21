@@ -40,20 +40,21 @@ const OVERRIDE_PATH := "user://server_url.txt"
 
 var _server_url: String = DEFAULT_SERVER_URL
 
-var _online_players: Array = []  # last known presence snapshot
-var _pending_pings := {}         # req_id -> send_time_ms
+var _online_players: Array = []      # last known presence snapshot
+var _pending_pings: Dictionary = {}  # req_id -> send_time_ms
 var _latency_ms: float = -1.0
 
 # -------------------------
 # Internal networking state
 # -------------------------
-var _ws := WebSocketPeer.new()
-var _is_connected := false
+var _ws: WebSocketPeer = WebSocketPeer.new()
+var _is_connected: bool = false
+var _is_connecting: bool = false
 var _req_counter: int = 0
 
 # Heartbeat: keeps server from disconnecting us due to inactivity
-var _heartbeat_interval := 3.0
-var _heartbeat_accum := 0.0
+var _heartbeat_interval: float = 3.0
+var _heartbeat_accum: float = 0.0
 
 # -------------------------
 # Profile + identity state
@@ -80,9 +81,9 @@ func _process(delta: float) -> void:
 		_heartbeat_accum += delta
 		if _heartbeat_accum >= _heartbeat_interval:
 			_heartbeat_accum = 0.0
-			var rid := _next_req_id()
-			_pending_pings[rid] = Time.get_ticks_msec()
-			_send("client_ping", { "client_ms": Time.get_ticks_msec() }, rid)
+			var request_id: String = _next_req_id()
+			_pending_pings[request_id] = Time.get_ticks_msec()
+			_send("client_ping", { "client_ms": Time.get_ticks_msec() }, request_id)
 
 # -------------------------
 # Public API (HUD calls these)
@@ -96,13 +97,18 @@ func connect_with_profile(name: String) -> void:
 	# Load profile credentials if they exist:
 	# - If exists -> we authenticate with {player_id, secret}
 	# - If not -> we register with {display_name}
-	var prof := ProfileStore.load_profile(profile_name)
+	var prof: Dictionary = ProfileStore.load_profile(profile_name)
 	player_id = str(prof.get("player_id", ""))
 	secret = str(prof.get("secret", ""))
 	display_name = str(prof.get("display_name", profile_name))
 
-	_emit_status("Connecting as '%s' to %s..." % [profile_name, _resolve_server_url()])
-	_connect_ws()
+	var resolved_server_url: String = _resolve_server_url()
+	if resolved_server_url == "":
+		_emit_status("Server URL is missing or invalid.")
+		return
+
+	_emit_status("Connecting as '%s' to %s..." % [profile_name, resolved_server_url])
+	_connect_ws(resolved_server_url)
 
 func request_world() -> void:
 	_send("request_world", {}, _next_req_id())
@@ -142,34 +148,93 @@ func cancel_plot_order(plot_id: String) -> void:
 		_next_req_id()
 	)
 
-func _resolve_server_url() -> String:
-	# Local override for you (LAN testing) without typing in-game.
-	if FileAccess.file_exists(OVERRIDE_PATH):
-		var f := FileAccess.open(OVERRIDE_PATH, FileAccess.READ)
-		if f:
-			var txt := f.get_as_text().strip_edges()
-			if txt != "":
-				return txt
+func _read_override_server_url() -> String:
+	# Optional per-machine override for local/LAN testing.
+	# This keeps the public-IP default in source control while still letting
+	# your own machine point somewhere else without editing the scene/UI.
+	if not FileAccess.file_exists(OVERRIDE_PATH):
+		return ""
 
-	return DEFAULT_SERVER_URL
+	var file: FileAccess = FileAccess.open(OVERRIDE_PATH, FileAccess.READ)
+	if file == null:
+		return ""
+
+	return _sanitize_server_url(file.get_as_text())
+
+func _sanitize_server_url(raw_url: String) -> String:
+	return raw_url.strip_edges()
+
+func _is_supported_server_url(url: String) -> bool:
+	return url.begins_with("ws://") or url.begins_with("wss://")
+
+func _clear_presence_snapshot() -> void:
+	if _online_players.is_empty():
+		return
+
+	_online_players = []
+	emit_signal("presence_updated", _online_players)
+
+func _reset_connection_runtime_state() -> void:
+	# These values belong to one live connection session only.
+	# Reset them before a new connect attempt and after disconnect so we do not
+	# keep stale latency/presence/ping state around in the UI.
+	_pending_pings.clear()
+	_heartbeat_accum = 0.0
+	_latency_ms = -1.0
+	_clear_presence_snapshot()
+
+func _reset_socket_for_new_connection() -> void:
+	# Always start a fresh socket object for a new connection attempt.
+	# This avoids carrying half-open or previously closed peer state into the
+	# next attempt.
+	if _ws.get_ready_state() != WebSocketPeer.STATE_CLOSED:
+		_ws.close()
+
+	_ws = WebSocketPeer.new()
+	_is_connected = false
+	_is_connecting = false
+	_reset_connection_runtime_state()
+
+func _resolve_server_url() -> String:
+	var override_url: String = _read_override_server_url()
+	if override_url != "":
+		if _is_supported_server_url(override_url):
+			return override_url
+
+		push_warning("Ignoring invalid server_url.txt override. Expected ws:// or wss:// URL.")
+
+	var default_url: String = _sanitize_server_url(DEFAULT_SERVER_URL)
+	if _is_supported_server_url(default_url):
+		return default_url
+
+	push_warning("DEFAULT_SERVER_URL is invalid. Expected ws:// or wss:// URL.")
+	return ""
+	
+func _connect_ws(server_url: String) -> void:
+	_server_url = server_url
+	_reset_socket_for_new_connection()
+
+	var err: int = _ws.connect_to_url(_server_url)
+	if err != OK:
+		# Reset again so failed attempts do not leave ambiguous socket state
+		# behind for the next connect attempt.
+		_reset_socket_for_new_connection()
+		_emit_status("WS connect failed (%s): %s" % [_server_url, str(err)])
+		return
+
+	_is_connecting = true
 
 # -------------------------
 # Internal networking
 # -------------------------
-func _connect_ws() -> void:
-	_server_url = _resolve_server_url()
-	var err = _ws.connect_to_url(_server_url)
-	if err != OK:
-		_emit_status("WS connect failed (%s): %s" % [_server_url, str(err)])
-		return
-
 func _poll_ws() -> void:
 	_ws.poll()
-	var state = _ws.get_ready_state()
+	var state: int = _ws.get_ready_state()
 
 	# Connection opened for the first time
 	if state == WebSocketPeer.STATE_OPEN and not _is_connected:
 		_is_connected = true
+		_is_connecting = false
 		emit_signal("connected")
 		_emit_status("Connected. Sending hello...")
 
@@ -187,17 +252,27 @@ func _poll_ws() -> void:
 
 		_send("hello", payload, _next_req_id())
 
-	# Connection closed after being open
-	if state == WebSocketPeer.STATE_CLOSED and _is_connected:
+	# Handle both:
+	# - real disconnects after being connected
+	# - connection attempts that close before login/handshake completes
+	if state == WebSocketPeer.STATE_CLOSED and (_is_connected or _is_connecting):
+		var was_connected: bool = _is_connected
+
 		_is_connected = false
-		emit_signal("disconnected")
-		_emit_status("Disconnected.")
+		_is_connecting = false
+		_reset_connection_runtime_state()
+
+		if was_connected:
+			emit_signal("disconnected")
+			_emit_status("Disconnected.")
+		else:
+			_emit_status("Connection closed before login completed.")
 
 	# Process incoming messages
 	while _ws.get_available_packet_count() > 0:
-		var pkt = _ws.get_packet()
-		var txt = pkt.get_string_from_utf8()
-		_handle_message(txt)
+		var packet: PackedByteArray = _ws.get_packet()
+		var text: String = packet.get_string_from_utf8()
+		_handle_message(text)
 
 func _handle_message(txt: String) -> void:
 	var msg = JSON.parse_string(txt)
@@ -206,6 +281,11 @@ func _handle_message(txt: String) -> void:
 
 	var msg_type: String = msg.get("type", "")
 	var payload: Dictionary = msg.get("payload", {})
+
+	# Capture a monotonic local receive time once for this message.
+	# We will combine this with the server-authored timestamp carried in the
+	# payload so rendering can estimate "current server time" safely.
+	var received_local_ms: int = Time.get_ticks_msec()
 
 	match msg_type:
 		"hello_ok":
@@ -218,7 +298,7 @@ func _handle_message(txt: String) -> void:
 			display_name = str(payload.get("display_name", profile_name))
 
 			# Save/update this profile on disk so reconnect works forever.
-			var save := {
+			var save: Dictionary = {
 				"profile_name": profile_name,
 				"player_id": player_id,
 				"secret": secret,
@@ -234,13 +314,27 @@ func _handle_message(txt: String) -> void:
 			# Ask for world snapshot (safe even if server also sends it)
 
 		"world_state":
-			# payload: { world: { version, plots: [...] } }
+			# payload: { world: { version, plots: [...] }, server_time_ms }
 			var world_payload: Dictionary = payload.get("world", {})
-			emit_signal("world_state_received", WireAdapter.normalize_world_from_wire(world_payload))
+			var server_time_ms: int = int(payload.get("server_time_ms", 0))
+
+			emit_signal(
+				"world_state_received",
+				WireAdapter.normalize_world_from_wire(
+					world_payload,
+					server_time_ms,
+					received_local_ms
+				)
+			)
 
 		"plot_update":
-			# payload: { plot: {...}, owner_display_name?: "Alice" }
-			var p: Dictionary = WireAdapter.normalize_plot_from_wire(payload.get("plot", {}))
+			# payload: { plot: {...}, owner_display_name?: "Alice", server_time_ms }
+			var server_time_ms: int = int(payload.get("server_time_ms", 0))
+			var p: Dictionary = WireAdapter.normalize_plot_from_wire(
+				payload.get("plot", {}),
+				server_time_ms,
+				received_local_ms
+			)
 
 			# If server provided a name, store it on the plot dict.
 			# This makes PlotView able to show the correct owner name even if
@@ -251,7 +345,15 @@ func _handle_message(txt: String) -> void:
 			emit_signal("plot_updated", p)
 
 		"world_patch":
-			emit_signal("world_patch_received", WireAdapter.normalize_patch_from_wire(payload))
+			var server_time_ms: int = int(payload.get("server_time_ms", 0))
+			emit_signal(
+				"world_patch_received",
+				WireAdapter.normalize_patch_from_wire(
+					payload,
+					server_time_ms,
+					received_local_ms
+				)
+			)
 
 		"claim_result":
 			emit_signal("claim_result_received", payload)
@@ -260,7 +362,7 @@ func _handle_message(txt: String) -> void:
 			emit_signal("clear_plot_object_result_received", payload)
 
 		"error":
-			_emit_status("Server error: %s" % str(payload))
+			_emit_server_error_status(payload)
 			
 		"presence_state":
 			# payload: { online: [ {player_id, display_name}, ... ] }
@@ -273,35 +375,39 @@ func _handle_message(txt: String) -> void:
 		"cancel_plot_order_result":
 			emit_signal("cancel_plot_order_result_received", payload)
 			
-		"error":
-			var reason := str(payload.get("reason", "unknown"))
-			_emit_status("Server error: %s" % reason)
-			
 		"server_pong":
 			# Compute RTT using the request id of the pong (if present)
-			var rid = str(msg.get("req_id", ""))
-			if _pending_pings.has(rid):
-				var sent_ms = int(_pending_pings[rid])
-				_pending_pings.erase(rid)
-				var rtt = Time.get_ticks_msec() - sent_ms
+			var request_id: String = str(msg.get("req_id", ""))
+			if _pending_pings.has(request_id):
+				var sent_ms: int = int(_pending_pings[request_id])
+				_pending_pings.erase(request_id)
+				var rtt_ms: int = Time.get_ticks_msec() - sent_ms
 
 				# Light smoothing so it doesn't jump around
-				if _latency_ms < 0:
-					_latency_ms = float(rtt)
+				if _latency_ms < 0.0:
+					_latency_ms = float(rtt_ms)
 				else:
-					_latency_ms = lerp(_latency_ms, float(rtt), 0.25)
+					_latency_ms = lerp(_latency_ms, float(rtt_ms), 0.25)
 
 				emit_signal("latency_updated", int(round(_latency_ms)))
 
 		_:
 			# Ignore unknown messages for now.
 			pass
+			
+func _emit_server_error_status(payload: Dictionary) -> void:
+	var reason: String = str(payload.get("reason", "")).strip_edges()
+	if reason != "":
+		_emit_status("Server error: %s" % reason)
+		return
+
+	_emit_status("Server error: %s" % str(payload))
 
 func _send(type_name: String, payload: Dictionary, req_id: String) -> void:
 	if _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
 		return
 
-	var env := {
+	var env: Dictionary = {
 		"v": PROTOCOL_VERSION,
 		"type": type_name,
 		"req_id": req_id,

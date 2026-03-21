@@ -265,9 +265,18 @@ func show_plot_detail(plot: Dictionary) -> void:
 	_last_plot_width = width
 	_last_plot_height = height
 
+	var snapshot_server_time_ms: int = int(detail.get("_snapshot_server_time_ms", 0))
+	var snapshot_received_local_ms: int = int(detail.get("_received_local_ms", 0))
+
 	_render_plot_ground(width, height)
 	_sync_starter_objects(detail, width, height)
-	_sync_npcs(detail, width, height)
+	_sync_npcs(
+		detail,
+		width,
+		height,
+		snapshot_server_time_ms,
+		snapshot_received_local_ms
+	)
 
 	
 func refresh_plot_detail(plot: Dictionary) -> void:
@@ -299,8 +308,17 @@ func refresh_plot_detail(plot: Dictionary) -> void:
 		show_plot_detail(plot)
 		return
 
+	var snapshot_server_time_ms: int = int(detail.get("_snapshot_server_time_ms", 0))
+	var snapshot_received_local_ms: int = int(detail.get("_received_local_ms", 0))
+
 	_sync_starter_objects(detail, width, height)
-	_sync_npcs(detail, width, height)
+	_sync_npcs(
+		detail,
+		width,
+		height,
+		snapshot_server_time_ms,
+		snapshot_received_local_ms
+	)
 
 func _ensure_content_root() -> void:
 	if _root == null:
@@ -565,8 +583,27 @@ func _make_npc_marker_placeholder() -> Node3D:
 	node.add_child(mesh_instance)
 
 	return node
+	
+func _estimate_current_server_time_ms(
+	snapshot_server_time_ms: int,
+	snapshot_received_local_ms: int
+) -> int:
+	# Never compare server-authored timestamps to the player's wall clock.
+	# We anchor the snapshot to the local monotonic receive time instead,
+	# then advance from there using elapsed local ticks.
+	if snapshot_server_time_ms <= 0 or snapshot_received_local_ms <= 0:
+		return 0
 
-func _sync_npcs(detail: Dictionary, width: int, height: int) -> void:
+	var elapsed_local_ms: int = maxi(0, Time.get_ticks_msec() - snapshot_received_local_ms)
+	return snapshot_server_time_ms + elapsed_local_ms
+
+func _sync_npcs(
+	detail: Dictionary,
+	width: int,
+	height: int,
+	snapshot_server_time_ms: int,
+	snapshot_received_local_ms: int
+) -> void:
 	var npcs: Variant = detail.get("npcs", [])
 	if typeof(npcs) != TYPE_ARRAY:
 		return
@@ -593,9 +630,25 @@ func _sync_npcs(detail: Dictionary, width: int, height: int) -> void:
 
 			npc_node.name = "NPC_" + npc_id
 			_content_root.add_child(npc_node)
-			_apply_npc_snapshot_to_node(npc_node, npc_dict, width, height, true)
+			_apply_npc_snapshot_to_node(
+				npc_node,
+				npc_dict,
+				width,
+				height,
+				snapshot_server_time_ms,
+				snapshot_received_local_ms,
+				true
+			)
 		else:
-			_apply_npc_snapshot_to_node(npc_node, npc_dict, width, height, false)
+			_apply_npc_snapshot_to_node(
+				npc_node,
+				npc_dict,
+				width,
+				height,
+				snapshot_server_time_ms,
+				snapshot_received_local_ms,
+				false
+			)
 
 		next_rendered_npc_nodes_by_id[npc_id] = npc_node
 
@@ -632,6 +685,8 @@ func _apply_npc_snapshot_to_node(
 	npc_data: Dictionary,
 	width: int,
 	height: int,
+	snapshot_server_time_ms: int,
+	snapshot_received_local_ms: int,
 	snap_immediately: bool
 ) -> void:
 	var npc_id: String = str(npc_data.get("id", ""))
@@ -694,20 +749,47 @@ func _apply_npc_snapshot_to_node(
 		]
 
 		var previous_signature: String = str(_npc_move_signatures_by_id.get(npc_id, ""))
+		var estimated_server_now_ms: int = _estimate_current_server_time_ms(
+			snapshot_server_time_ms,
+			snapshot_received_local_ms
+		)
+
+		# Reconstruct how far through the authoritative move we should already be.
+		# This matters on first snapshot / reconnect so the actor does not restart
+		# the walk from the original source cell.
+		var total_move_ms: int = maxi(0, end_ms - start_ms)
+		var move_progress: float = 0.0
+
+		if estimated_server_now_ms > 0 and total_move_ms > 0:
+			var elapsed_move_ms: int = clampi(
+				estimated_server_now_ms - start_ms,
+				0,
+				total_move_ms
+			)
+			move_progress = float(elapsed_move_ms) / float(total_move_ms)
 
 		if previous_signature != move_signature:
 			if existing_tween != null:
 				existing_tween.kill()
 				_npc_move_tweens_by_id.erase(npc_id)
 
-			var now_ms: int = int(Time.get_unix_time_from_system() * 1000.0)
-			var remaining_ms: int = maxi(0, end_ms - now_ms)
-			var duration_sec: float = maxf(0.05, float(remaining_ms) / 1000.0)
+			# Start from the best-known in-between position for this server-timed move.
+			npc_node.position = current_pos.lerp(target_pos, move_progress)
 
-			var tween: Tween = npc_node.create_tween()
-			tween.tween_property(npc_node, "position", target_pos, duration_sec)
+			var remaining_ms: int = 0
+			if estimated_server_now_ms > 0:
+				remaining_ms = maxi(0, end_ms - estimated_server_now_ms)
 
-			_npc_move_tweens_by_id[npc_id] = tween
+			# If timing metadata is missing or the move has already ended, do not
+			# guess using local wall clock time. Snap to the target instead.
+			if remaining_ms <= 0:
+				npc_node.position = target_pos
+			else:
+				var duration_sec: float = maxf(0.05, float(remaining_ms) / 1000.0)
+				var tween: Tween = npc_node.create_tween()
+				tween.tween_property(npc_node, "position", target_pos, duration_sec)
+				_npc_move_tweens_by_id[npc_id] = tween
+
 			_npc_move_signatures_by_id[npc_id] = move_signature
 	else:
 		if existing_tween != null:

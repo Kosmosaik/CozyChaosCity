@@ -2,9 +2,9 @@
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
 **Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
-**Last updated:** 2026-03-19  
-**Current milestone direction:** **M3 foundation complete; next step should be targeted order selection**  
-**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 now includes the real NPC/order foundation, modular Orders UI, active-order cancellation, and a lightweight developer debug overlay.
+**Last updated:** 2026-03-21  
+**Current milestone direction:** **M3 foundation complete; current priority is post-M3 hardening + friend playtesting**  
+**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 now includes the real NPC/order foundation, modular Orders UI, active-order cancellation, and a lightweight developer debug overlay. A first post-M3 hardening pass is now also implemented: NPC movement presentation is synced from server-authored snapshot timing, visuals use a project-owned `NpcVisual` wrapper, lightweight server dev metrics are in place, and NetClient connection handling is safer for playtesting.
 
 This document is the handoff reference for any future GPT assistant.
 
@@ -39,8 +39,9 @@ Current playable loop:
 Important current direction:
 - the project already has a working first owned-plot mode
 - neighborhood loading/rendering is **not** the active next priority
-- the project is now continuing from the **M3 NPC/order foundation**
+- the project is now continuing from the **M3 NPC/order foundation** plus a selective hardening/playtest pass
 - future work should keep extending stable systems instead of adding rushed feature slices
+- the immediate next priority is not broad order expansion first; it is playtest-driven cleanup and validation on top of the current foundation
 
 ---
 
@@ -134,6 +135,41 @@ Still not the current next step:
 
 These remain valid future goals but are not the active implementation target.
 
+### Post-M3 hardening / playtest baseline — partly implemented
+Delivered in the current session:
+- server-authored timing fields on world/plot payloads:
+  - `server_time_ms` on `world_state`
+  - `server_time_ms` on `plot_update`
+  - `server_time_ms` on `world_patch`
+  - `server_time_ms` on `server_pong`
+- client wire adapters now preserve snapshot timing metadata:
+  - `_snapshot_server_time_ms`
+  - `_received_local_ms`
+- owned-plot NPC presentation now reconstructs movement progress from server snapshot timing instead of client wall-clock time
+- working-state facing now rebuilds deterministically from the rubble target on plot re-entry
+- NPC visuals now use a project-owned `NpcVisual` wrapper scene/script for:
+  - animation player lookup
+  - label-anchor resolution
+  - model-space transform ownership
+- server-side lightweight dev metrics now exist for:
+  - `npc_simulation_ms`
+  - `npc_tick_loop_ms`
+  - `build_client_plot_ms`
+  - `build_client_world_ms`
+  - `persist_clone_world_ms`
+  - `persist_flush_ms`
+  - `persist_write_snapshot_ms`
+- NetClient connection flow is cleaner for playtesting:
+  - override URL validation
+  - fresh socket reset before reconnect attempts
+  - stale latency/presence reset on disconnect
+  - duplicate `"error"` handling removed
+
+Current measurement result:
+- NPC simulation is still cheap under multi-plot scavenging tests
+- the first real scaling pressure is JSON persistence clone/write cost, not NPC logic
+
+
 ---
 
 ## 3) Repository structure (actual repo conventions / active areas)
@@ -161,6 +197,7 @@ cozy-chaos-city/
       core/
         client_view.ts
         config.ts
+        dev_metrics.ts
         npc.ts
         players.ts
         presence.ts
@@ -176,6 +213,8 @@ cozy-chaos-city/
     main.tscn
     hud.tscn
     scenes/
+      actors/
+        NpcVisual.tscn
       ui/
         BottomActionBar.tscn
         NpcCharacterSheet.tscn
@@ -212,6 +251,9 @@ cozy-chaos-city/
         PlotRenderer3D.gd
         PlotTile3D.gd
         TilePicker3D.gd
+        actors/
+          NpcVisual.gd
+          OwnedPlotNpcActor3D.gd
         local_objects/
           Rubble4x4.gd
     shaders/
@@ -241,6 +283,7 @@ Defines:
 - persistence path under `server/data/`
 - keepalive / timeout settings
 - save debounce timing
+- dev-metrics enable/report window flags
 
 ### `server/src/net/protocol.ts`
 Defines the main protocol/world/domain types and runtime message schemas.
@@ -274,6 +317,7 @@ Important architectural note:
 - do not leak raw `WorldState` to clients
 - client-safe payloads are built explicitly now
 - keep DTO/wire shape changes synchronized on both server and client
+- current movement presentation timing now depends on explicit timed payload contracts, not implicit client wall clock assumptions
 
 ### `server/src/core/client_view.ts`
 Owns client-facing world shaping.
@@ -282,6 +326,7 @@ Important responsibilities:
 - build client-safe world payloads
 - encode owner-only detail for the owning player only
 - prevent player secret leakage into client world snapshots
+- emit lightweight dev metrics for world/plot DTO build cost during profiling runs
 
 This file exists because raw server state and client-visible state must stay separate.
 
@@ -331,6 +376,11 @@ Important responsibilities:
 - queue debounced saves
 - write atomically through temp-file rename
 - keep persistence behind an abstraction instead of direct save calls everywhere
+- emit lightweight dev metrics for clone/flush/write timing
+
+Important current reality:
+- profiling now shows JSON persistence clone/write cost is the first real scaling pressure under multi-plot scavenging tests
+- JSON save remains acceptable for the current stage, but it is the first subsystem to revisit when scale grows
 
 ### `server/src/index.ts`
 Currently handles:
@@ -377,6 +427,7 @@ Important current responsibilities:
 
 Important architectural note:
 - this script was recently hardened against freed-node reuse and over-aggressive movement tween resets
+- NPC movement presentation now reconstructs progress from `server_time_ms` snapshot metadata plus local monotonic receive time instead of using client wall clock time
 - future work should keep presentation state separate from authoritative gameplay state
 
 ### Local interaction relay
@@ -409,9 +460,13 @@ Current responsibilities:
 - clear request sending
 - issue-order request sending
 - cancel-order request sending
+- preserving snapshot timing metadata for NPC presentation
+- validating / resolving endpoint override flow for playtesting
 
 Important current detail:
 - compact owner-only local detail is adapted on the client
+- client adapters now preserve snapshot timing metadata so NPC movement presentation can be reconstructed from server-authored timing
+- `NetClient.gd` now validates override URLs, resets stale socket/runtime state on reconnect attempts, and clears stale latency/presence on disconnect
 - any protocol changes for NPC/local data must be kept synchronized with server changes
 
 ### UI
@@ -466,6 +521,9 @@ These are true in the project direction now:
 - the NPC selects nearby rubble jobs and performs the work loop
 - duplicate conflicting scavenging orders are rejected
 - the developer can inspect live plot job/NPC state with F3
+- NPC movement presentation now uses server-authored snapshot timing instead of local wall-clock time
+- NPC visuals now route through the project-owned `NpcVisual` wrapper scene
+- lightweight server dev metrics now exist for tick/build/save timing during playtests
 
 ---
 
@@ -481,6 +539,9 @@ Still temporary or incomplete:
 - local mode still renders only the owned plot
 - interior/private room systems are not implemented
 - `server/src/index.ts` still carries too many responsibilities
+- profile filename sanitization is still deferred
+- the current uploaded repo README is truncated and should be restored before final handoff/cleanup
+- archives are still noisy unless `.git`, `node_modules`, `.godot`, and temp files are excluded manually
 
 ---
 
@@ -545,6 +606,8 @@ Especially:
 - keep code modular
 - never use inferred local variable types in GDScript
 - keep public/client DTOs separate from raw server state
+- don't grow existing scripts unless it's really necessary
+- leave useful comments in code explaining the code
 - provide:
   - what changes
   - why
@@ -562,12 +625,4 @@ Additional project-specific guidance:
 
 ## 10) Handoff warning for the next assistant
 
-Do **not** assume the next task is to continue M2 neighborhood rendering.
-
-That was the old direction.
-
-The updated direction is:
-- M2 foundation is complete enough for now
-- neighborhood is deferred
-- M3 foundation is complete enough for the current project flow
-- the next work should continue from this stable architecture by adding targeted order-selection flow instead of more one-off menu actions
+Nothing. Listen to what the developer wants.
