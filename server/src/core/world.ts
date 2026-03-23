@@ -3,11 +3,18 @@ import {
   PlotDetail,
   PlotDetailCell,
   PlotDetailNpc,
-  PlotDetailStarterObject,
+  PlotLooseItem,
+  PlotObject,
   PlotShell,
   PlotType,
   WorldState,
 } from "../net/protocol";
+import {
+  getItemDefinition,
+  type ItemId,
+  rollStarterRubbleOutputItem,
+  rollStarterRubbleOutputRollCount,
+} from "./items";
 import { makeNpcName } from "./npc_names";
 
 
@@ -68,13 +75,17 @@ export function makeStarterNpc(
     move_to_y: null,
     state_started_at_ms: null,
     state_ends_at_ms: null,
-    carrying_kind: null,
+    // Carry slots replace the old carrying_kind string so later branches can
+    // spawn real items directly into NPC hands without changing the DTO again.
+    carry_slots: [],
+    haul_target_mode: null,
+    haul_target_object_id: null,
   };
 }
 
 function makeStarterPlotDetail(plotId: string): PlotDetail {
   const cells: PlotDetailCell[] = [];
-  const starterObjects: PlotDetailStarterObject[] = [];
+  const plotObjects: PlotObject[] = [];
 
   const clearAreaMinX = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
   const clearAreaMinY = Math.floor((STARTER_DETAIL_SIZE - STARTER_CLEAR_AREA_SIZE) / 2);
@@ -84,6 +95,8 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
   const shackX = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
   const shackY = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
 
+  const dumpZonePlacement = getStarterDumpZonePlacement(shackX, clearAreaMinY);
+
   for (let y = 0; y < STARTER_DETAIL_SIZE; y++) {
     for (let x = 0; x < STARTER_DETAIL_SIZE; x++) {
       const insideStarterClearArea =
@@ -92,12 +105,23 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
         y >= clearAreaMinY &&
         y <= clearAreaMaxY;
 
+      const insideStarterDumpZone = isInsideFootprint(
+        x,
+        y,
+        dumpZonePlacement.x,
+        dumpZonePlacement.y,
+        dumpZonePlacement.footprint_w,
+        dumpZonePlacement.footprint_h
+      );
+
+      const isWalkableStarterGround = insideStarterClearArea || insideStarterDumpZone;
+
       cells.push({
         x,
         y,
-        blocked: !insideStarterClearArea,
-        clearable: !insideStarterClearArea,
-        terrain: insideStarterClearArea ? "GROUND" : "RUBBLE",
+        blocked: !isWalkableStarterGround,
+        clearable: !isWalkableStarterGround,
+        terrain: isWalkableStarterGround ? "GROUND" : "RUBBLE",
       });
     }
   }
@@ -110,23 +134,35 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
         y >= clearAreaMinY &&
         (y + STARTER_RUBBLE_SIZE - 1) <= clearAreaMaxY;
 
-      if (chunkInsideClearArea) {
+      const chunkOverlapsDumpZone = footprintsOverlap(
+        x,
+        y,
+        STARTER_RUBBLE_SIZE,
+        STARTER_RUBBLE_SIZE,
+        dumpZonePlacement.x,
+        dumpZonePlacement.y,
+        dumpZonePlacement.footprint_w,
+        dumpZonePlacement.footprint_h
+      );
+
+      if (chunkInsideClearArea || chunkOverlapsDumpZone) {
         continue;
       }
 
-      starterObjects.push({
+      plotObjects.push({
         id: `starter_rubble_${x}_${y}`,
         kind: "RUBBLE_4X4",
         x,
         y,
         footprint_w: STARTER_RUBBLE_SIZE,
         footprint_h: STARTER_RUBBLE_SIZE,
-        clear_hits_remaining: STARTER_RUBBLE_CLEAR_HITS,
+        // Starter rubble now uses real output counts instead of generic clear hits.
+        remaining_output_rolls: rollStarterRubbleOutputRollCount(),
       });
     }
   }
 
-  starterObjects.push({
+  plotObjects.push({
     id: "starter_shack",
     kind: "SHACK",
     x: shackX,
@@ -135,6 +171,8 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
     footprint_h: STARTER_SHACK_SIZE,
   });
 
+  plotObjects.push(makeStarterDumpZoneObject(dumpZonePlacement.x, dumpZonePlacement.y));
+
   const starterNpcX = shackX + STARTER_SHACK_SIZE + 1;
   const starterNpcY = shackY + STARTER_SHACK_SIZE - 1;
 
@@ -142,7 +180,8 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
     width: STARTER_DETAIL_SIZE,
     height: STARTER_DETAIL_SIZE,
     cells,
-    starter_objects: starterObjects,
+    plot_objects: plotObjects,
+    loose_items: [],
     npcs: [
       makeStarterNpc(plotId, "starter_worker_1", starterNpcX, starterNpcY, "SCAVENGER"),
       makeStarterNpc(plotId, "starter_worker_2", starterNpcX, starterNpcY + 2, "LABORER"),
@@ -214,7 +253,7 @@ export function ensureClaimedPlayerPlotInitialized(plot: Plot): boolean {
 }
 
 function objectOccupiesCell(
-  obj: PlotDetailStarterObject,
+  obj: PlotObject,
   x: number,
   y: number
 ): boolean {
@@ -229,13 +268,253 @@ function objectOccupiesCell(
   );
 }
 
-function getRubbleObjectAtCell(plot: Plot, x: number, y: number): PlotDetailStarterObject | null {
+function isInsideFootprint(
+  x: number,
+  y: number,
+  footprintX: number,
+  footprintY: number,
+  footprintW: number,
+  footprintH: number
+): boolean {
+  return (
+    x >= footprintX &&
+    x < footprintX + footprintW &&
+    y >= footprintY &&
+    y < footprintY + footprintH
+  );
+}
+
+function footprintsOverlap(
+  ax: number,
+  ay: number,
+  aw: number,
+  ah: number,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number
+): boolean {
+  return !(
+    ax + aw <= bx ||
+    bx + bw <= ax ||
+    ay + ah <= by ||
+    by + bh <= ay
+  );
+}
+
+function getStarterDumpZonePlacement(
+  shackX: number,
+  clearAreaMinY: number
+): { x: number; y: number; footprint_w: number; footprint_h: number } {
+  // The current starter clear area is only 8x8 and the shack already consumes 4x4,
+  // so the starter dump zone has to carve out its own cleared footprint.
+  // We anchor it to the right of the shack with a small gap so it stays near the
+  // home area without overlapping the shack or starter rubble chunks.
+  return {
+    x: shackX + STARTER_SHACK_SIZE + STARTER_DUMP_ZONE_GAP_TILES,
+    y: clearAreaMinY,
+    footprint_w: STARTER_DUMP_ZONE_SIZE,
+    footprint_h: STARTER_DUMP_ZONE_SIZE,
+  };
+}
+
+function makeStarterDumpZoneObject(x: number, y: number): PlotObject {
+  return {
+    id: "starter_dump_zone",
+    kind: "DUMP_ZONE_8X8",
+    x,
+    y,
+    footprint_w: STARTER_DUMP_ZONE_SIZE,
+    footprint_h: STARTER_DUMP_ZONE_SIZE,
+    storage: {
+      mode: "ABSTRACT",
+      capacity_max: STARTER_DUMP_ZONE_CAPACITY,
+      capacity_used: 0,
+      item_counts: {},
+      haul_blocked_until_ms: null,
+    },
+  };
+}
+
+function clearCellsInsideFootprint(
+  detail: PlotDetail,
+  footprintX: number,
+  footprintY: number,
+  footprintW: number,
+  footprintH: number
+): void {
+  for (let y = footprintY; y < footprintY + footprintH; y += 1) {
+    for (let x = footprintX; x < footprintX + footprintW; x += 1) {
+      const cell = detail.cells.find((candidate) => candidate.x === x && candidate.y === y);
+      if (!cell) {
+        continue;
+      }
+
+      cell.terrain = "GROUND";
+      cell.blocked = false;
+      cell.clearable = false;
+    }
+  }
+}
+
+function getDumpZoneObject(detail: PlotDetail): PlotObject | null {
+  return detail.plot_objects.find((obj) => obj.kind === "DUMP_ZONE_8X8") ?? null;
+}
+
+export function getPlotObjectById(plot: Plot, objectId: string): PlotObject | null {
   const detail = plot.detail;
   if (!detail) {
     return null;
   }
 
-  for (const obj of detail.starter_objects) {
+  return detail.plot_objects.find((obj) => obj.id === objectId) ?? null;
+}
+
+function getOrCreateDumpZoneStorageState(dumpZoneObject: PlotObject) {
+  if (!dumpZoneObject.storage) {
+    dumpZoneObject.storage = {
+      mode: "ABSTRACT",
+      capacity_max: STARTER_DUMP_ZONE_CAPACITY,
+      capacity_used: 0,
+      item_counts: {},
+      haul_blocked_until_ms: null,
+    };
+  }
+
+  if (typeof dumpZoneObject.storage.haul_blocked_until_ms === "undefined") {
+    dumpZoneObject.storage.haul_blocked_until_ms = null;
+  }
+
+  return dumpZoneObject.storage;
+}
+
+function getNearestObjectFootprintDistance(
+  object: PlotObject,
+  fromX: number,
+  fromY: number
+): number {
+  const footprintW = object.footprint_w ?? 1;
+  const footprintH = object.footprint_h ?? 1;
+  const minX = object.x;
+  const maxX = object.x + footprintW - 1;
+  const minY = object.y;
+  const maxY = object.y + footprintH - 1;
+
+  const nearestX = Math.max(minX, Math.min(fromX, maxX));
+  const nearestY = Math.max(minY, Math.min(fromY, maxY));
+  return Math.abs(fromX - nearestX) + Math.abs(fromY - nearestY);
+}
+
+function canDumpZoneAcceptSingleItemNow(
+  dumpZoneObject: PlotObject,
+  itemId: ItemId,
+  nowMs: number
+): boolean {
+  const storage = getOrCreateDumpZoneStorageState(dumpZoneObject);
+  const itemDefinition = getItemDefinition(itemId);
+
+  if (!itemDefinition.storage.allowed_storage_tags.includes("DUMP_ZONE")) {
+    return false;
+  }
+
+  if (
+    typeof storage.haul_blocked_until_ms === "number" &&
+    nowMs < storage.haul_blocked_until_ms
+  ) {
+    return false;
+  }
+
+  return storage.capacity_used + itemDefinition.storage.dump_zone_capacity_cost <= storage.capacity_max;
+}
+
+export type DirectHaulDestination =
+  | { mode: "DUMP_ZONE"; object_id: string }
+  | { mode: "GROUND" };
+
+export function resolveDirectHaulDestinationForSingleItem(
+  plot: Plot,
+  itemId: ItemId,
+  sourceX: number,
+  sourceY: number,
+  nowMs: number
+): DirectHaulDestination {
+  const detail = plot.detail;
+  if (!detail) {
+    return { mode: "GROUND" };
+  }
+
+  const dumpZoneObject = getDumpZoneObject(detail);
+  if (!dumpZoneObject) {
+    return { mode: "GROUND" };
+  }
+
+  const distanceToDumpZone = getNearestObjectFootprintDistance(
+    dumpZoneObject,
+    sourceX,
+    sourceY
+  );
+  if (distanceToDumpZone > DIRECT_HAUL_MAX_DISTANCE_TILES) {
+    return { mode: "GROUND" };
+  }
+
+  if (!canDumpZoneAcceptSingleItemNow(dumpZoneObject, itemId, nowMs)) {
+    const storage = getOrCreateDumpZoneStorageState(dumpZoneObject);
+    storage.haul_blocked_until_ms = nowMs + DUMP_ZONE_RETRY_BLOCK_MS;
+    return { mode: "GROUND" };
+  }
+
+  return {
+    mode: "DUMP_ZONE",
+    object_id: dumpZoneObject.id,
+  };
+}
+
+export function tryDepositSingleItemIntoDumpZone(
+  plot: Plot,
+  dumpZoneObjectId: string,
+  itemId: ItemId,
+  nowMs: number
+): { changed: boolean; deposited: boolean } {
+  const detail = plot.detail;
+  if (!detail) {
+    return { changed: false, deposited: false };
+  }
+
+  const dumpZoneObject = detail.plot_objects.find(
+    (obj) => obj.id === dumpZoneObjectId && obj.kind === "DUMP_ZONE_8X8"
+  );
+  if (!dumpZoneObject) {
+    return { changed: false, deposited: false };
+  }
+
+  const storage = getOrCreateDumpZoneStorageState(dumpZoneObject);
+  const itemDefinition = getItemDefinition(itemId);
+
+  if (!itemDefinition.storage.allowed_storage_tags.includes("DUMP_ZONE")) {
+    return { changed: false, deposited: false };
+  }
+
+  const nextCapacityUsed =
+    storage.capacity_used + itemDefinition.storage.dump_zone_capacity_cost;
+  if (nextCapacityUsed > storage.capacity_max) {
+    storage.haul_blocked_until_ms = nowMs + DUMP_ZONE_RETRY_BLOCK_MS;
+    return { changed: true, deposited: false };
+  }
+
+  storage.capacity_used = nextCapacityUsed;
+  storage.item_counts[itemId] = (storage.item_counts[itemId] ?? 0) + 1;
+  storage.haul_blocked_until_ms = null;
+
+  return { changed: true, deposited: true };
+}
+
+function getRubbleObjectAtCell(plot: Plot, x: number, y: number): PlotObject | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  for (const obj of detail.plot_objects) {
     if (obj.kind !== "RUBBLE_4X4") {
       continue;
     }
@@ -248,35 +527,228 @@ function getRubbleObjectAtCell(plot: Plot, x: number, y: number): PlotDetailStar
   return null;
 }
 
-function getRubbleObjectById(plot: Plot, objectId: string): PlotDetailStarterObject | null {
-  const detail = plot.detail;
-  if (!detail) {
+function getRubbleObjectById(plot: Plot, objectId: string): PlotObject | null {
+  const plotObject = getPlotObjectById(plot, objectId);
+  if (!plotObject || plotObject.kind !== "RUBBLE_4X4") {
     return null;
   }
 
-  for (const obj of detail.starter_objects) {
-    if (obj.kind !== "RUBBLE_4X4") {
-      continue;
-    }
+  return plotObject;
+}
 
-    if (obj.id === objectId) {
-      return obj;
+function getLooseItems(detail: PlotDetail): PlotLooseItem[] {
+  if (!Array.isArray(detail.loose_items)) {
+    detail.loose_items = [];
+  }
+
+  return detail.loose_items;
+}
+
+function findLooseItemAtTile(
+  detail: PlotDetail,
+  x: number,
+  y: number
+): PlotLooseItem | null {
+  for (const looseItem of getLooseItems(detail)) {
+    if (looseItem.x === x && looseItem.y === y) {
+      return looseItem;
     }
   }
 
   return null;
 }
 
+function makeLooseItemId(detail: PlotDetail): string {
+  let maxNumericId = 0;
+
+  for (const looseItem of getLooseItems(detail)) {
+    const match = /^loose_(\d+)$/.exec(looseItem.id);
+    if (!match) {
+      continue;
+    }
+
+    const parsed = Number.parseInt(match[1], 10);
+    if (Number.isFinite(parsed) && parsed > maxNumericId) {
+      maxNumericId = parsed;
+    }
+  }
+
+  return `loose_${maxNumericId + 1}`;
+}
+
+function isTileInsidePlotBounds(detail: PlotDetail, x: number, y: number): boolean {
+  return x >= 0 && y >= 0 && x < detail.width && y < detail.height;
+}
+
+function isAnyPlotObjectOccupyingTile(
+  detail: PlotDetail,
+  x: number,
+  y: number,
+  ignoreObjectId?: string | null
+): boolean {
+  for (const plotObject of detail.plot_objects) {
+    if (ignoreObjectId && plotObject.id === ignoreObjectId) {
+      continue;
+    }
+
+    if (objectOccupiesCell(plotObject, x, y)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function canLooseItemOccupyTile(
+  detail: PlotDetail,
+  x: number,
+  y: number,
+  itemId: ItemId,
+  ignoreObjectId?: string | null
+): boolean {
+  if (!isTileInsidePlotBounds(detail, x, y)) {
+    return false;
+  }
+
+  const cell = detail.cells.find((candidate) => candidate.x === x && candidate.y === y);
+  if (!cell || cell.blocked) {
+    return false;
+  }
+
+  if (isAnyPlotObjectOccupyingTile(detail, x, y, ignoreObjectId)) {
+    return false;
+  }
+
+  const existingLooseItem = findLooseItemAtTile(detail, x, y);
+  if (!existingLooseItem) {
+    return true;
+  }
+
+  return existingLooseItem.item_id === itemId;
+}
+
+export function findLooseItemPlacementTileNear(
+  plot: Plot,
+  itemId: ItemId,
+  preferredX: number,
+  preferredY: number,
+  ignoreObjectId?: string | null
+): { x: number; y: number } | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  const maxRadius = Math.max(detail.width, detail.height);
+
+  // Ring search keeps placement deterministic and local-first.
+  // We try the preferred tile first, then expand outward until we find:
+  // - an empty valid tile
+  // - or a same-item tile that can merge
+  for (let radius = 0; radius <= maxRadius; radius += 1) {
+    for (let y = preferredY - radius; y <= preferredY + radius; y += 1) {
+      for (let x = preferredX - radius; x <= preferredX + radius; x += 1) {
+        const onRingEdge =
+          x === preferredX - radius ||
+          x === preferredX + radius ||
+          y === preferredY - radius ||
+          y === preferredY + radius;
+
+        if (!onRingEdge) {
+          continue;
+        }
+
+        if (!canLooseItemOccupyTile(detail, x, y, itemId, ignoreObjectId)) {
+          continue;
+        }
+
+        return { x, y };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function spawnLooseItemNearTile(
+  plot: Plot,
+  itemId: ItemId,
+  preferredX: number,
+  preferredY: number,
+  nowMs: number,
+  ignoreObjectId?: string | null
+): { changed: boolean; looseItem: PlotLooseItem | null } {
+  const detail = plot.detail;
+  if (!detail) {
+    return { changed: false, looseItem: null };
+  }
+
+  const itemDefinition = getItemDefinition(itemId);
+  if (!itemDefinition.storage.can_exist_loose) {
+    return { changed: false, looseItem: null };
+  }
+
+  const placementTile = findLooseItemPlacementTileNear(
+    plot,
+    itemId,
+    preferredX,
+    preferredY,
+    ignoreObjectId
+  );
+  if (!placementTile) {
+    return { changed: false, looseItem: null };
+  }
+
+  const existingLooseItem = findLooseItemAtTile(detail, placementTile.x, placementTile.y);
+  if (existingLooseItem) {
+    existingLooseItem.quantity += 1;
+    return { changed: true, looseItem: existingLooseItem };
+  }
+
+  const looseItem: PlotLooseItem = {
+    id: makeLooseItemId(detail),
+    item_id: itemId,
+    quantity: 1,
+    x: placementTile.x,
+    y: placementTile.y,
+    reserved_by_npc_id: null,
+    created_at_ms: nowMs,
+  };
+
+  getLooseItems(detail).push(looseItem);
+  return { changed: true, looseItem };
+}
+
+function ensurePlotObjectsCollection(detail: PlotDetail): boolean {
+  // Saved plots may still carry the old starter_objects field. Migrate that data
+  // once into the durable plot_objects collection before any gameplay code uses it.
+  let changed = false;
+  const legacyStarterObjects =
+    (detail as PlotDetail & { starter_objects?: PlotObject[] }).starter_objects;
+
+  if (!Array.isArray(detail.plot_objects)) {
+    detail.plot_objects = Array.isArray(legacyStarterObjects) ? legacyStarterObjects : [];
+    changed = true;
+  }
+
+  if (Array.isArray(legacyStarterObjects)) {
+    delete (detail as PlotDetail & { starter_objects?: PlotObject[] }).starter_objects;
+    changed = true;
+  }
+
+  return changed;
+}
+
 function clearRubbleObjectFootprint(
   plot: Plot,
-  rubbleObject: PlotDetailStarterObject
+  rubbleObject: PlotObject
 ): boolean {
   const detail = plot.detail;
   if (!detail) {
     return false;
   }
 
-  detail.starter_objects = detail.starter_objects.filter((obj) => obj.id !== rubbleObject.id);
+  detail.plot_objects = detail.plot_objects.filter((obj) => obj.id !== rubbleObject.id);
 
   const footprintW = rubbleObject.footprint_w ?? 1;
   const footprintH = rubbleObject.footprint_h ?? 1;
@@ -297,16 +769,80 @@ function clearRubbleObjectFootprint(
   return true;
 }
 
+function ensureStarterDumpZone(detail: PlotDetail): boolean {
+  const migratedPlotObjects = ensurePlotObjectsCollection(detail);
+  let changed = migratedPlotObjects;
+
+  const existingDumpZone = getDumpZoneObject(detail);
+  if (existingDumpZone) {
+    const storage = getOrCreateDumpZoneStorageState(existingDumpZone);
+    if (storage.capacity_max !== STARTER_DUMP_ZONE_CAPACITY) {
+      storage.capacity_max = STARTER_DUMP_ZONE_CAPACITY;
+      changed = true;
+    }
+
+    clearCellsInsideFootprint(
+      detail,
+      existingDumpZone.x,
+      existingDumpZone.y,
+      existingDumpZone.footprint_w ?? STARTER_DUMP_ZONE_SIZE,
+      existingDumpZone.footprint_h ?? STARTER_DUMP_ZONE_SIZE
+    );
+    return changed;
+  }
+
+  const shack = detail.plot_objects.find((obj) => obj.kind === "SHACK");
+  if (!shack) {
+    return changed;
+  }
+
+  const dumpZonePlacement = getStarterDumpZonePlacement(
+    shack.x,
+    Math.floor((detail.height - STARTER_CLEAR_AREA_SIZE) / 2)
+  );
+
+  detail.plot_objects = detail.plot_objects.filter(
+    (obj) =>
+      obj.kind !== "RUBBLE_4X4" ||
+      !footprintsOverlap(
+        obj.x,
+        obj.y,
+        obj.footprint_w ?? 1,
+        obj.footprint_h ?? 1,
+        dumpZonePlacement.x,
+        dumpZonePlacement.y,
+        dumpZonePlacement.footprint_w,
+        dumpZonePlacement.footprint_h
+      )
+  );
+
+  detail.plot_objects.push(
+    makeStarterDumpZoneObject(dumpZonePlacement.x, dumpZonePlacement.y)
+  );
+  clearCellsInsideFootprint(
+    detail,
+    dumpZonePlacement.x,
+    dumpZonePlacement.y,
+    dumpZonePlacement.footprint_w,
+    dumpZonePlacement.footprint_h
+  );
+  changed = true;
+
+  return changed;
+}
+
 function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
+  const migratedPlotObjects = ensurePlotObjectsCollection(detail);
+
   // Backward-safe migration helper:
   // if an older claimed plot has rubble cells but no rubble objects yet,
   // reconstruct the starter rubble object layout from the current cell data.
-  const hasRubbleObjects = detail.starter_objects.some((obj) => obj.kind === "RUBBLE_4X4");
+  const hasRubbleObjects = detail.plot_objects.some((obj) => obj.kind === "RUBBLE_4X4");
   if (hasRubbleObjects) {
-    return false;
+    return migratedPlotObjects;
   }
 
-  let changed = false;
+  let changed = migratedPlotObjects;
 
   for (let y = 0; y < detail.height; y += STARTER_RUBBLE_SIZE) {
     for (let x = 0; x < detail.width; x += STARTER_RUBBLE_SIZE) {
@@ -330,14 +866,14 @@ function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
         continue;
       }
 
-      detail.starter_objects.push({
+      detail.plot_objects.push({
         id: `starter_rubble_${x}_${y}`,
         kind: "RUBBLE_4X4",
         x,
         y,
         footprint_w: STARTER_RUBBLE_SIZE,
         footprint_h: STARTER_RUBBLE_SIZE,
-        clear_hits_remaining: STARTER_RUBBLE_CLEAR_HITS,
+        remaining_output_rolls: rollStarterRubbleOutputRollCount(),
       });
       changed = true;
     }
@@ -346,19 +882,30 @@ function ensureStarterRubbleObjects(detail: PlotDetail): boolean {
   return changed;
 }
 
-function ensureStarterRubbleObjectClearHits(detail: PlotDetail): boolean {
-  let changed = false;
+function ensureStarterRubbleObjectRemainingOutputs(detail: PlotDetail): boolean {
+  const migratedPlotObjects = ensurePlotObjectsCollection(detail);
+  let changed = migratedPlotObjects;
 
-  for (const obj of detail.starter_objects) {
+  for (const obj of detail.plot_objects) {
     if (obj.kind !== "RUBBLE_4X4") {
       continue;
     }
 
     if (
-      typeof obj.clear_hits_remaining !== "number" ||
-      obj.clear_hits_remaining <= 0
+      typeof obj.remaining_output_rolls !== "number" ||
+      obj.remaining_output_rolls <= 0
     ) {
-      obj.clear_hits_remaining = STARTER_RUBBLE_CLEAR_HITS;
+      // Older saves may still have the pre-logistics clear-hit field.
+      // Migrate it once into the new remaining-output model.
+      const legacyClearHits =
+        (obj as PlotObject & { clear_hits_remaining?: number }).clear_hits_remaining;
+
+      obj.remaining_output_rolls =
+        typeof legacyClearHits === "number" && legacyClearHits > 0
+          ? legacyClearHits
+          : rollStarterRubbleOutputRollCount();
+
+      delete (obj as PlotObject & { clear_hits_remaining?: number }).clear_hits_remaining;
       changed = true;
     }
   }
@@ -413,6 +960,16 @@ function normalizeStarterNpc(
     changed = true;
   }
 
+  if (typeof (npc as PlotDetailNpc & { haul_target_mode?: string | null }).haul_target_mode === "undefined") {
+    (npc as PlotDetailNpc & { haul_target_mode?: string | null }).haul_target_mode = null;
+    changed = true;
+  }
+
+  if (typeof (npc as PlotDetailNpc & { haul_target_object_id?: string | null }).haul_target_object_id === "undefined") {
+    (npc as PlotDetailNpc & { haul_target_object_id?: string | null }).haul_target_object_id = null;
+    changed = true;
+  }
+
   return changed;
 }
 
@@ -422,7 +979,7 @@ function ensureStarterNpcData(plot: Plot): boolean {
     return false;
   }
 
-  let changed = false;
+  let changed = ensurePlotObjectsCollection(detail);
 
   if (!Array.isArray(detail.npcs)) {
     detail.npcs = [];
@@ -437,16 +994,16 @@ function ensureStarterNpcData(plot: Plot): boolean {
   let fallbackX = 0;
   let fallbackY = 0;
 
-  const oldMarker = detail.starter_objects.find((obj) => obj.kind === "NPC_MARKER");
+  const oldMarker = detail.plot_objects.find((obj) => obj.kind === "NPC_MARKER");
   if (oldMarker) {
     fallbackX = oldMarker.x;
     fallbackY = oldMarker.y;
-    detail.starter_objects = detail.starter_objects.filter(
+    detail.plot_objects = detail.plot_objects.filter(
       (obj) => obj.id !== oldMarker.id
     );
     changed = true;
   } else {
-    const shack = detail.starter_objects.find((obj) => obj.kind === "SHACK");
+    const shack = detail.plot_objects.find((obj) => obj.kind === "SHACK");
     if (shack) {
       const shackW = shack.footprint_w ?? 1;
       const shackH = shack.footprint_h ?? 1;
@@ -467,7 +1024,14 @@ function ensureStarterNpcData(plot: Plot): boolean {
 
   for (let index = 0; index < detail.npcs.length; index += 1) {
     const fallbackJobType = index === 0 ? "SCAVENGER" : "LABORER";
-    if (normalizeStarterNpc(plot.id, detail.npcs[index], fallbackJobType)) {
+    const npc = detail.npcs[index];
+
+    if (normalizeStarterNpc(plot.id, npc, fallbackJobType)) {
+      changed = true;
+    }
+
+    if (!Array.isArray(npc.carry_slots)) {
+      npc.carry_slots = [];
       changed = true;
     }
   }
@@ -477,9 +1041,13 @@ function ensureStarterNpcData(plot: Plot): boolean {
     changed = true;
   }
 
+  if (!Array.isArray(detail.loose_items)) {
+    detail.loose_items = [];
+    changed = true;
+  }
+
   return changed;
 }
-
 
 export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailCell | null {
   const detail = plot.detail;
@@ -498,26 +1066,29 @@ export function getPlotDetailCell(plot: Plot, x: number, y: number): PlotDetailC
   return cell ?? null;
 }
 
-export function applyClearActionToPlotObject(
+export function extractRubbleOutputFromPlotObject(
   plot: Plot,
   objectId: string
-): { changed: boolean; cleared: boolean; hitsRemaining: number } {
+): { changed: boolean; cleared: boolean; outputsRemaining: number; itemId: ItemId | null } {
   const rubbleObject = getRubbleObjectById(plot, objectId);
   if (!rubbleObject) {
-    return { changed: false, cleared: false, hitsRemaining: -1 };
+    return { changed: false, cleared: false, outputsRemaining: -1, itemId: null };
   }
 
-  const currentHitsRemaining =
-    typeof rubbleObject.clear_hits_remaining === "number" && rubbleObject.clear_hits_remaining > 0
-      ? rubbleObject.clear_hits_remaining
-      : STARTER_RUBBLE_CLEAR_HITS;
+  const currentOutputsRemaining =
+    typeof rubbleObject.remaining_output_rolls === "number" && rubbleObject.remaining_output_rolls > 0
+      ? rubbleObject.remaining_output_rolls
+      : rollStarterRubbleOutputRollCount();
 
-  if (currentHitsRemaining > 1) {
-    rubbleObject.clear_hits_remaining = currentHitsRemaining - 1;
+  const itemId = rollStarterRubbleOutputItem();
+
+  if (currentOutputsRemaining > 1) {
+    rubbleObject.remaining_output_rolls = currentOutputsRemaining - 1;
     return {
       changed: true,
       cleared: false,
-      hitsRemaining: rubbleObject.clear_hits_remaining,
+      outputsRemaining: rubbleObject.remaining_output_rolls,
+      itemId,
     };
   }
 
@@ -525,7 +1096,38 @@ export function applyClearActionToPlotObject(
   return {
     changed: cleared,
     cleared,
-    hitsRemaining: 0,
+    outputsRemaining: 0,
+    itemId,
+  };
+}
+
+export function applyClearActionToPlotObject(
+  plot: Plot,
+  objectId: string,
+  nowMs: number = Date.now()
+): { changed: boolean; cleared: boolean; hitsRemaining: number } {
+  // Manual/debug clear actions should still yield a real loose item.
+  // Capture the source tile before extraction in case this work round exhausts
+  // and removes the rubble object completely.
+  const sourceObject = getRubbleObjectById(plot, objectId);
+  const preferredX = sourceObject?.x ?? 0;
+  const preferredY = sourceObject?.y ?? 0;
+
+  const action = extractRubbleOutputFromPlotObject(plot, objectId);
+  if (!action.changed || !action.itemId) {
+    return {
+      changed: action.changed,
+      cleared: action.cleared,
+      hitsRemaining: action.outputsRemaining,
+    };
+  }
+
+  spawnLooseItemNearTile(plot, action.itemId, preferredX, preferredY, nowMs, objectId);
+
+  return {
+    changed: true,
+    cleared: action.cleared,
+    hitsRemaining: action.outputsRemaining,
   };
 }
 
@@ -653,7 +1255,11 @@ const STARTER_DETAIL_SIZE = 40;
 const STARTER_CLEAR_AREA_SIZE = 8;
 const STARTER_SHACK_SIZE = 4;
 const STARTER_RUBBLE_SIZE = 4;
-const STARTER_RUBBLE_CLEAR_HITS = 3;
+const STARTER_DUMP_ZONE_SIZE = 8;
+const STARTER_DUMP_ZONE_GAP_TILES = 2;
+const STARTER_DUMP_ZONE_CAPACITY = 200;
+const DIRECT_HAUL_MAX_DISTANCE_TILES = 8;
+const DUMP_ZONE_RETRY_BLOCK_MS = 60_000;
 
 function moduleKey(mx: number, my: number): string {
   return `M_${mx}_${my}`;
@@ -763,14 +1369,19 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
   }
 
   // Detect M0 plots (missing coords) or old type RES_SHARED
-  const hasAnyMissingCoords = world.plots?.some((p: any) => typeof p.x !== "number" || typeof p.y !== "number");
+  const hasAnyMissingCoords = world.plots?.some(
+    (p: any) => typeof p.x !== "number" || typeof p.y !== "number"
+  );
   const hasOldType = world.plots?.some((p: any) => p.type === "RES_SHARED");
 
   if (hasAnyMissingCoords || hasOldType) {
     world.plots = makeStarterPlots3x3();
     world.version = 1;
     changed = true;
-    return { changed, reason: "Old save detected (missing coords / old plot type). Regenerated starter 3x3." };
+    return {
+      changed,
+      reason: "Old save detected (missing coords / old plot type). Regenerated starter 3x3.",
+    };
   }
 
   // Ensure any missing tiles in the current bounds are filled (safety)
@@ -781,6 +1392,7 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
     changed = true;
   }
 
+  let migratedPlotObjects = 0;
   let migratedRubbleObjects = 0;
   let migratedRubbleClearHits = 0;
 
@@ -789,25 +1401,37 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
       continue;
     }
 
+    if (ensurePlotObjectsCollection(plot.detail)) {
+      migratedPlotObjects += 1;
+      changed = true;
+    }
+
+    if (ensureStarterDumpZone(plot.detail)) {
+      changed = true;
+    }
+
     if (ensureStarterRubbleObjects(plot.detail)) {
       migratedRubbleObjects += 1;
       changed = true;
     }
-    if (ensureStarterRubbleObjectClearHits(plot.detail)) {
+
+    if (ensureStarterRubbleObjectRemainingOutputs(plot.detail)) {
       migratedRubbleClearHits += 1;
       changed = true;
     }
+
     if (ensureStarterNpcData(plot)) {
       changed = true;
     }
   }
 
-  if (migratedRubbleObjects > 0 || migratedRubbleClearHits > 0) {
+  if (migratedPlotObjects > 0 || migratedRubbleObjects > 0 || migratedRubbleClearHits > 0) {
     return {
       changed,
       reason:
-        `Migrated rubble local data for ${migratedRubbleObjects} claimed plot(s)` +
-        ` and initialized clear-hit state for ${migratedRubbleClearHits} claimed plot(s).`,
+        `Migrated plot-object collections for ${migratedPlotObjects} claimed plot(s), ` +
+        `reconstructed rubble objects for ${migratedRubbleObjects} claimed plot(s), ` +
+        `and initialized rubble output counts for ${migratedRubbleClearHits} claimed plot(s).`,
     };
   }
 

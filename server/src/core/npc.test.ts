@@ -5,7 +5,7 @@ import {
   tickNpcSimulation,
 } from "./npc";
 import { ensureClaimedPlayerPlotInitialized, normalizeWorldForM0_5 } from "./world";
-import type { Plot, PlotDetail, PlotDetailNpc, WorldState } from "../net/protocol";
+import type { Plot, PlotDetail, WorldState } from "../net/protocol";
 
 function makeClaimedPlayerPlot(): Plot {
   const plot: Plot = {
@@ -44,7 +44,9 @@ function makeClaimedPlayerPlotWithId(plotId: string, x: number, y: number): Plot
 }
 
 function makeLegacyNpcDetail(): PlotDetail {
-  return {
+  // This intentionally uses the pre-logistics owned-plot shape so the
+  // normalization path proves that legacy saves migrate correctly.
+  const legacyDetail = {
     width: 10,
     height: 10,
     cells: [],
@@ -73,12 +75,14 @@ function makeLegacyNpcDetail(): PlotDetail {
         move_to_y: null,
         state_started_at_ms: null,
         state_ends_at_ms: null,
-        carrying_kind: null,
-      } as PlotDetailNpc,
+        carry_slots: [],
+      },
     ],
     jobs: [],
     active_order: null,
   };
+
+  return legacyDetail as unknown as PlotDetail;
 }
 
 describe("npc job system", () => {
@@ -165,6 +169,7 @@ describe("npc job system", () => {
       "SCAVENGING",
       "SCAVENGING_SINGLE",
     ]);
+    expect(npc?.carry_slots).toEqual([]);
   });
 
     it("creates one job for the single-target scavenging order", () => {
@@ -249,6 +254,119 @@ describe("npc job system", () => {
     expect(typeof workingEndsAtMs).toBe("number");
 
     tickNpcSimulation({ plots: [plot] }, workingEndsAtMs as number);
-    expect(scavenger.current_activity).toBe("Carrying scrap");
+    expect(scavenger.current_activity).toBe("Carrying item");
+  });
+it("rolls a real carried item after work completes", () => {
+  const plot = makeClaimedPlayerPlot();
+
+  const issue = issueScavengingOrder(plot, 1000);
+  expect(issue.ok).toBe(true);
+
+  const scavenger = (plot.detail?.npcs ?? []).find(
+    (npc) => npc.job_type === "SCAVENGER"
+  );
+  if (!scavenger) {
+    throw new Error("expected scavenger npc");
+  }
+
+  // First transition: moving_to_target -> working
+  const moveEndsAtMs = scavenger.state_ends_at_ms;
+  expect(typeof moveEndsAtMs).toBe("number");
+  tickNpcSimulation({ plots: [plot] }, moveEndsAtMs as number);
+
+  // Second transition: working -> carrying_to_dropoff
+  const workEndsAtMs = scavenger.state_ends_at_ms;
+  expect(typeof workEndsAtMs).toBe("number");
+  tickNpcSimulation({ plots: [plot] }, workEndsAtMs as number);
+
+  expect(scavenger.state).toBe("carrying_to_dropoff");
+  expect(scavenger.current_activity).toBe("Carrying item");
+  expect(scavenger.carry_slots?.length).toBe(1);
+  expect(["SCRAP_WOOD", "SCRAP_METAL", "TARP", "MIXED_SALVAGE"]).toContain(
+    scavenger.carry_slots?.[0]?.item_id ?? ""
+  );
+});
+
+  it("deposits into the dump zone when a valid direct-haul target is nearby", () => {
+    const plot = makeClaimedPlayerPlot();
+
+    const issue = issueScavengingOrder(plot, 1000);
+    expect(issue.ok).toBe(true);
+
+    const scavenger = (plot.detail?.npcs ?? []).find((npc) => npc.job_type === "SCAVENGER");
+    const dumpZone = (plot.detail?.plot_objects ?? []).find(
+      (obj) => obj.id === "starter_dump_zone"
+    );
+    if (!scavenger || !dumpZone?.storage) {
+      throw new Error("expected starter scavenger and dump zone");
+    }
+
+    // moving_to_target -> working
+    const moveEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof moveEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, moveEndsAtMs as number);
+
+    // working -> carrying_to_dropoff
+    const workEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof workEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, workEndsAtMs as number);
+
+    // carrying_to_dropoff -> dropping_off
+    const carryEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof carryEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, carryEndsAtMs as number);
+
+    // dropping_off -> next state, item abstracted into dump zone
+    const dropEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof dropEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, dropEndsAtMs as number);
+
+    expect(scavenger.carry_slots).toEqual([]);
+    expect(dumpZone.storage.capacity_used).toBeGreaterThan(0);
+    expect((plot.detail?.loose_items ?? []).length).toBe(0);
+  });
+
+  it("drops the carried item as a loose item when the dump zone is full", () => {
+    const plot = makeClaimedPlayerPlot();
+    const dumpZone = (plot.detail?.plot_objects ?? []).find(
+      (obj) => obj.id === "starter_dump_zone"
+    );
+    if (!dumpZone?.storage) {
+      throw new Error("expected starter dump zone");
+    }
+
+    dumpZone.storage.capacity_used = dumpZone.storage.capacity_max;
+
+    const issue = issueScavengingOrder(plot, 1000);
+    expect(issue.ok).toBe(true);
+
+    const scavenger = (plot.detail?.npcs ?? []).find((npc) => npc.job_type === "SCAVENGER");
+    if (!scavenger) {
+      throw new Error("expected scavenger npc");
+    }
+
+    // moving_to_target -> working
+    const moveEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof moveEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, moveEndsAtMs as number);
+
+    // working -> carrying_to_dropoff
+    const workEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof workEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, workEndsAtMs as number);
+
+    // carrying_to_dropoff -> dropping_off
+    const carryEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof carryEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, carryEndsAtMs as number);
+
+    // dropping_off -> next state, item falls back to the ground
+    const dropEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof dropEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, dropEndsAtMs as number);
+
+    expect(scavenger.carry_slots).toEqual([]);
+    expect((plot.detail?.loose_items ?? []).length).toBeGreaterThan(0);
+    expect(typeof dumpZone.storage.haul_blocked_until_ms).toBe("number");
   });
 });

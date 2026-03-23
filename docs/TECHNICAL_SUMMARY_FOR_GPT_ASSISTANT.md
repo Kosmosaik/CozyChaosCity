@@ -2,9 +2,9 @@
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
 **Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
-**Last updated:** 2026-03-21  
-**Current milestone direction:** **M3 foundation complete; current priority is post-M3 hardening + friend playtesting**  
-**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 now includes the real NPC/order foundation, modular Orders UI, active-order cancellation, and a lightweight developer debug overlay. A first post-M3 hardening pass is now also implemented: NPC movement presentation is synced from server-authored snapshot timing, visuals use a project-owned `NpcVisual` wrapper, lightweight server dev metrics are in place, and NetClient connection handling is safer for playtesting.
+**Last updated:** 2026-03-23  
+**Current milestone direction:** **Early logistics foundation in progress; immediate next priority is Branch 1D client representation for Dump Zone + loose items**  
+**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 delivered the real NPC/order foundation. Post-M3 hardening is in place. The repo has now also started the first logistics foundation: authoritative item ids, `plot_objects`, `loose_items`, real NPC carry slots, rubble output rolls, tile-based loose-item spawning/merge, and server-side Dump Zone intake with capacity + fallback behavior.
 
 This document is the handoff reference for any future GPT assistant.
 
@@ -169,6 +169,42 @@ Current measurement result:
 - NPC simulation is still cheap under multi-plot scavenging tests
 - the first real scaling pressure is JSON persistence clone/write cost, not NPC logic
 
+---
+
+### Early logistics foundation — partly implemented
+Delivered:
+- authoritative item/output foundation:
+  - `server/src/core/items.ts`
+  - `server/src/core/items.test.ts`
+- logistics protocol/domain refactor:
+  - `plot_objects`
+  - `loose_items`
+  - `PlotObjectStorageState`
+  - `carry_slots`
+  - NPC haul target metadata
+- legacy migration support from:
+  - `starter_objects` -> `plot_objects`
+  - `clear_hits_remaining` -> `remaining_output_rolls`
+- rubble now yields one real item per completed work round
+- loose items now exist as authoritative plot state with tile-based merge behavior
+- starter Dump Zone now exists server-side as a real plot object with:
+  - abstract storage
+  - finite capacity
+  - full-state retry block
+- scavengers now place a real item into their hands first, then:
+  - direct-haul to Dump Zone when valid and within 8 tiles
+  - otherwise drop to the ground
+
+Not yet implemented:
+- Dump Zone rendering in the client
+- loose-item rendering in the client
+- hauling existing loose items into storage
+- pickup reservations for loose-item hauling
+- Basic Stockpile gameplay
+- Sorting Station gameplay
+
+Important current next step:
+- complete **Branch 1D** first so the current server-authoritative logistics loop is visible and debuggable in the client before adding stockpiles/sorting
 
 ---
 

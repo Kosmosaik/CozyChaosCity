@@ -2,13 +2,21 @@ import {
   Plot,
   PlotDetail,
   PlotDetailNpc,
-  PlotDetailStarterObject,
+  PlotNpcCarrySlot,
+  PlotObject,
   PlotJob,
   PlotOrder,
   PlotOrderKind,
   PlotOrderTargetScope,
 } from "../net/protocol";
-import { applyClearActionToPlotObject } from "./world";
+import {
+  extractRubbleOutputFromPlotObject,
+  findLooseItemPlacementTileNear,
+  getPlotObjectById,
+  resolveDirectHaulDestinationForSingleItem,
+  spawnLooseItemNearTile,
+  tryDepositSingleItemIntoDumpZone,
+} from "./world";
 
 const MOVE_MS_PER_CELL = 310;
 const MIN_MOVE_MS = 450;
@@ -19,8 +27,8 @@ const ACTIVITY_BY_STATE: Record<PlotDetailNpc["state"], string> = {
   idle: "Idle",
   moving_to_target: "Walking to rubble",
   working: "Clearing rubble",
-  carrying_to_dropoff: "Carrying scrap",
-  dropping_off: "Dropping off scrap",
+  carrying_to_dropoff: "Carrying item",
+  dropping_off: "Dropping off item",
   returning: "Returning",
 };
 
@@ -67,31 +75,112 @@ function getJobs(detail: PlotDetail): PlotJob[] {
 function getRubbleObjects(plot: Plot) {
   const detail = getDetail(plot);
   if (!detail) return [];
-  return detail.starter_objects.filter((obj) => obj.kind === "RUBBLE_4X4");
+  return detail.plot_objects.filter((obj) => obj.kind === "RUBBLE_4X4");
 }
 
 function manhattanDistance(ax: number, ay: number, bx: number, by: number): number {
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
-function getDropoffCell(detail: PlotDetail, npc: PlotDetailNpc): { x: number; y: number } {
-  const shack = detail.starter_objects.find((obj) => obj.kind === "SHACK");
-  if (!shack) {
+function getDropoffCell(
+  plot: Plot,
+  npc: PlotDetailNpc,
+  nowMs: number
+): { x: number; y: number } {
+  const detail = getDetail(plot);
+  if (!detail) {
     return { x: npc.home_x, y: npc.home_y };
   }
 
-  const shackW = shack.footprint_w ?? 1;
-  const shackH = shack.footprint_h ?? 1;
+  const carriedItem = getFirstCarriedItemId(npc);
+  if (!carriedItem) {
+    npc.haul_target_mode = null;
+    npc.haul_target_object_id = null;
+    return { x: npc.home_x, y: npc.home_y };
+  }
 
-  return {
-    x: shack.x + shackW + 1,
-    y: shack.y + shackH - 1,
+  const preferredX = npc.x;
+  const preferredY = npc.y;
+  const haulTarget = resolveDirectHaulDestinationForSingleItem(
+    plot,
+    carriedItem,
+    preferredX,
+    preferredY,
+    nowMs
+  );
+
+  if (haulTarget.mode === "DUMP_ZONE") {
+    const dumpZoneObject = getPlotObjectById(plot, haulTarget.object_id);
+    if (dumpZoneObject) {
+      npc.haul_target_mode = "DUMP_ZONE";
+      npc.haul_target_object_id = dumpZoneObject.id;
+      return getObjectEdgeWorkCell(dumpZoneObject, preferredX, preferredY);
+    }
+  }
+
+  // Ground fallback stays explicit on the NPC snapshot so the later drop-off
+  // step does not have to guess whether the NPC was meant to deposit or dump.
+  npc.haul_target_mode = "GROUND";
+  npc.haul_target_object_id = null;
+
+  const syntheticPlot: Plot = {
+    id: "synthetic_drop_target_plot",
+    type: "PLAYER",
+    x: 0,
+    y: 0,
+    claimed_by: null,
+    detail,
   };
+
+  const dropTile = findLooseItemPlacementTileNear(
+    syntheticPlot,
+    carriedItem,
+    preferredX,
+    preferredY,
+    npc.target_object_id ?? null
+  );
+
+  if (dropTile) {
+    return dropTile;
+  }
+
+  return { x: npc.home_x, y: npc.home_y };
 }
 
 function clearMovementFields(npc: PlotDetailNpc) {
   npc.move_to_x = null;
   npc.move_to_y = null;
+}
+
+function clearNpcCarrySlots(npc: PlotDetailNpc): void {
+  npc.carry_slots = [];
+}
+
+function clearNpcHaulTarget(npc: PlotDetailNpc): void {
+  npc.haul_target_mode = null;
+  npc.haul_target_object_id = null;
+}
+
+function createCarrySlotsForSingleItem(
+  itemId: PlotNpcCarrySlot["item_id"]
+): PlotNpcCarrySlot[] {
+  // Branch 1A only needs one carried medium item at a time.
+  // The carry-slot structure still leaves room for future two-hand or multi-slot
+  // hauling without changing the DTO shape again.
+  return [
+    {
+      slot: "LEFT_HAND",
+      item_id: itemId,
+      quantity: 1,
+    },
+  ];
+}
+
+function getFirstCarriedItemId(
+  npc: PlotDetailNpc
+): PlotNpcCarrySlot["item_id"] | null {
+  const firstSlot = Array.isArray(npc.carry_slots) ? npc.carry_slots[0] : null;
+  return firstSlot?.item_id ?? null;
 }
 
 function snapNpcToMoveTarget(npc: PlotDetailNpc) {
@@ -181,7 +270,7 @@ function isCancelableJobStatus(status: PlotJob["status"]): boolean {
 }
 
 function getObjectEdgeWorkCell(
-  object: PlotDetailStarterObject,
+  object: PlotObject,
   fromX: number,
   fromY: number
 ): { x: number; y: number } {
@@ -230,7 +319,7 @@ function getObjectEdgeWorkCell(
 }
 
 function createScavengeJob(
-  rubble: PlotDetailStarterObject,
+  rubble: PlotObject,
   nowMs: number,
   orderKind: PlotOrderKind,
   targetScope: PlotOrderTargetScope
@@ -299,7 +388,7 @@ function ensureScavengeJobForSingle(
     return 0;
   }
 
-  let bestRubble: PlotDetailStarterObject | null = null;
+  let bestRubble: PlotObject | null = null;
   let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const rubble of rubbleObjects) {
@@ -355,7 +444,7 @@ function findJobTargetCell(
   const detail = getDetail(plot);
   if (!detail) return null;
 
-  const rubble = detail.starter_objects.find(
+  const rubble = detail.plot_objects.find(
     (obj) => obj.kind === "RUBBLE_4X4" && obj.id === job.target_object_id
   );
   if (!rubble) return null;
@@ -445,7 +534,8 @@ function assignNextJob(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
 
   npc.assigned_order = nextJob.source_order_kind;
   npc.target_object_id = nextJob.target_object_id;
-  npc.carrying_kind = null;
+  clearNpcCarrySlots(npc);
+  clearNpcHaulTarget(npc);
 
   beginMove(npc, "moving_to_target", target.x, target.y, nowMs);
   syncActiveOrder(detail);
@@ -528,7 +618,8 @@ export function cancelActivePlotOrder(
     // Fully reset NPC assignment
     npc.assigned_order = null;
     npc.target_object_id = null;
-    npc.carrying_kind = null;
+    clearNpcCarrySlots(npc);
+    clearNpcHaulTarget(npc);
 
     // Always safely transition NPC state
     if (npc.x === npc.home_x && npc.y === npc.home_y) {
@@ -643,18 +734,30 @@ function tickNpc(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
         npc.state_ends_at_ms = null;
         npc.target_object_id = null;
         npc.assigned_order = null;
+        clearNpcHaulTarget(npc);
         updateNpcActivity(npc);
         syncActiveOrder(detail);
         return true;
       }
 
-      const action = applyClearActionToPlotObject(plot, npc.target_object_id);
+      const action = extractRubbleOutputFromPlotObject(plot, npc.target_object_id);
 
-      if (!action.changed) {
+      if (!action.changed || !action.itemId) {
         job.status = "cancelled";
         job.assigned_npc_id = null;
         job.updated_at_ms = nowMs;
-      } else if (action.cleared) {
+        npc.state = "idle";
+        npc.state_started_at_ms = null;
+        npc.state_ends_at_ms = null;
+        npc.target_object_id = null;
+        npc.assigned_order = null;
+        clearNpcHaulTarget(npc);
+        updateNpcActivity(npc);
+        syncActiveOrder(detail);
+        return true;
+      }
+
+      if (action.cleared) {
         job.status = "completed";
         job.assigned_npc_id = npc.id;
         job.updated_at_ms = nowMs;
@@ -664,8 +767,12 @@ function tickNpc(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
         job.updated_at_ms = nowMs;
       }
 
-      const dropoff = getDropoffCell(detail, npc);
-      npc.carrying_kind = "SCRAP";
+      // The found item now exists in the NPC's hands first. This branch adds
+      // the first real direct-haul decision on top of that carry state:
+      // nearby dump zone if valid, otherwise explicit ground fallback.
+      npc.carry_slots = createCarrySlotsForSingleItem(action.itemId);
+
+      const dropoff = getDropoffCell(plot, npc, nowMs);
       beginMove(npc, "carrying_to_dropoff", dropoff.x, dropoff.y, nowMs);
       syncActiveOrder(detail);
       return true;
@@ -678,7 +785,45 @@ function tickNpc(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
     }
 
     case "dropping_off": {
-      npc.carrying_kind = null;
+      const carriedItemId = getFirstCarriedItemId(npc);
+      if (carriedItemId) {
+        if (
+          npc.haul_target_mode === "DUMP_ZONE" &&
+          typeof npc.haul_target_object_id === "string"
+        ) {
+          const deposit = tryDepositSingleItemIntoDumpZone(
+            plot,
+            npc.haul_target_object_id,
+            carriedItemId,
+            nowMs
+          );
+
+          // Full or blocked dump zones must safely fall back to a nearby ground
+          // drop instead of deleting items or leaving the NPC stuck carrying.
+          if (!deposit.deposited) {
+            spawnLooseItemNearTile(
+              plot,
+              carriedItemId,
+              npc.x,
+              npc.y,
+              nowMs,
+              npc.haul_target_object_id
+            );
+          }
+        } else {
+          spawnLooseItemNearTile(
+            plot,
+            carriedItemId,
+            npc.x,
+            npc.y,
+            nowMs,
+            npc.target_object_id ?? null
+          );
+        }
+      }
+
+      clearNpcCarrySlots(npc);
+      clearNpcHaulTarget(npc);
       npc.target_object_id = null;
 
       if ((detail.jobs ?? []).some((job) => job.status === "queued")) {
@@ -694,6 +839,7 @@ function tickNpc(plot: Plot, npc: PlotDetailNpc, nowMs: number): boolean {
       npc.state = "idle";
       npc.state_started_at_ms = null;
       npc.state_ends_at_ms = null;
+      clearNpcHaulTarget(npc);
       updateNpcActivity(npc);
       syncActiveOrder(detail);
       return true;

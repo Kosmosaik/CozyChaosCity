@@ -254,14 +254,51 @@ The repo now meets the M3 foundation goal:
 - NetClient connection handling is more reliable for friend playtesting through cleaner override validation and socket reset flow
 
 ### Next recommended direction after M3
-The immediate next priority is selective hardening plus friend-playtest validation, not broader order expansion first.
 
-That means:
-- keep using the new dev metrics during larger playtests
-- finish the remaining small A5 cleanup items only if testing reveals pain points
-- avoid growing the known hotspot files further
+The project has now already started the first real **early logistics foundation** on top of the M3 NPC/order base.
 
-After that, the next gameplay-facing step should be the first **targeted order-selection flow**, so the player can choose a rubble target or marked area instead of depending on the temporary `Scavenge All` convenience action.
+### What is already true in the repo
+- owned-plot logistics now has authoritative item ids
+- owned-plot state now uses `plot_objects` instead of `starter_objects`
+- owned-plot state now supports:
+  - loose ground items
+  - NPC carry slots
+  - storage state on plot objects
+- rubble now produces one real item per completed work round
+- starter rubble now uses `remaining_output_rolls`
+- a starter Dump Zone now exists server-side as a real plot object with:
+  - abstract storage
+  - finite capacity
+  - 1-minute retry block when full
+- scavengers now:
+  - receive a real item into their hands first
+  - direct-haul to the Dump Zone when it is valid and within range
+  - otherwise fall back to a ground drop
+
+### Immediate next priority
+The immediate next milestone slice is **Branch 1D** of the logistics roadmap:
+
+- render the Dump Zone in the owned plot
+- render loose ground items
+- expose enough player-facing/debug readability to verify:
+  - carried item flow
+  - direct-haul into Dump Zone
+  - fallback to ground when Dump Zone is full
+
+### What should come after that
+After Branch 1D is readable and stable in the client, the next real gameplay phase should be:
+
+- **Phase 2 — Basic Stockpile and Physical Construction Delivery**
+- then **Phase 3 — Sorting Station and Mixed Salvage processing**
+
+### Important direction
+Do not steer the project back toward “more M3 features first” as the default path.
+
+The correct current direction is:
+
+1. finish Branch 1D client verification for the logistics foundation
+2. then continue into stockpiles / construction delivery
+3. then sorting / Mixed Salvage processing
 
 ---
 

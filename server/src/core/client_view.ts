@@ -29,7 +29,11 @@ export function encodePlotDetailForClient(detail: PlotDetail): ClientPlotDetail 
     width: detail.width,
     height: detail.height,
     cell_rows,
-    starter_objects: detail.starter_objects,
+    // Plot objects are the durable local-object DTO for logistics-era owned plots.
+    plot_objects: detail.plot_objects,
+    // The client should always receive an array here so UI/render code does not
+    // need null/undefined branching once loose items start spawning.
+    loose_items: detail.loose_items ?? [],
     npcs: detail.npcs ?? [],
     jobs: detail.jobs ?? [],
     active_order: detail.active_order ?? null,

@@ -2,157 +2,139 @@
 
 You are continuing work on the **Cozy Chaos City** project.
 
-## Important instructions
+## Mandatory first step
 
-- Read the project source .zip **recursively** before making suggestions.
-- Start by reading these files carefully:
-  - `docs/GPT_Assistant_Rules.md`
-  - `CHANGELOG.md`
-  - `docs/milestones.md`
-  - `docs/M3_implementation_plan.md`
-  - `docs/TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md`
-- Follow `docs/GPT_Assistant_Rules.md` strictly.
+Read the latest uploaded repo zip **recursively** before making suggestions.
+
+Then read these files carefully:
+
+- `docs/GPT_Assistant_Rules.md`
+- `CHANGELOG.md`
+- `docs/milestones.md`
+- `docs/CozyChaosCity_Logistics_Technical_Implementation_Roadmap.md`
+- `docs/TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md`
+
+Follow `docs/GPT_Assistant_Rules.md` strictly.
+
+---
+
+## Important implementation rules
+
 - Use the **actual current files from the repo**, not assumptions.
 - Give **exact file paths** and **exact insertion/replacement anchors**.
-- Keep code **modular** and avoid spaghetti.
-- For **new files**, provide the **full file**.
-- For **existing files**, provide **minimal patches only**, perferably replacement of whole functions.
+- Keep code modular.
+- For **new files**, provide the **entire file**.
+- For **existing files**, provide the **smallest exact patch possible**, preferably whole-function replacements when practical.
+- Keep server/client protocol changes synchronized intentionally.
 - Explain:
   - what each change does
   - where it goes
-  - why it works
+  - why it is structured that way
   - how to test it
-- Use **Godot editor instructions first** when static UI/scene changes are needed.
-- Keep **server/client protocol changes synchronized**.
+- Leave meaningful comments in code.
+- Do not invent design/balance behavior when the repo or user has not locked it yet — ask first.
+
+---
 
 ## Current confirmed project state
 
-The repo is already past the earlier M2 groundwork.
+The project is already past M3.
 
-What is already implemented:
+### Already implemented
+- M0, M0.5, M1, M2, and the M3 NPC/order foundation
+- post-M3 hardening:
+  - server-authored snapshot timing
+  - `NpcVisual` wrapper
+  - dev metrics
+  - safer NetClient reconnect flow
 
-- M1 is complete and working.
-- M2 has already delivered the first real owned-plot gameplay foundation.
-- The player can:
-  - connect/login
-  - view the world
-  - claim a plot
-  - enter their owned plot
-  - leave back to the world
-- Camera enter/exit transition exists and works.
-- Transition sound hook exists.
-- Local owned-plot rendering exists.
-- Hidden local cells still exist for logic.
-- Ground is player-facing presentation, while the hidden grid is for logic/snap/blocking.
-- Rubble is represented as real local 4x4 objects.
-- Real rubble interaction is implemented:
-  - click/right-click rubble
-  - popup action flow
-  - send clear request by object id
-  - server validates and clears authoritatively
-  - updated plot detail is broadcast back
-  - removed rubble animates out on the client
-- Multi-step rubble clearing is implemented:
-  - rubble stores remaining clear hits
-  - final clear removes rubble and frees its footprint
-- Player Plot camera parity is implemented:
-  - local mode now uses free camera movement after enter
-  - movement bounds exist
-  - world camera state is restored on exit
-- Local visual polish was added:
-  - rubble random Y rotation
-  - rubble slight random X/Z offset
-  - randomized multi-texture ground shader for the plot ground
-  - smoke effect on final rubble removal
-- Local detail is owner-only and compacted on the wire for stability.
-- The current NPC in local view is still a **placeholder marker**.
+### Logistics foundation already implemented in the repo
+- authoritative item ids and starter-rubble output rules now exist in:
+  - `server/src/core/items.ts`
+- owned-plot protocol/domain state now uses:
+  - `plot_objects`
+  - `loose_items`
+  - `carry_slots`
+  - plot-object storage state
+  - NPC haul target metadata
+- legacy migration paths exist for older owned-plot saves
+- rubble now uses `remaining_output_rolls`
+- each completed scavenging work round yields one real item
+- loose items now exist as authoritative plot state
+- same-item/same-tile merge is implemented
+- a starter Dump Zone now exists server-side as a real plot object with:
+  - abstract storage
+  - finite capacity
+  - full-state retry cooldown
+- current scavenger behavior is:
+  1. finish work round
+  2. receive a real item into carry slots
+  3. direct-haul to Dump Zone if valid and within 8 tiles
+  4. otherwise drop to the ground
+
+### Important current limitations
+- Dump Zone is **not rendered yet** in the client
+- loose ground items are **not rendered yet** in the client
+- current direct-haul only covers newly scavenged output
+- hauling existing loose items into storage is not implemented yet
+- loose-item pickup reservations are not implemented yet
+- Basic Stockpile is not implemented yet
+- Sorting Station gameplay is not implemented yet
+
+---
 
 ## Current priority order
 
-1. **M3 - NPC foundation and first local orders**
-2. Then interaction UX polish as needed
-3. Neighborhood/public local rendering later
-4. Broader business/economy expansion after the NPC base is proven
+1. **Branch 1D — Client representation and verification**
+   - render Dump Zone
+   - render loose items
+   - make current logistics behavior readable in the client
+2. **Phase 2 — Basic Stockpile and physical construction delivery**
+3. **Phase 3 — Sorting Station and Mixed Salvage processing**
 
-## Important direction
+Do **not** steer the project back toward “more M3 feature work first” unless the user explicitly asks for it.
 
-Neighborhood loading/rendering is **not** the current next step anymore.
+---
 
-Do **not** write as if:
-- neighborhood is still the immediate priority
-- camera parity is still upcoming
-- real rubble interaction is still upcoming
+## Useful current assets in the repo
 
-Those are already done.
+The uploaded repo already contains storage/building assets that may matter for upcoming client-side logistics visualization:
 
-## What M3 is supposed to achieve
+- `client/assets/storage/LastPall.glb`
+- `client/assets/buildings/SortingStation.glb`
 
-The next milestone is:
+Do not assume they are already wired into scenes/scripts. Check the repo first.
 
-## M3 - NPC Foundation and First Local Orders
-
-The first M3 implementation should stay intentionally small and server-authoritative.
-
-Target direction:
-- add dedicated NPC data
-- separate NPCs from static starter objects
-- add a small bounded server-side NPC simulation/tick path
-- replace the placeholder NPC marker with a real local NPC actor representation
-- add the first simple NPC state machine
-- add the first player-issued order:
-  - `Scavenging`
-- let an eligible NPC perform a simple local scavenging loop on the owned plot
-
-Recommended first NPC states:
-- `idle`
-- `moving_to_target`
-- `working`
-- `carrying_to_dropoff`
-- `dropping_off`
-- `returning`
-
-Recommended first scavenging loop:
-1. Player issues `Scavenging` order
-2. Server validates the order
-3. Eligible owned-plot NPC accepts the task
-4. NPC moves to a valid local scavenging target
-5. NPC works for a short time
-6. NPC returns to the shack/drop area
-7. NPC visibly drops found material
-8. NPC continues if more valid work remains, otherwise returns idle
-
-## Very important technical direction
-
-Do **not** fake major NPC behavior entirely on the client.
-
-Keep the first NPC implementation **server-authoritative** for:
-- task assignment
-- state progression
-- work timing
-- result generation
-- completion/cancel behavior
-
-Client responsibilities should mainly be:
-- rendering NPCs
-- showing movement/state
-- sending order requests
-- reflecting server updates
+---
 
 ## What I want from you first
 
-Before proposing code changes:
+Before proposing changes:
 
-1. Summarize the **current repo state** from the actual files.
-2. Confirm exactly what is already implemented.
-3. Identify the **cleanest first vertical slice for M3** based on the current codebase.
-4. Then prepare the implementation for that M3 slice only.
+1. Summarize the **actual current repo state** from the latest files.
+2. Confirm exactly what part of the logistics roadmap is already implemented.
+3. Identify the **smallest correct next slice**.
+4. Then implement **only that slice**.
 
-## Extra guidance
+The expected next slice is probably **Branch 1D**, unless the actual repo state proves otherwise.
 
-- Do not skip the repo-reading step.
-- Do not invent files or project state.
-- Base everything on the actual repo.
-- Keep the initial summary short before moving into the implementation plan.
-- Keep the first M3 slice small, testable, and clean.
-- Avoid giant speculative systems or overengineering.
-- Prefer building the smallest real NPC loop that future work can extend.
+---
+
+## Technical direction reminder
+
+Keep this server-authoritative.
+
+Do not fake logistics entirely on the client.
+
+The correct architecture direction is:
+- server owns:
+  - item ids
+  - storage
+  - routing decisions
+  - loose-item state
+  - NPC work/carry/drop state
+- client owns:
+  - rendering
+  - interaction
+  - readable verification/debug UI
+  - presentation of server-authored state

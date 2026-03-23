@@ -167,17 +167,17 @@ func _build_active_order_text(detail: Dictionary) -> String:
 
 func _count_rubble_targets(detail: Dictionary) -> int:
 	var count: int = 0
-	var starter_objects_value: Variant = detail.get("starter_objects", [])
-	if typeof(starter_objects_value) != TYPE_ARRAY:
+	var plot_objects_value: Variant = detail.get("plot_objects", [])
+	if typeof(plot_objects_value) != TYPE_ARRAY:
 		return count
 
-	var starter_objects: Array = starter_objects_value as Array
-	for object_value in starter_objects:
+	var plot_objects: Array = plot_objects_value as Array
+	for object_value in plot_objects:
 		if typeof(object_value) != TYPE_DICTIONARY:
 			continue
 
-		var starter_object: Dictionary = object_value as Dictionary
-		if str(starter_object.get("kind", "")) == "RUBBLE_4X4":
+		var plot_object: Dictionary = object_value as Dictionary
+		if str(plot_object.get("kind", "")) == "RUBBLE_4X4":
 			count += 1
 
 	return count

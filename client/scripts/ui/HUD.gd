@@ -658,20 +658,19 @@ func _on_claim_result(result: Dictionary) -> void:
 
 func _on_clear_plot_object_result(result: Dictionary) -> void:
 	if result.get("ok", false):
-		var object_id := str(result.get("object_id", ""))
-		var was_cleared := bool(result.get("cleared", false))
-		var hits_remaining := int(result.get("hits_remaining", -1))
+		var object_id: String = str(result.get("object_id", ""))
+		var was_cleared: bool = bool(result.get("cleared", false))
+		var outputs_remaining: int = int(result.get("hits_remaining", -1))
 
 		if was_cleared:
-			_set_status_text("Rubble cleared: %s" % object_id)
+			_set_status_text("Rubble exhausted: %s" % object_id)
 		else:
 			_set_status_text(
-				"Rubble worked: %s (%d clear actions left)" % [object_id, hits_remaining]
+				"Rubble worked: %s (%d outputs remaining)" % [object_id, outputs_remaining]
 			)
 	else:
-		_set_status_text(
-			"Clear rubble failed: %s" % str(result.get("reason", "unknown"))
-		)
+		var reason: String = str(result.get("reason", "unknown"))
+		_set_status_text("Clear rubble failed: %s" % reason)
 		
 func _on_latency_updated(ms: int) -> void:
 	latency_label.text = "Ping: %d ms" % ms

@@ -526,3 +526,62 @@ This project is in early development. Version numbers are informal for now.
 - The current repo README in the uploaded zip is truncated; restore the corrected README before finalizing the branch.
 
 ---
+
+---
+
+## [0.0.13] — 2026-03-23 — Logistics Foundation Part 1 (Items + Plot Objects + Loose Items + Dump Zone Intake)
+
+### Added
+- Authoritative item/output foundation for early logistics:
+  - `server/src/core/items.ts`
+  - `server/src/core/items.test.ts`
+- New early-logistics item ids:
+  - `SCRAP_WOOD`
+  - `SCRAP_METAL`
+  - `TARP`
+  - `MIXED_SALVAGE`
+  - `WOODEN_PALLET`
+- Starter-rubble output rolling:
+  - 3–8 total outputs per rubble object
+  - 50/50 clean vs Mixed Salvage split
+  - one real item per completed work round
+- New owned-plot logistics state in protocol/domain:
+  - `plot_objects`
+  - `loose_items`
+  - `PlotObjectStorageState`
+  - `carry_slots`
+  - NPC haul-target metadata
+- Starter Dump Zone server-side object with abstract storage and capacity tracking.
+- New server test coverage for:
+  - item/output rules
+  - loose-item placement/merge
+  - Dump Zone direct-haul/deposit behavior
+  - updated NPC carry/drop flow
+
+### Changed
+- Owned-plot local object state now uses `plot_objects` instead of `starter_objects`.
+- Rubble now uses `remaining_output_rolls` instead of the older `clear_hits_remaining` model.
+- Scavengers now receive a real rolled item into their hands first instead of using the old generic carry marker.
+- Scavenger dropoff routing is now server-authoritative for current early logistics:
+  - direct-haul to nearby Dump Zone within 8 tiles when valid
+  - otherwise ground fallback
+- Owner-only plot DTO/client consumers were updated to the new logistics-era state shape:
+  - `plot_objects`
+  - `loose_items`
+  - `carry_slots`
+- HUD/debug/order helpers were updated to the new plot-object naming and rubble-output wording.
+
+### Fixed
+- Fixed the old generic `"SCRAP"` carry path by replacing it with real item-based carry state.
+- Fixed rubble output state so it now produces real items instead of only decrementing a generic clear counter.
+- Fixed ground-drop placement so same-item/same-tile merges correctly and different items do not stack on one tile.
+- Fixed save/backward-compatibility issues by adding legacy migration for older owned-plot data:
+  - `starter_objects` -> `plot_objects`
+  - `clear_hits_remaining` -> `remaining_output_rolls`
+- Fixed item-loss risk during direct-haul by falling back to loose ground drops when the Dump Zone is full or blocked.
+
+### Notes / Known limitations
+- Dump Zone and loose-item logistics are now authoritative on the server, but they are not yet rendered in the Godot client.
+- Current direct-haul covers newly scavenged output only; hauling existing loose ground items is not implemented yet.
+- Loose-item pickup reservations are not implemented yet because loose-item hauling is still future work.
+- Basic Stockpile and Sorting Station gameplay are still not implemented yet.

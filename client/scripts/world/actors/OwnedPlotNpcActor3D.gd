@@ -87,8 +87,12 @@ func apply_snapshot(
 	has_work_visual_target: bool
 ) -> void:
 	var state: String = str(npc_data.get("state", "idle"))
-	var carrying_kind_value: Variant = npc_data.get("carrying_kind", null)
-	var is_carrying: bool = carrying_kind_value != null
+	var carry_slots_value: Variant = npc_data.get("carry_slots", [])
+	var is_carrying: bool = false
+
+	if typeof(carry_slots_value) == TYPE_ARRAY:
+		var carry_slots: Array = carry_slots_value as Array
+		is_carrying = not carry_slots.is_empty()
 
 	if carry_visual != null:
 		carry_visual.visible = is_carrying

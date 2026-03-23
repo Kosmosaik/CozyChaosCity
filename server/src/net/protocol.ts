@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CONFIG } from "../core/config";
+import type { ItemId } from "../core/items";
 
 export const EnvelopeSchema = z.object({
   v: z.number(),
@@ -13,7 +14,13 @@ export type Envelope = z.infer<typeof EnvelopeSchema>;
 export type PlotType = "PLAYER" | "RESOURCE";
 export type PlotShellKind = "EMPTY" | "RUINED" | "BASIC_CITY";
 export type PlotDetailTerrain = "GROUND" | "RUBBLE";
-export type PlotDetailStarterObjectKind = "SHACK" | "NPC_MARKER" | "RUBBLE_4X4";
+export type PlotObjectKind =
+  | "SHACK"
+  | "NPC_MARKER"
+  | "RUBBLE_4X4"
+  | "DUMP_ZONE_8X8"
+  | "BASIC_STOCKPILE_1X1"
+  | "SORTING_STATION_1X1";
 export type PlotOrderKind = "SCAVENGING" | "SCAVENGING_SINGLE";
 export type PlotOrderTargetScope = "ALL" | "SINGLE";
 export type PlotNpcKind = "STARTER_WORKER";
@@ -27,7 +34,7 @@ export type PlotNpcState =
   | "dropping_off"
   | "returning";
 
-export type PlotNpcCarryKind = "SCRAP";
+export type PlotNpcHaulTargetMode = "GROUND" | "DUMP_ZONE";
 
 export type PlotJobKind = "SCAVENGE_RUBBLE";
 export type PlotJobStatus =
@@ -52,14 +59,54 @@ export type PlotDetailCell = {
   terrain: PlotDetailTerrain;
 };
 
-export type PlotDetailStarterObject = {
+export type PlotNpcCarrySlotName = "LEFT_HAND" | "RIGHT_HAND";
+
+export type PlotNpcCarrySlot = {
+  slot: PlotNpcCarrySlotName;
+  item_id: ItemId;
+  quantity: number;
+};
+
+export type PlotLooseItem = {
   id: string;
-  kind: PlotDetailStarterObjectKind;
+  item_id: ItemId;
+  quantity: number;
+  x: number;
+  y: number;
+  reserved_by_npc_id: string | null;
+  created_at_ms: number;
+};
+
+export type PlotObjectStorageMode = "ABSTRACT" | "SLOTTED";
+
+export type PlotObjectStorageState = {
+  mode: PlotObjectStorageMode;
+  capacity_max: number;
+  capacity_used: number;
+  item_counts: Partial<Record<ItemId, number>>;
+
+  /**
+   * When intake fails because the storage is full, haulers should stop trying
+   * for a short cooldown instead of pointlessly retrying every tick.
+   */
+  haul_blocked_until_ms?: number | null;
+};
+
+export type PlotObject = {
+  id: string;
+  kind: PlotObjectKind;
   x: number;
   y: number;
   footprint_w?: number;
   footprint_h?: number;
-  clear_hits_remaining?: number;
+
+  /**
+   * Remaining output rolls for resource-node style objects like rubble.
+   * This replaces the older clear-hit model so each work round can yield a real item.
+   */
+  remaining_output_rolls?: number;
+
+  storage?: PlotObjectStorageState | null;
 };
 
 export type PlotOrder = {
@@ -99,14 +146,28 @@ export type PlotDetailNpc = {
   move_to_y?: number | null;
   state_started_at_ms?: number | null;
   state_ends_at_ms?: number | null;
-  carrying_kind?: PlotNpcCarryKind | null;
+  /**
+   * Real authoritative item carry state.
+   * Branch 1A uses this for one rolled rubble output at a time, and later
+   * branches will route the same carried item into storage instead of always
+   * falling back to a ground drop.
+   */
+  carry_slots?: PlotNpcCarrySlot[] | null;
+    /**
+   * Carry target fields keep routing decisions explicit once an item has been
+   * rolled into the NPC's hands. That prevents the drop-off step from having to
+   * guess whether the NPC was walking to storage or to a ground tile.
+   */
+  haul_target_mode?: PlotNpcHaulTargetMode | null;
+  haul_target_object_id?: string | null;
 };
 
 export type PlotDetail = {
   width: number;
   height: number;
   cells: PlotDetailCell[];
-  starter_objects: PlotDetailStarterObject[];
+  plot_objects: PlotObject[];
+  loose_items?: PlotLooseItem[];
   npcs?: PlotDetailNpc[];
   jobs?: PlotJob[];
   active_order?: PlotOrder | null;
@@ -138,7 +199,8 @@ export type ClientPlotDetail = {
   width: number;
   height: number;
   cell_rows: string[];
-  starter_objects: PlotDetailStarterObject[];
+  plot_objects: PlotObject[];
+  loose_items: PlotLooseItem[];
   npcs: PlotDetailNpc[];
   jobs: PlotJob[];
   active_order: PlotOrder | null;

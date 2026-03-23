@@ -269,7 +269,7 @@ func show_plot_detail(plot: Dictionary) -> void:
 	var snapshot_received_local_ms: int = int(detail.get("_received_local_ms", 0))
 
 	_render_plot_ground(width, height)
-	_sync_starter_objects(detail, width, height)
+	_sync_plot_objects(detail, width, height)
 	_sync_npcs(
 		detail,
 		width,
@@ -311,7 +311,7 @@ func refresh_plot_detail(plot: Dictionary) -> void:
 	var snapshot_server_time_ms: int = int(detail.get("_snapshot_server_time_ms", 0))
 	var snapshot_received_local_ms: int = int(detail.get("_received_local_ms", 0))
 
-	_sync_starter_objects(detail, width, height)
+	_sync_plot_objects(detail, width, height)
 	_sync_npcs(
 		detail,
 		width,
@@ -380,18 +380,19 @@ func _render_plot_ground(width: int, height: int) -> void:
 	_content_root.add_child(ground_mesh)
 	_ground_node = ground_mesh
 
-func _sync_starter_objects(detail: Dictionary, width: int, height: int) -> void:
-	var starter_objects = detail.get("starter_objects", [])
-	if typeof(starter_objects) != TYPE_ARRAY:
+func _sync_plot_objects(detail: Dictionary, width: int, height: int) -> void:
+	var plot_objects: Variant = detail.get("plot_objects", [])
+	if typeof(plot_objects) != TYPE_ARRAY:
 		return
 
 	var next_object_data_by_id: Dictionary = {}
 
-	for object_data in starter_objects:
+	var plot_object_array: Array = plot_objects as Array
+	for object_data in plot_object_array:
 		if typeof(object_data) != TYPE_DICTIONARY:
 			continue
 
-		var object_id : String = str(object_data.get("id", ""))
+		var object_id: String = str(object_data.get("id", ""))
 		if object_id == "":
 			continue
 
@@ -400,19 +401,20 @@ func _sync_starter_objects(detail: Dictionary, width: int, height: int) -> void:
 		if _rendered_object_nodes_by_id.has(object_id):
 			continue
 
-		var obj_node : Node3D = _make_starter_object_node(object_data, width, height)
+		var obj_node: Node3D = _make_starter_object_node(object_data, width, height)
 		if obj_node == null:
 			continue
 
 		_rendered_object_nodes_by_id[object_id] = obj_node
 		_content_root.add_child(obj_node)
 
-	var rendered_ids : Array = _rendered_object_nodes_by_id.keys()
-	for object_id in rendered_ids:
+	var rendered_ids: Array = _rendered_object_nodes_by_id.keys()
+	for object_id_value in rendered_ids:
+		var object_id: String = str(object_id_value)
 		if next_object_data_by_id.has(object_id):
 			continue
 
-		var existing_node = _rendered_object_nodes_by_id.get(object_id, null)
+		var existing_node: Node = _rendered_object_nodes_by_id.get(object_id, null)
 		if existing_node != null and is_instance_valid(existing_node):
 			if existing_node.has_method("play_clear_animation"):
 				existing_node.play_clear_animation()
@@ -814,8 +816,14 @@ func _apply_npc_snapshot_to_node(
 	else:
 		var carry_visual: MeshInstance3D = npc_node.get_node_or_null("CarryVisual") as MeshInstance3D
 		if carry_visual != null:
-			var carrying_kind: Variant = npc_data.get("carrying_kind", null)
-			carry_visual.visible = carrying_kind != null
+			var carry_slots_value: Variant = npc_data.get("carry_slots", [])
+			var is_carrying: bool = false
+
+			if typeof(carry_slots_value) == TYPE_ARRAY:
+				var carry_slots: Array = carry_slots_value as Array
+				is_carrying = not carry_slots.is_empty()
+
+			carry_visual.visible = is_carrying
 
 	_apply_npc_selection_state_to_node(
 		npc_node,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildClientWorld } from "./client_view";
-import type { WorldState } from "../net/protocol";
+import { buildClientWorld, encodePlotDetailForClient } from "./client_view";
+import type { PlotDetail, WorldState } from "../net/protocol";
 
 describe("buildClientWorld", () => {
   it("does not expose players to the client payload", () => {
@@ -30,5 +30,50 @@ describe("buildClientWorld", () => {
     expect(clientWorld.players).toBeUndefined();
     expect(clientWorld.version).toBe(1);
     expect(Array.isArray(clientWorld.plots)).toBe(true);
+  });
+});
+
+describe("encodePlotDetailForClient", () => {
+  it("uses plot_objects and loose_items in the owned-plot DTO", () => {
+    const detail: PlotDetail = {
+      width: 4,
+      height: 4,
+      cells: [
+        { x: 0, y: 0, blocked: false, clearable: false, terrain: "GROUND" },
+        { x: 1, y: 0, blocked: true, clearable: true, terrain: "RUBBLE" },
+      ],
+      plot_objects: [
+        {
+          id: "starter_shack",
+          kind: "SHACK",
+          x: 0,
+          y: 0,
+          footprint_w: 2,
+          footprint_h: 2,
+        },
+      ],
+      loose_items: [
+        {
+          id: "loose_1",
+          item_id: "SCRAP_WOOD",
+          quantity: 1,
+          x: 2,
+          y: 2,
+          reserved_by_npc_id: null,
+          created_at_ms: 1000,
+        },
+      ],
+      npcs: [],
+      jobs: [],
+      active_order: null,
+    };
+
+    const encoded = encodePlotDetailForClient(detail);
+
+    expect(encoded.plot_objects).toHaveLength(1);
+    expect(encoded.plot_objects[0]?.id).toBe("starter_shack");
+    expect(encoded.loose_items).toHaveLength(1);
+    expect(encoded.loose_items[0]?.item_id).toBe("SCRAP_WOOD");
+    expect(encoded.cell_rows[0]).toBe("GRGG");
   });
 });
