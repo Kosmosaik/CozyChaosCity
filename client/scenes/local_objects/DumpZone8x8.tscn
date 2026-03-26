@@ -1,0 +1,57 @@
+[gd_scene format=3 uid="uid://le8wh0h7akc2"]
+
+[ext_resource type="Script" uid="uid://c1w1ws58qig74" path="res://scripts/world/local_objects/DumpZone8x8.gd" id="1_dump_zone_script"]
+
+[sub_resource type="BoxShape3D" id="1_zone_shape"]
+size = Vector3(8, 0.2, 8)
+
+[sub_resource type="StandardMaterial3D" id="2_base_material"]
+albedo_color = Color(0.168627, 0.203922, 0.168627, 1)
+emission_enabled = true
+emission = Color(0.0352941, 0.0627451, 0.0352941, 1)
+
+[sub_resource type="BoxMesh" id="3_base_mesh"]
+size = Vector3(8, 0.08, 8)
+
+[sub_resource type="StandardMaterial3D" id="4_fill_material"]
+albedo_color = Color(0.552941, 0.431373, 0.176471, 1)
+roughness = 0.9
+emission_enabled = true
+emission = Color(0.180392, 0.121569, 0.0313726, 1)
+
+[sub_resource type="BoxMesh" id="5_fill_mesh"]
+size = Vector3(7.2, 2.61, 7.2)
+
+[sub_resource type="StandardMaterial3D" id="6_blocked_material"]
+albedo_color = Color(0.772549, 0.270588, 0.243137, 1)
+roughness = 0.6
+emission_enabled = true
+emission = Color(0.294118, 0.0588235, 0.0431373, 1)
+
+[sub_resource type="CylinderMesh" id="7_blocked_mesh"]
+top_radius = 0.28
+bottom_radius = 0.28
+height = 0.18
+
+[node name="DumpZone8x8" type="StaticBody3D" unique_id=1657920183]
+script = ExtResource("1_dump_zone_script")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=206080459]
+shape = SubResource("1_zone_shape")
+
+[node name="Base" type="MeshInstance3D" parent="." unique_id=1973009203]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.04, 0)
+material_override = SubResource("2_base_material")
+mesh = SubResource("3_base_mesh")
+
+[node name="FillLevel" type="MeshInstance3D" parent="." unique_id=954360933]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.385, 0)
+visible = false
+material_override = SubResource("4_fill_material")
+mesh = SubResource("5_fill_mesh")
+
+[node name="BlockedMarker" type="MeshInstance3D" parent="." unique_id=985148065]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.18, 0)
+visible = false
+material_override = SubResource("6_blocked_material")
+mesh = SubResource("7_blocked_mesh")

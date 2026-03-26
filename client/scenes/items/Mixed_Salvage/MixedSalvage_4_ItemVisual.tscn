@@ -1,0 +1,22 @@
+[gd_scene format=3 uid="uid://djntug52wwb0h"]
+
+[ext_resource type="Script" uid="uid://bwtp82602mx3t" path="res://scripts/world/item_visuals/StaticItemModelVisual.gd" id="1_e0loc"]
+[ext_resource type="PackedScene" uid="uid://baasfipbiolk2" path="res://assets/resources/trash.glb" id="2_605fu"]
+
+[node name="MixedSalvageItemVisual" type="Node3D" unique_id=747591068]
+script = ExtResource("1_e0loc")
+loose_ground_visual_height = 0.0
+
+[node name="ModelRoot" type="Node3D" parent="." unique_id=689230826]
+
+[node name="Model" parent="ModelRoot" unique_id=1032219057 instance=ExtResource("2_605fu")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16700757, 0, 0.31720158)
+
+[node name="Model2" parent="ModelRoot" unique_id=1202105331 instance=ExtResource("2_605fu")]
+transform = Transform3D(0.73697823, -0.11904517, 0.66535056, 0.20840658, 0.9764295, -0.0561387, -0.6429848, 0.18003644, 0.7444172, 0.16700757, 0, -0.26610914)
+
+[node name="Model3" parent="ModelRoot" unique_id=1170747872 instance=ExtResource("2_605fu")]
+transform = Transform3D(0.7651781, 0.19257379, 0.61434335, -0.032751177, 0.9646251, -0.26158208, -0.6429848, 0.18003644, 0.7444172, -0.36727083, 0, 0.016876847)
+
+[node name="Model4" parent="ModelRoot" unique_id=1254937212 instance=ExtResource("2_605fu")]
+transform = Transform3D(0.5766096, -0.18761721, -0.795186, 0.041713044, 0.97876734, -0.20068443, 0.81595415, 0.082546875, 0.5721931, 0.008440614, 0.3811732, 0.016876847)

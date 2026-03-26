@@ -4,10 +4,27 @@ import type {
   ClientWorldState,
   Plot,
   PlotDetail,
+  PlotJob,
   WorldState,
 } from "../net/protocol";
 
 import { DEV_METRICS } from "./dev_metrics";
+
+function isClientVisibleJobStatus(status: PlotJob["status"]): boolean {
+  return (
+    status === "queued" ||
+    status === "reserved" ||
+    status === "in_progress" ||
+    status === "blocked"
+  );
+}
+
+function filterJobsForClient(jobs: PlotJob[]): PlotJob[] {
+  // The client only needs active/relevant jobs for rendering and debug.
+  // Completed/cancelled history can grow without bound during long sessions and
+  // turns plot updates into large payloads for no gameplay value.
+  return jobs.filter((job) => isClientVisibleJobStatus(job.status));
+}
 
 export function encodePlotDetailForClient(detail: PlotDetail): ClientPlotDetail {
   const cellByKey = new Map<string, PlotDetail["cells"][number]>();
@@ -35,7 +52,7 @@ export function encodePlotDetailForClient(detail: PlotDetail): ClientPlotDetail 
     // need null/undefined branching once loose items start spawning.
     loose_items: detail.loose_items ?? [],
     npcs: detail.npcs ?? [],
-    jobs: detail.jobs ?? [],
+    jobs: filterJobsForClient(detail.jobs ?? []),
     active_order: detail.active_order ?? null,
   };
 }

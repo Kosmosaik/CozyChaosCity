@@ -13,7 +13,12 @@ export const CONFIG = {
   protocolVersion: 3,
   maxMessageBytes: 64 * 1024,
   pingIntervalMs: 10_000,
-  clientTimeoutMs: 30_000,
+
+  // Temporary disconnect-hardening while we diagnose the owned-plot session
+  // drop. The old 30s timeout was fast enough to hide whether the client was
+  // briefly stalling during heavy local plot updates.
+  clientTimeoutMs: 120_000,
+
   saveDebounceMs: 150,
 
   // This project is still in an active dev-hardening phase, so basic timing

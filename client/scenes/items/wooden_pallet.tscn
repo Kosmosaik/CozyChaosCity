@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://dydw0ujm3ej5d"]
+
+[ext_resource type="PackedScene" uid="uid://dmcgqmtbbl48n" path="res://assets/manufactured/LastPall.glb" id="1_m5kov"]
+
+[node name="WoodenPallet" type="Node3D" unique_id=414314185]
+
+[node name="Model" parent="." unique_id=1645547408 instance=ExtResource("1_m5kov")]

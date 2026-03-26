@@ -19,6 +19,7 @@ export type PlotObjectKind =
   | "NPC_MARKER"
   | "RUBBLE_4X4"
   | "DUMP_ZONE_8X8"
+  | "WORKBENCH_1X2"
   | "BASIC_STOCKPILE_1X1"
   | "SORTING_STATION_1X1";
 export type PlotOrderKind = "SCAVENGING" | "SCAVENGING_SINGLE";
@@ -34,9 +35,12 @@ export type PlotNpcState =
   | "dropping_off"
   | "returning";
 
-export type PlotNpcHaulTargetMode = "GROUND" | "DUMP_ZONE";
+export type PlotNpcHaulTargetMode =
+  | "GROUND"
+  | "DUMP_ZONE"
+  | "MANUFACTURING_INPUT";
 
-export type PlotJobKind = "SCAVENGE_RUBBLE";
+export type PlotJobKind = "SCAVENGE_RUBBLE" | "HAUL_LOOSE_ITEM";
 export type PlotJobStatus =
   | "queued"
   | "reserved"
@@ -67,6 +71,12 @@ export type PlotNpcCarrySlot = {
   quantity: number;
 };
 
+export type PlotLooseItemReservation = {
+  npc_id: string;
+  quantity: number;
+  reserved_at_ms: number;
+};
+
 export type PlotLooseItem = {
   id: string;
   item_id: ItemId;
@@ -74,7 +84,44 @@ export type PlotLooseItem = {
   x: number;
   y: number;
   reserved_by_npc_id: string | null;
+  reservations?: PlotLooseItemReservation[];
   created_at_ms: number;
+};
+
+export type PlotManufacturingStationKind = "WORKBENCH";
+
+export type PlotManufacturingRecipeId = "WOODEN_PALLET";
+
+export type PlotObjectItemBufferState = {
+  /**
+   * First manufacturing slice only needs durable buffered item identity/counts.
+   * Capacity rules will be added when crafting and output blocking go live.
+   */
+  item_counts: Partial<Record<ItemId, number>>;
+};
+
+export type PlotObjectManufacturingQueueEntry = {
+  recipe_id: PlotManufacturingRecipeId;
+  quantity: number;
+  requested_at_ms: number;
+};
+
+export type PlotObjectManufacturingActiveCraft = {
+  recipe_id: PlotManufacturingRecipeId;
+  operator_npc_id: string | null;
+  started_at_ms: number;
+  ends_at_ms: number;
+  locked_input_item_counts: Partial<Record<ItemId, number>>;
+};
+
+export type PlotObjectManufacturingState = {
+  station_kind: PlotManufacturingStationKind;
+  allowed_recipe_ids: PlotManufacturingRecipeId[];
+  assigned_npc_id: string | null;
+  queue: PlotObjectManufacturingQueueEntry[];
+  input_buffer: PlotObjectItemBufferState;
+  output_buffer: PlotObjectItemBufferState;
+  active_craft: PlotObjectManufacturingActiveCraft | null;
 };
 
 export type PlotObjectStorageMode = "ABSTRACT" | "SLOTTED";
@@ -107,6 +154,7 @@ export type PlotObject = {
   remaining_output_rolls?: number;
 
   storage?: PlotObjectStorageState | null;
+  manufacturing?: PlotObjectManufacturingState | null;
 };
 
 export type PlotOrder = {
@@ -118,9 +166,15 @@ export type PlotOrder = {
 export type PlotJob = {
   id: string;
   kind: PlotJobKind;
-  source_order_kind: PlotOrderKind;
-  source_target_scope: PlotOrderTargetScope;
-  target_object_id: string;
+  source_order_kind?: PlotOrderKind | null;
+  source_target_scope?: PlotOrderTargetScope | null;
+  target_object_id?: string | null;
+  target_loose_item_id?: string | null;
+  haul_item_id?: ItemId | null;
+  haul_quantity?: number | null;
+  haul_destination_mode?: PlotNpcHaulTargetMode | null;
+  haul_destination_object_id?: string | null;
+  blocked_reason?: string | null;
   status: PlotJobStatus;
   assigned_npc_id: string | null;
   created_at_ms: number;
@@ -141,6 +195,7 @@ export type PlotDetailNpc = {
   home_y: number;
   state: PlotNpcState;
   assigned_order?: PlotOrderKind | null;
+  assigned_job_id?: string | null;
   target_object_id?: string | null;
   move_to_x?: number | null;
   move_to_y?: number | null;
@@ -308,6 +363,18 @@ export const CancelPlotOrderPayloadSchema = z.object({
   plot_id: z.string().min(1),
 });
 
+export const QueueManufacturingRecipePayloadSchema = z.object({
+  plot_id: z.string().min(1),
+  station_object_id: z.string().min(1),
+  recipe_id: z.enum(["WOODEN_PALLET"]),
+  quantity: z.number().int().positive().max(999),
+});
+
+export const ClearManufacturingQueuePayloadSchema = z.object({
+  plot_id: z.string().min(1),
+  station_object_id: z.string().min(1),
+});
+
 export const HelloMessageSchema = EnvelopeSchema.extend({
   type: z.literal("hello"),
   payload: HelloPayloadSchema,
@@ -343,6 +410,16 @@ export const CancelPlotOrderMessageSchema = EnvelopeSchema.extend({
   payload: CancelPlotOrderPayloadSchema,
 });
 
+export const QueueManufacturingRecipeMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("queue_manufacturing_recipe"),
+  payload: QueueManufacturingRecipePayloadSchema,
+});
+
+export const ClearManufacturingQueueMessageSchema = EnvelopeSchema.extend({
+  type: z.literal("clear_manufacturing_queue"),
+  payload: ClearManufacturingQueuePayloadSchema,
+});
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   HelloMessageSchema,
   RequestWorldMessageSchema,
@@ -351,6 +428,8 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   ClearPlotObjectMessageSchema,
   IssuePlotOrderMessageSchema,
   CancelPlotOrderMessageSchema,
+  QueueManufacturingRecipeMessageSchema,
+  ClearManufacturingQueueMessageSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;

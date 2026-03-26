@@ -151,6 +151,8 @@ func _ready() -> void:
 	net.clear_plot_object_result_received.connect(_on_clear_plot_object_result)
 	net.issue_plot_order_result_received.connect(_on_issue_plot_order_result)
 	net.cancel_plot_order_result_received.connect(_on_cancel_plot_order_result)
+	net.queue_manufacturing_recipe_result_received.connect(_on_queue_manufacturing_recipe_result)
+	net.clear_manufacturing_queue_result_received.connect(_on_clear_manufacturing_queue_result)
 
 
 	# IMPORTANT: identity_ready signature is now (player_id, display_name)
@@ -321,6 +323,68 @@ func _request_plot_order(order_kind: String, target_scope: String) -> void:
 		_set_status_text("Issuing scavenging order...")
 	else:
 		_set_status_text("Issuing order...")
+
+func _request_queue_manufacturing_recipe(recipe_id: String, station_object_id: String) -> void:
+	if not _is_logged_in:
+		_set_status_text("Not logged in. Connect first.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "Not logged in. Connect first.", false)
+		return
+
+	if net == null:
+		_set_status_text("NetClient not found.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "NetClient not found.", false)
+		return
+
+	if _active_player_plot_id == "":
+		_set_status_text("No active owned plot.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "No active owned plot.", false)
+		return
+
+	if station_object_id == "":
+		_set_status_text("No workbench is available.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "No workbench is available.", false)
+		return
+
+	if orders_menu_panel != null:
+		orders_menu_panel.set_request_pending("Queueing workbench recipe...")
+
+	net.queue_manufacturing_recipe(_active_player_plot_id, station_object_id, recipe_id, 1)
+	_set_status_text("Queueing workbench recipe...")
+
+func _request_clear_manufacturing_queue(station_object_id: String) -> void:
+	if not _is_logged_in:
+		_set_status_text("Not logged in. Connect first.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "Not logged in. Connect first.", false)
+		return
+
+	if net == null:
+		_set_status_text("NetClient not found.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "NetClient not found.", false)
+		return
+
+	if _active_player_plot_id == "":
+		_set_status_text("No active owned plot.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "No active owned plot.", false)
+		return
+
+	if station_object_id == "":
+		_set_status_text("No workbench is available.")
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", "No workbench is available.", false)
+		return
+
+	if orders_menu_panel != null:
+		orders_menu_panel.set_request_pending("Clearing workbench queue...")
+
+	net.clear_manufacturing_queue(_active_player_plot_id, station_object_id)
+	_set_status_text("Clearing workbench queue...")
 		
 func _request_cancel_active_order() -> void:
 	if not _is_logged_in:
@@ -370,6 +434,13 @@ func _on_orders_menu_action_requested(
 			_request_cancel_active_order()
 		PlotOrderDefinitions.ACTION_TYPE_ISSUE_ORDER:
 			_request_plot_order(order_kind, target_scope)
+		PlotOrderDefinitions.ACTION_TYPE_QUEUE_MANUFACTURING_RECIPE:
+			# Orders menu currently reuses the existing order row view-model.
+			# For manufacturing rows, order_kind carries recipe_id and target_scope
+			# carries the station object id until we split the menu model further.
+			_request_queue_manufacturing_recipe(order_kind, target_scope)
+		PlotOrderDefinitions.ACTION_TYPE_CLEAR_MANUFACTURING_QUEUE:
+			_request_clear_manufacturing_queue(target_scope)
 		_:
 			_set_status_text("Unknown orders menu action.")
 			
@@ -543,6 +614,54 @@ func _on_cancel_plot_order_result(result: Dictionary) -> void:
 			success_text = "Scavenge All cancelled."
 		elif cancelled_order_kind == PlotOrderDefinitions.ORDER_KIND_SCAVENGING_SINGLE:
 			success_text = "Scavenge One cancelled."
+
+		_set_status_text(success_text)
+
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result(success_text, "", true)
+	else:
+		var reason: String = str(result.get("reason", "unknown"))
+		var failure_text: String = PlotOrderDefinitions.get_failure_text(reason)
+
+		_set_status_text(failure_text)
+
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", failure_text, false)
+
+	_refresh_orders_menu_if_open()
+
+func _on_queue_manufacturing_recipe_result(result: Dictionary) -> void:
+	var was_success: bool = bool(result.get("ok", false))
+
+	if was_success:
+		var queued_quantity: int = int(result.get("queued_quantity", 0))
+		var success_text: String = "Workbench queue updated."
+		if queued_quantity > 0:
+			success_text = "Queued Wooden Pallet work (%d queued)." % queued_quantity
+
+		_set_status_text(success_text)
+
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result(success_text, "", true)
+	else:
+		var reason: String = str(result.get("reason", "unknown"))
+		var failure_text: String = PlotOrderDefinitions.get_failure_text(reason)
+
+		_set_status_text(failure_text)
+
+		if orders_menu_panel != null:
+			orders_menu_panel.show_request_result("", failure_text, false)
+
+	_refresh_orders_menu_if_open()
+
+func _on_clear_manufacturing_queue_result(result: Dictionary) -> void:
+	var was_success: bool = bool(result.get("ok", false))
+
+	if was_success:
+		var cleared_quantity: int = int(result.get("cleared_quantity", 0))
+		var success_text: String = "Workbench queue cleared."
+		if cleared_quantity > 0:
+			success_text = "Cleared workbench queue (%d removed)." % cleared_quantity
 
 		_set_status_text(success_text)
 

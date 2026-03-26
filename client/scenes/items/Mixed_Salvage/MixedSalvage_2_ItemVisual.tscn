@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://rij08heiy2fg"]
+
+[ext_resource type="Script" uid="uid://bwtp82602mx3t" path="res://scripts/world/item_visuals/StaticItemModelVisual.gd" id="1_k1rgi"]
+[ext_resource type="PackedScene" uid="uid://baasfipbiolk2" path="res://assets/resources/trash.glb" id="2_nnxph"]
+
+[node name="MixedSalvageItemVisual" type="Node3D" unique_id=747591068]
+script = ExtResource("1_k1rgi")
+loose_ground_visual_height = 0.0
+
+[node name="ModelRoot" type="Node3D" parent="." unique_id=689230826]
+
+[node name="Model" parent="ModelRoot" unique_id=1032219057 instance=ExtResource("2_nnxph")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.31720158)
+
+[node name="Model2" parent="ModelRoot" unique_id=1202105331 instance=ExtResource("2_nnxph")]
+transform = Transform3D(0.73697823, -0.11904517, 0.66535056, 0.20840658, 0.9764295, -0.0561387, -0.6429848, 0.18003644, 0.7444172, 0, 0, -0.26610914)

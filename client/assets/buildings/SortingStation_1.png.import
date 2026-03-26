@@ -2,14 +2,14 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b81x0iep60bxo"
+uid="uid://dw7p8ic83h4lw"
 path.s3tc="res://.godot/imported/SortingStation_1.png-d45d276782ebd35a7a02d1a3b92b9721.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
 }
 generator_parameters={
-"md5": "6bc71a18095ddefe5c09b9d41d54e1be"
+"md5": "6315f7de5ae0bb4b43793bbbb76fef72"
 }
 
 [deps]

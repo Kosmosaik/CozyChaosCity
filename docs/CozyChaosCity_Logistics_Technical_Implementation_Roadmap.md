@@ -1,6 +1,6 @@
 # Cozy Chaos City — Logistics / Storage / Sorting Technical Implementation Roadmap
 
-_Last updated: 2026-03-23_
+_Last updated: 2026-03-24_
 
 ## Purpose
 
@@ -14,7 +14,7 @@ It is based on:
 
 This is not a replacement for the design plan. It is the **technical execution roadmap** that defines what should be built first, what each branch is responsible for, and what must remain deferred.
 
-## Current implementation status after the 2026-03-23 session
+## Current implementation status after the 2026-03-24 session
 
 ### Completed branches
 - **Branch 0A — Authoritative Item / Output Definitions**
@@ -45,41 +45,52 @@ This is not a replacement for the design plan. It is the **technical execution r
     - same item + same tile = merge
     - different item + same tile = choose another tile
 
-### Partially completed branches
-- **Branch 1B — NPC Carry / Direct-Haul Decisions**
+- **Branch 1B — NPC Carry
   - scavengers now carry a real item in `carry_slots`
-  - direct-haul decision is now server-authoritative for newly scavenged output
+  - direct-haul decision is server-authoritative for newly scavenged output
   - current routing is:
     - nearby valid Dump Zone within 8 tiles
     - otherwise ground fallback
-  - **Not implemented yet in this branch:**
-    - hauling existing loose items
-    - loose-item pickup reservations
-    - stockpile-aware routing
 
 - **Branch 1C — Dump Zone Object and Intake Logic**
   - starting Dump Zone now exists as a real plot object
   - Dump Zone now has authoritative abstract storage state
   - capacity is enforced
   - full-state handling now blocks retry for 1 minute and safely falls back to loose ground items
-  - **Still pending:**
-    - player-facing rendering / feedback for Dump Zone state
+
+- **Branch 1D — Client Representation and Verification for Branch 1**
+  - Dump Zone is rendered in the owned plot
+  - loose ground items are rendered in the owned plot
+  - carried-item visuals now reflect real item identity
+  - NPC Character Sheet now shows carrying and drop-off state
+  - Plot Debug Overlay now shows dump-zone, loose-item, carried-item, and haul-target summaries
+  - Plot Debug Overlay is now scrollable and blocks camera wheel zoom while hovered
+
+- **Branch 1E — Shared Item Visual Asset Pipeline**
+  - shared item visual catalog/registry/node foundation now exists
+  - carry and loose-item visuals now resolve through one shared path
+  - missing assets fall back to placeholder visuals cleanly
+  - quantity-specific loose-ground scene variants are supported through central catalog mapping
+  - first wrapper scenes are wired for:
+    - `SCRAP_WOOD`
+    - `SCRAP_METAL`
+    - `MIXED_SALVAGE`
+
+
 
 ### Current next branch
-- **Branch 1D — Client Representation and Verification for Branch 1**
-  - render Dump Zone in the owned plot
-  - render loose ground items
-  - verify carried-item presentation against the new item/state path
-  - add enough player-facing/debug visibility to confirm:
-    - direct-haul to Dump Zone
-    - ground fallback when full
-    - loose-item placement/merge behavior
+- **Branch 2 — Hauling Foundation**
+  - add a real server-authoritative hauling job layer
+  - treat hauling as an automatic background task that all NPCs can do in early game
+  - Change the current Scavenger behavior to do hauling instead of direct-haul
 
 ### Important current limitations
-- Dump Zone and loose items are already authoritative on the server, but they are not yet visible in the client.
-- Direct-haul currently covers newly scavenged output only.
-- No stockpile or sorting logic is implemented yet.
-- Branch 2 should not begin until Branch 1D makes the current server behavior readable and testable in the client.
+- Current direct-haul still covers newly scavenged output only. (we will change that in Branch 2)
+- General hauling jobs for existing loose items, Dump Zone extraction, manufacturing output, and construction delivery do not exist yet.
+- Reservation rules are not yet implemented for item hauling.
+- Workbench manufacturing does not exist yet.
+- Construction sites and Basic Stockpile construction do not exist yet.
+- Sorting Station gameplay does not exist yet.
 
 ---
 
@@ -235,13 +246,7 @@ The first two storage modes needed are:
 - **Abstract storage**: Dump Zone
 - **Slotted storage**: Basic Stockpile
 
-### 3.5 NPC carry state
-Replace generic carry markers with real carry-slot data.
-
-The carry model should be ready for:
-- 1 medium item in one hand
-- 2 medium items total
-- future two-hand large items
+### 3.5 - Removed
 
 ### 3.6 Resource node output state
 Rubble should no longer only track clear hits. It should track remaining outputs or equivalent node-yield state.
@@ -370,7 +375,7 @@ This is the first truly playable logistics phase.
 - Overflow safely falls back to loose ground items rather than destroying items
 
 ## Branch 1D — Client Representation and Verification for Branch 1
-**Status:** This is now the active next branch
+**Status:** Implemented for current scope
 
 ### Scope
 - Render Dump Zone object
@@ -384,182 +389,309 @@ This is the first truly playable logistics phase.
 - Server/client protocol is stable
 - Core branch-1 tests pass
 
+## Branch 1E — Shared Item Visual Asset Pipeline
+**Status:** Implemented foundation. More wrapper scenes and quantity variants can be added later without gameplay-code changes.
+
+
+### Goal
+Introduce one durable client-side item-visual system so the same item keeps the same visual identity across:
+- NPC carry visuals
+- loose ground items
+- stockpile representative visuals
+- future build-site delivery visuals
+
+### Scope
+- Add a shared item-visual registry/mapping layer keyed by authoritative `item_id`
+- Support item wrapper scenes rather than hardcoding mesh/material logic separately in each gameplay scene
+- Use project-owned wrapper scenes for item visuals so scale, rotation, pivot, and future polish live in one place
+- Convert carry/ground presentation to instance visuals through a shared path
+- Keep a clear fallback placeholder path when a real asset does not exist yet
+- Keep all of this client-presentation-only and separate from gameplay/domain logic
+
+### Required structure direction
+- authoritative item identity remains server-owned
+- client presentation resolves `item_id -> visual scene / fallback`
+- carry and loose-item presentation must not maintain separate item-shape logic
+- one item should read as the same item before drop, during carry, and after drop
+- visual scene ownership should live in one reusable layer, not spread across actor/world scripts
+
+### Out of scope
+- final art polish
+- animation-heavy item handling
+- one-model-per-unit rendering for storage piles
+- inventory UI art pass
+- gameplay rules for storage/carry capacity
+
+### Exit criteria
+- the same `item_id` uses the same shared visual source in carry and loose-item presentation
+- adding a new item asset does not require patching multiple unrelated scripts
+- missing assets degrade gracefully to a fallback placeholder
+- the system is ready to be reused later by stockpiles and construction delivery visuals
+
 ---
 
-# Phase 2 — Playable Branch 2: Basic Stockpile and Physical Construction Delivery
+# Phase 2 — Playable Branch 2: Hauling Foundation
 
 ## Goal
-Introduce the first real buildable filtered storage and the first construction-delivery loop.
+Turn hauling into a real server-authoritative background logistics task that can move existing items through the city without being tied only to scavenger dropoff.
 
-## Branch 2A — Construction Site and Physical Delivery Foundation
+### Locked direction from the branch questionnaire
+- Early game: all NPCs can haul when they do not have a higher-priority task.
+- Current scavenger direct-haul is changed to use the hauling framework. They will haul when they have no higher-priority task.
+- Hauling jobs are invisible background logistics in this phase.
+- First hardcoded priority order is:
+  1. construction demand
+  2. manufacturing demand
+  3. ground cleanup
+  4. storage refill / organization
+  5. Dump Zone fallback
+- Dump Zone is a last resort once real destinations exist.
 
-### Scope
-- Add construction-site object state
-- Add required-item buffers for buildables
-- Require physical material delivery for storage construction
-- Visually represent delivered materials at the site in a lightweight but durable way
-- Lock delivered materials to the site until completion or cancellation rules exist
-
-### Exit criteria
-- Buildables can require real delivered materials
-- Construction input buffers are authoritative
-- Delivery state is not faked through abstract inventory subtraction
-
-## Branch 2B — Wooden Pallet Recipe / Availability
+## Branch 2 — Hauling Foundation
 
 ### Scope
-- Add Wooden Pallet production rule to the recipe/process layer
-- Ensure the item exists in a durable way for future buildings too
-- Keep manufacturing simple for this phase if needed, but do not hardcode pallet handling as a special one-off building exception
+- Add authoritative hauling jobs for existing loose items.
+- Extend the same hauling framework so it can later serve:
+  - Dump Zone extraction
+  - stockpile transfers
+  - manufacturing output movement
+  - construction delivery
+- Keep all early-game NPCs eligible to haul when they do not have a higher-priority task.
+- Use a shared reservation model:
+  - reserve a quantity inside a stack when possible
+  - allow multiple NPCs to reserve different quantities from the same stack
+  - if another NPC reaches a specific item first, the loser re-evaluates and continues
+- Keep the current carry-capacity rules and one carried medium item at a time.
+- Generate hauling jobs automatically when valid haulable state exists.
+- Use a first hauling search radius of **10 tiles**.
+- Make idle NPCs roam around the plot to find haulable items.
+- Make sure roaming NPCs can not walk on other tiles/footprints than the ground.
+- Surface later debugging hooks for:
+  - haul job counts
+  - reserved quantities
+  - destination counts
+  - blocked reasons
 
 ### Exit criteria
-- Wooden Pallet can enter the logistics system as a real item
-- Construction requirements can consume it normally
-
-## Branch 2C — Basic Stockpile Storage Logic and Filters
-
-### Scope
-- Add Basic Stockpile object
-- Add 4-slot pallet storage state
-- Add slot filter configuration
-- Prevent hauling into stockpile until a slot is configured
-- Enforce one resource type per slot
-- Enforce 20 medium items per slot
-- Allow multiple stockpiles
-- Handle filter change conflicts by requiring relocation first
-
-### Exit criteria
-- Basic Stockpile works as real slotted storage
-- Filters control intake correctly
-- Storage contents are represented in object state, not generic ad hoc counters
-
-## Branch 2D — Routing Integration and Visual Representation
-
-### Scope
-- Update routing priority so clean resources prefer valid stockpiles
-- Add representative stack visuals for stockpile contents
-- Ensure stockpile capacity and filter behavior are visible and debuggable
-
-### Exit criteria
-- Stockpiles are usable and preferred correctly by the routing layer
-- Visuals represent contents without one-model-per-unit spam
+- Existing loose items with a valid destination create hauling jobs automatically.
+- Idle/available NPCs can reserve, pick up, and deliver those items if they are in range.
+- Reservation conflicts resolve by re-evaluation instead of item destruction or permanent job deadlock.
+- Current scavenger direct-haul is changed to use the hauling framework. They will haul when they have no higher-priority task.
+- NPCs roam around the plot to find haulable items without walking through other tiles/footprints than the ground.
 
 ---
 
-# Phase 3 — Playable Branch 3: Sorting Station and Mixed Salvage Processing
+# Phase 3 — Playable Branch 3: Manufacturing Foundation
+
+## Goal
+Introduce the first real production station and recipe loop so Wooden Pallets become manufactured physical items instead of a future special case.
+
+## Branch 3 — Manufacturing Foundation
+
+### Locked direction from the branch questionnaire
+- First manufacturing station: **Workbench**.
+- First recipe only: **1 Wooden Pallet = 4 Scrap Wood**.
+- Craft time: **10 seconds**.
+- Output quantity: **1**.
+- One NPC assigned per station for the first version.
+- Manufacturing is player-issued for now, not autonomous.
+
+### Scope
+- Add Workbench as a real placed object with authoritative state.
+- Add Workbench recipe queue state that is easy to extend later.
+- Add input buffer and output buffer state.
+- Require physical delivery of ingredients to the Workbench.
+- Allow the player to control manufacturing from:
+  - the Orders panel
+  - the station-local UI
+- Support player-controlled quantity adjustment for pallet crafting.
+- Block crafting when output buffer is full.
+- Lock recipe inputs once crafting starts.
+- If the player cancels queued work or removes the station, release unusable buffered ingredients back into hauling.
+- Completed pallet outputs create hauling work automatically.
+- Show first-pass station visuals for:
+  - input materials
+  - output pallets
+  - simple crafting animation / VFX hooks
+
+### Exit criteria
+- The player can place or access a Workbench, queue Wooden Pallet crafting, deliver Scrap Wood to it, and receive real `WOODEN_PALLET` outputs through the same logistics system.
+- Completed pallet outputs can be hauled like any other item.
+- The recipe/station path is reusable for later stations and recipes.
+
+Important Note!: Workbench will initially just be "spawned" into the world on entering a plot, but will in Branch 4 be moved into the construction foundation as a buildable item.
+
+---
+
+# Phase 4 — Playable Branch 4: Construction Foundation
+
+## Goal
+Introduce the first real blueprint-to-build flow with physical delivery, staged visuals, and a usable Basic Stockpile as the first constructed building.
+
+## Branch 4 — Construction Foundation
+
+### Locked direction from the branch questionnaire
+- First construction target: **Basic Stockpile**.
+- Construction starts from a placed blueprint and immediately creates a construction-site object.
+- All materials must be delivered before build work starts.
+- First stockpile recipe: **4 Wooden Pallets** only.
+- Up to **2 NPCs** can work on one site.
+- Base build time: **20 seconds**; with 2 NPCs the target time is **12 seconds**.
+- Delivered materials are locked to the site until completion or cancellation.
+- Canceling drops delivered materials back to the ground and hauling picks them up later.
+- Construction and stockpile filter logic should be designed together in this branch.
+
+### Scope
+- Add a Construction order flow through the Orders UI.
+- Add blueprint placement that creates authoritative construction-site state.
+- Add real site delivery buffers for required materials.
+- Generate hauling demand for existing required items.
+- Generate manufacturing demand for missing pallets when construction needs them.
+- Allow construction sites to wait for all required items before worker-time begins.
+- After delivery is complete, generate normal construction work jobs.
+- Support staged visuals:
+  - minimum acceptable stage count is 2 (blueprint + completed)
+  - if more staged assets exist later, progress should switch between them cleanly
+- Visually show each delivered material at the site before construction starts.
+- Add first usable Basic Stockpile behavior after completion:
+  - 4 pallet slots
+  - one resource type per slot
+  - reject all intake until a filter is assigned
+  - start empty
+  - after filter assignment, matching loose items or dump zone items can generate haul jobs into it automatically
+- Add site panel information for:
+  - required items
+  - delivered items
+  - percent complete
+  - assigned workers
+  - blocked reason
+
+### Exit criteria
+- The player can place a Basic Stockpile blueprint, deliver 4 Wooden Pallets to it physically, complete the build with NPC worker time, assign filters, and then use it as the first real organized storage object.
+- Construction cancellation returns delivered materials to the world instead of destroying them.
+- Construction and stockpile state are both authoritative and inspectable.
+
+---
+
+# Phase 5 — Playable Branch 5: Sorting Station and Mixed Salvage Processing
 
 ## Goal
 Turn Mixed Salvage into a true processing loop that feeds the rest of the logistics system.
 
-## Branch 3A — Sorting Station Construction
+## Branch 5A — Sorting Station Construction
 
 ### Scope
-- Add Sorting Station as a buildable object
-- Use physical delivery for construction
-- Support object state needed for future process queues
+- Add Sorting Station as a buildable object.
+- Use the same construction-site and physical-delivery foundation introduced for Basic Stockpile.
+- Support object state needed for future process queues.
 
 ### Exit criteria
-- Sorting Station can be built through the same durable construction foundation used by stockpiles
+- Sorting Station can be built through the same durable construction foundation used by stockpiles.
 
-## Branch 3B — Sorting Orders and Processing State
+## Branch 5B — Sorting Orders and Processing State
 
 ### Scope
-- Add Sorting Station order path through the order system
-- Pull Mixed Salvage from the Dump Zone only for this phase
-- Consume worker time only
-- Convert inputs into random clean outputs through the recipe/process layer
+- Add Sorting Station order path through the order system.
+- NPCs will haul mixed salvage from the dump zone to the sorting station (a pallet on the left side)
+- An NPC will take one mixed salvage from the pallet, put it on a bench, and process it, and then throw it in a hatch and create a clean output item. Most of this will be animated so the real process behind it is:    Move mixed salvage from the input buffer (pallet - belongs to the full asset), process it and then put it in the output buffer (hatch - belongs to the full asset).
+- Consume worker time only.
+- Convert inputs into random clean outputs through the recipe/process layer.
 
 ### Exit criteria
-- Mixed Salvage can be turned into Scrap Wood / Scrap Metal / Tarp through a real process path
-- Processing state is server-authoritative
+- Mixed Salvage can be turned into Scrap Wood / Scrap Metal / Tarp through a real process path.
+- Processing state is server-authoritative.
 
-## Branch 3C — Sorted Output Routing
+## Branch 5C — Sorted Output Routing
 
 ### Scope
 - Route sorted outputs to:
   1. matching stockpile
   2. build site if needed
   3. Dump Zone fallback
-- Reuse common routing helpers rather than station-specific hardcoding
+- Reuse common routing helpers rather than station-specific hardcoding.
 
 ### Exit criteria
-- Sorted outputs re-enter the logistics network cleanly
-- Routing remains consistent with the rest of the game rules
+- Sorted outputs re-enter the logistics network cleanly.
+- Routing remains consistent with the rest of the game rules.
 
 ---
 
-# Phase 4 — Playable Branch 4: First City Inventory / Logistics UI
+# Phase 6 — Playable Branch 6: First City Inventory / Logistics UI
 
 ## Goal
 Give the player an exact practical logistics overview while more advanced reporting fantasy remains deferred.
 
-## Branch 4A — Inventory Aggregation Layer
+## Branch 6A — Inventory Aggregation Layer
 
 ### Scope
-- Add exact inventory aggregation by item type
+- Add exact inventory aggregation by item type.
 - Add source breakdown by source class:
   - Dump Zone
   - Stockpiles
   - Sorting Station
   - Ground / loose items
-- Keep reserved / in-transit totals out of this first UI unless explicitly added later
+- Keep reserved / in-transit totals out of this first UI unless explicitly added later.
 
 ### Exit criteria
-- The server can produce exact current logistics totals by source category
+- The server can produce exact current logistics totals by source category.
 
-## Branch 4B — Player-Facing Inventory Panel
+## Branch 6B — Player-Facing Inventory Panel
 
 ### Scope
-- Add one usable city inventory panel
-- Show item totals and expandable source breakdowns
-- Keep the first version practical and exact, not flavor-based
+- Add one usable city inventory panel.
+- Show item totals and expandable source breakdowns.
+- Keep the first version practical and exact, not flavor-based.
 
 ### Exit criteria
-- The player can inspect exact city totals during owned-plot play
+- The player can inspect exact city totals during owned-plot play.
 
-## Branch 4C — Local Object Panels and Warnings
+## Branch 6C — Local Object Panels and Warnings
 
 ### Scope
 - Add local click panels for:
   - Dump Zone
   - Basic Stockpile
   - Sorting Station
-- Add blocked messages, warning messages, and simple activity/report lines
+  - Workbench
+  - Construction Site
+- Add blocked messages, warning messages, and simple activity/report lines.
 
 ### Exit criteria
-- The player can inspect both global and object-local logistics state
-- Important blocked states are visible
+- The player can inspect both global and object-local logistics state.
+- Important blocked states are visible.
 
 ---
 
-# Phase 5 — Hardening, Cleanup, and Expansion Safety
+# Phase 7 — Hardening, Cleanup, and Expansion Safety
 
 ## Goal
 Stabilize the first logistics foundation before adding more node types, more storage categories, or more advanced simulation detail.
 
-## Branch 5A — Regression Coverage and Save/Protocol Safety
+## Branch 7A — Regression Coverage and Save/Protocol Safety
 
 ### Scope
 - Add targeted tests for:
   - loot rolls
   - loose-item merging
-  - reservations
+  - hauling reservations
   - dump-zone capacity
+  - manufacturing buffers
+  - construction buffers
   - stockpile slot rules
   - sorting outputs
-- Verify persistence shape is stable if save storage is affected
-- Verify protocol remains explicit and mirrored on both client and server
+- Verify persistence shape is stable if save storage is affected.
+- Verify protocol remains explicit and mirrored on both client and server.
 
-## Branch 5B — Code Splits / Anti-Spaghetti Review
+## Branch 7B — Code Splits / Anti-Spaghetti Review
 
 ### Scope
-- Review whether any simulation file became too central during the logistics work
-- Split routing, storage, node-output, or construction helpers if needed
-- Remove temporary debug-only wiring once no longer needed
+- Review whether any simulation file became too central during the logistics work.
+- Split routing, storage, manufacturing, or construction helpers if needed.
+- Remove temporary debug-only wiring once no longer needed.
 
 ### Exit criteria
-- The logistics system is in a stable state for the next family of features
-- The project is not boxed into a rushed milestone structure
+- The logistics system is in a stable state for the next family of features.
+- The project is not boxed into a rushed milestone structure.
 
 ---
 
@@ -570,22 +702,40 @@ The recommended dependency chain is:
 1. **0A** — Item/output definitions
 2. **0B** — State/protocol refactor
 3. **1A** — Rubble outputs + loose items
-4. **1B** — NPC carry/reservations/routing
+4. **1B** — NPC carry/direct-haul special case
 5. **1C** — Dump Zone intake/capacity
 6. **1D** — Client representation + verification
-7. **2A** — Construction delivery foundation
-8. **2B** — Wooden Pallet production
-9. **2C** — Stockpile logic/filters
-10. **2D** — Stockpile routing + visuals
-11. **3A** — Sorting Station construction
-12. **3B** — Sorting processing/orders
-13. **3C** — Sorted output routing
-14. **4A** — Inventory aggregation
-15. **4B** — Inventory panel
-16. **4C** — Local panels/warnings
-17. **5A / 5B** — hardening and cleanup
+7. **1E** — Shared item-visual pipeline
+8. **2** — Hauling foundation
+9. **3** — Manufacturing foundation (Workbench + Wooden Pallets)
+10. **4** — Construction foundation (Basic Stockpile)
+11. **5A** — Sorting Station construction
+12. **5B** — Sorting processing/orders
+13. **5C** — Sorted output routing
+14. **6A** — Inventory aggregation
+15. **6B** — Inventory panel
+16. **6C** — Local panels/warnings
+17. **7A / 7B** — hardening and cleanup
 
 ---
+
+## 6. What Must Stay Deferred
+
+The following systems should remain deferred unless intentionally promoted into a later scoped branch:
+- extra rubble/node types
+- different node sizes
+- small-item storage
+- crates
+- lighters and matches
+- advanced dump penalties
+- contamination / smell / rats / fire systems
+- NPC personal ownership as real gameplay state
+- NPC-owned business/domain hauling priorities as active gameplay logic
+- estimated inventory reporting
+- mistaken deliveries / wrong deliveries / over-delivery
+- in-transit or reserved inventory UI layers
+- imports / market / other players
+- personality-driven reporting mistakes
 
 ## 6. What Must Stay Deferred
 
@@ -613,7 +763,7 @@ These should not be added as hidden placeholders inside the first logistics bran
 The first logistics milestone should be considered complete when all of the following are true:
 - rubble outputs real items one at a time
 - loose items exist as real plot state
-- NPCs can carry, reserve, drop, and direct-haul real items
+- NPCs can carry, reserve, drop  real items
 - a starting Dump Zone accepts and abstracts deposited items with capacity enforcement
 - Basic Stockpiles can be built through physical delivery and used with slot filters
 - Mixed Salvage can be processed through a Sorting Station into clean resources

@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3 uid="uid://b1vaw7tahxxlk"]
+
+[ext_resource type="Script" uid="uid://clkaum7puaxin" path="res://scripts/world/local_objects/LooseItemStack.gd" id="1_loose_item_script"]
+[ext_resource type="Script" path="res://scripts/world/item_visuals/ItemVisualNode.gd" id="2_item_visual_node_script"]
+
+[node name="LooseItemStack" type="Node3D" unique_id=2105191869]
+script = ExtResource("1_loose_item_script")
+
+[node name="ItemVisual" type="Node3D" parent="." unique_id=577336973]
+script = ExtResource("2_item_visual_node_script")

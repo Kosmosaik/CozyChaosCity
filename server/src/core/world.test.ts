@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   ensureClaimedPlayerPlotInitialized,
   extractRubbleOutputFromPlotObject,
+  releaseManufacturingInputBufferToGround,
   resolveDirectHaulDestinationForSingleItem,
   spawnLooseItemNearTile,
   tryDepositSingleItemIntoDumpZone,
 } from "./world";
+
+import { queueManufacturingRecipe } from "./manufacturing";
 import type { Plot } from "../net/protocol";
 
 function makeClaimedPlayerPlot(): Plot {
@@ -72,6 +75,72 @@ describe("world logistics helpers", () => {
     expect(dumpZone?.storage?.mode).toBe("ABSTRACT");
     expect(dumpZone?.storage?.capacity_max).toBe(200);
     expect(dumpZone?.storage?.capacity_used).toBe(0);
+  });
+
+    it("creates the starter workbench with reusable manufacturing state", () => {
+    const plot = makeClaimedPlayerPlot();
+    const workbench = plot.detail?.plot_objects.find(
+      (obj) => obj.kind === "WORKBENCH_1X2"
+    );
+
+    expect(workbench?.id).toBe("starter_workbench");
+    expect(workbench?.footprint_w).toBe(2);
+    expect(workbench?.footprint_h).toBe(6);
+    expect(workbench?.manufacturing?.station_kind).toBe("WORKBENCH");
+    expect(workbench?.manufacturing?.allowed_recipe_ids).toEqual([
+      "WOODEN_PALLET",
+    ]);
+    expect(workbench?.manufacturing?.queue).toEqual([]);
+    expect(workbench?.manufacturing?.input_buffer.item_counts).toEqual({});
+    expect(workbench?.manufacturing?.output_buffer.item_counts).toEqual({});
+    expect(workbench?.manufacturing?.active_craft).toBeNull();
+  });
+
+  it("releases buffered workbench inputs back to loose items when the queue is cleared", () => {
+    const plot = makeClaimedPlayerPlot();
+    queueManufacturingRecipe(plot, "starter_workbench", "WOODEN_PALLET", 1, 1000);
+
+    const workbench = plot.detail?.plot_objects.find(
+      (obj) => obj.id === "starter_workbench"
+    );
+    if (!workbench?.manufacturing) {
+      throw new Error("expected starter workbench");
+    }
+
+    workbench.manufacturing.input_buffer.item_counts.SCRAP_WOOD = 2;
+    workbench.manufacturing.queue = [];
+
+    const release = releaseManufacturingInputBufferToGround(
+      plot,
+      "starter_workbench",
+      2000
+    );
+
+    const releasedScrapWoodQuantity = (plot.detail?.loose_items ?? [])
+      .filter((looseItem) => looseItem.item_id === "SCRAP_WOOD")
+      .reduce((total, looseItem) => total + looseItem.quantity, 0);
+
+    expect(release).toEqual({ changed: true, released_quantity: 2 });
+    expect(workbench.manufacturing.input_buffer.item_counts.SCRAP_WOOD).toBeUndefined();
+    expect(releasedScrapWoodQuantity).toBe(2);
+  });
+
+  it("routes scrap wood to the workbench input when queued pallet work needs ingredients", () => {
+    const plot = makeClaimedPlayerPlot();
+    queueManufacturingRecipe(plot, "starter_workbench", "WOODEN_PALLET", 1, 1000);
+
+    const destination = resolveDirectHaulDestinationForSingleItem(
+      plot,
+      "SCRAP_WOOD",
+      23,
+      23,
+      1200
+    );
+
+    expect(destination).toEqual({
+      mode: "MANUFACTURING_INPUT",
+      object_id: "starter_workbench",
+    });
   });
 
   it("routes to the dump zone when it is within the direct-haul range", () => {

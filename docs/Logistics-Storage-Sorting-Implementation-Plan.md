@@ -389,6 +389,22 @@ Create the first working scavenging output loop with Rubble, clean resources, Mi
 ### Success condition
 The player can scavenge Rubble and produce Scrap Wood, Scrap Metal, Tarp, and Mixed Salvage. NPCs can carry, drop, and haul those outputs. The starting Dump Zone accepts and abstracts them, while overflow falls back to loose ground drops.
 
+### Item visual system note
+Item visuals must be introduced through one shared client presentation path keyed by authoritative `item_id`.
+
+Do not maintain separate hardcoded visual logic for:
+- carried items
+- loose ground items
+- stockpile contents
+- future construction-delivery props
+
+Use:
+- shared item wrapper scenes
+- one item visual registry/mapping layer
+- fallback placeholder visuals when a real asset is missing
+
+This keeps item identity visually consistent and avoids rewriting presentation code when more item assets are added.
+
 ---
 
 ## Branch 2 — Basic Stockpile Construction and Physical Delivery

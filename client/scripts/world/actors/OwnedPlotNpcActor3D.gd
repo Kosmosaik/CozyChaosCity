@@ -40,7 +40,7 @@ const STATE_ANIMATION_CANDIDATES: Dictionary = {
 @onready var click_body: StaticBody3D = $ClickBody
 @onready var visual_root: Node3D = $VisualRoot
 @onready var selection_ring: MeshInstance3D = $SelectionRing
-@onready var carry_visual: MeshInstance3D = $CarryVisual
+@onready var carry_visual: ItemVisualNode = $CarryVisual
 
 var _visual_instance: Node3D = null
 var _animation_player: AnimationPlayer = null
@@ -88,14 +88,12 @@ func apply_snapshot(
 ) -> void:
 	var state: String = str(npc_data.get("state", "idle"))
 	var carry_slots_value: Variant = npc_data.get("carry_slots", [])
-	var is_carrying: bool = false
+	var carry_slots: Array = []
 
 	if typeof(carry_slots_value) == TYPE_ARRAY:
-		var carry_slots: Array = carry_slots_value as Array
-		is_carrying = not carry_slots.is_empty()
+		carry_slots = carry_slots_value as Array
 
-	if carry_visual != null:
-		carry_visual.visible = is_carrying
+	_apply_carry_visual_from_slots(carry_slots)
 
 	# Facing should be reconstructed from real snapshot context whenever possible.
 	# That keeps the actor visually stable even after the plot is re-entered and
@@ -115,6 +113,57 @@ func apply_snapshot(
 		has_work_visual_target
 	)
 	_play_animation_for_state(state)
+
+func _apply_carry_visual_from_slots(carry_slots: Array) -> void:
+	if carry_visual == null:
+		return
+
+	var first_carry_slot: Dictionary = _get_first_non_empty_carry_slot(carry_slots)
+	if first_carry_slot.is_empty():
+		carry_visual.visible = false
+		carry_visual.clear_item_visual()
+		return
+
+	var item_id: String = str(first_carry_slot.get("item_id", ""))
+	var quantity: int = _read_non_negative_whole_number(first_carry_slot.get("quantity", 0))
+	if item_id == "" or quantity <= 0:
+		carry_visual.visible = false
+		carry_visual.clear_item_visual()
+		return
+
+	carry_visual.visible = true
+	carry_visual.apply_item_visual(
+		item_id,
+		quantity,
+		ItemVisualNode.CONTEXT_CARRY
+	)
+
+func _get_first_non_empty_carry_slot(carry_slots: Array) -> Dictionary:
+	for carry_slot_value in carry_slots:
+		if typeof(carry_slot_value) != TYPE_DICTIONARY:
+			continue
+
+		var carry_slot: Dictionary = carry_slot_value as Dictionary
+		var item_id: String = str(carry_slot.get("item_id", ""))
+		var quantity: int = _read_non_negative_whole_number(carry_slot.get("quantity", 0))
+
+		if item_id != "" and quantity > 0:
+			return carry_slot
+
+	return {}
+
+func _read_non_negative_whole_number(value: Variant) -> int:
+	# Wire-decoded JSON numbers may arrive as either TYPE_INT or TYPE_FLOAT.
+	# Carry-slot quantities are logically whole numbers, so normalize them here.
+	if typeof(value) == TYPE_INT:
+		var int_value: int = value
+		return maxi(0, int_value)
+
+	if typeof(value) == TYPE_FLOAT:
+		var float_value: float = value
+		return maxi(0, int(round(float_value)))
+
+	return 0
 
 func _spawn_visual_if_needed() -> void:
 	if _visual_instance != null and is_instance_valid(_visual_instance):

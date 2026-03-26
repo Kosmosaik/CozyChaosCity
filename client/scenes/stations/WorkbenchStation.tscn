@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://b7h6kxxn08v6d"]
+
+[ext_resource type="Script" uid="uid://4qaxcg7walgc" path="res://scripts/world/local_objects/ManufacturingStationVisual.gd" id="1_workbench_station_script"]
+[ext_resource type="PackedScene" uid="uid://xq4q0f3435jy" path="res://scenes/stations/workbench.tscn" id="2_workbench_model"]
+[ext_resource type="Script" uid="uid://741vfx0bgsd2" path="res://scripts/world/item_visuals/ItemVisualNode.gd" id="3_item_visual_script"]
+
+[node name="WorkbenchStation" type="Node3D" unique_id=837381905]
+script = ExtResource("1_workbench_station_script")
+
+[node name="WorkbenchModel" parent="." unique_id=101889 instance=ExtResource("2_workbench_model")]
+transform = Transform3D(-0.034899462, 0, -0.99939084, 0, 1, 0, 0.99939084, 0, -0.034899462, 0, 0, 0)
+
+[node name="InputBufferAnchor" type="Node3D" parent="." unique_id=1403240573]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.05, 0.05, 0)
+
+[node name="InputBufferVisual" type="Node3D" parent="InputBufferAnchor" unique_id=1055419910]
+script = ExtResource("3_item_visual_script")
+
+[node name="OutputBufferAnchor" type="Node3D" parent="." unique_id=1370464602]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.05, 0.05, 0)
+
+[node name="OutputBufferVisual" type="Node3D" parent="OutputBufferAnchor" unique_id=1627377215]
+script = ExtResource("3_item_visual_script")

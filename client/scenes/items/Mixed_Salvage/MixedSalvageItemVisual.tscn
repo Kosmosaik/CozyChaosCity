@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://cn1or8rjstw40"]
+
+[ext_resource type="Script" uid="uid://bwtp82602mx3t" path="res://scripts/world/item_visuals/StaticItemModelVisual.gd" id="1_hvhd5"]
+[ext_resource type="PackedScene" uid="uid://baasfipbiolk2" path="res://assets/resources/trash.glb" id="2_veu4i"]
+
+[node name="MixedSalvageItemVisual" type="Node3D" unique_id=747591068]
+script = ExtResource("1_hvhd5")
+loose_ground_visual_height = 0.0
+
+[node name="ModelRoot" type="Node3D" parent="." unique_id=689230826]
+
+[node name="Model" parent="ModelRoot" unique_id=1032219057 instance=ExtResource("2_veu4i")]

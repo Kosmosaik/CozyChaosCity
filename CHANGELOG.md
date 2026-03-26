@@ -585,3 +585,57 @@ This project is in early development. Version numbers are informal for now.
 - Current direct-haul covers newly scavenged output only; hauling existing loose ground items is not implemented yet.
 - Loose-item pickup reservations are not implemented yet because loose-item hauling is still future work.
 - Basic Stockpile and Sorting Station gameplay are still not implemented yet.
+
+---
+
+## [0.0.14] — 2026-03-24 — Logistics Foundation Part 2 (Client Verification + Item Visual Pipeline + Branch Replan)
+
+### Added
+- Client-side Dump Zone rendering with authoritative storage/fill-state presentation.
+- Client-side loose-item rendering for authoritative ground items.
+- Shared item visual pipeline foundation:
+  - `ItemVisualCatalog.gd`
+  - `ItemVisualRegistry.gd`
+  - `ItemVisualNode.gd`
+  - `StaticItemModelVisual.gd`
+- First item wrapper scenes for:
+  - `SCRAP_WOOD`
+  - `SCRAP_METAL`
+  - `MIXED_SALVAGE`
+- Quantity-aware loose-ground scene variant lookup with clean fallback to the 1x wrapper scene.
+- NPC Character Sheet logistics fields:
+  - Carrying
+  - Drop-off
+- Plot Debug Overlay logistics sections for:
+  - Dump Zone
+  - Loose Items
+  - Carried Items
+  - Haul Targets
+- Scrollable Plot Debug Overlay behavior that captures mouse wheel input instead of leaking it to camera zoom.
+- Branch-design questionnaire answers documented in `docs/CozyChaosCity_Branch_Design_Questionnaire.md` and folded into the logistics planning docs.
+
+### Changed
+- Branch 1 client verification is now readable and debuggable enough for the current scope.
+- Carried-item visuals now reflect real `item_id` state instead of a generic carry marker.
+- Loose-ground visuals and carried-item visuals now share one item-visual pipeline instead of separate ad hoc placeholder logic.
+- Loose-ground quantity handling now supports quantity-specific scene variants rather than repeated or quantity-scaled placeholder logic.
+- First temporary item asset mapping is now centralized instead of spread across actor/world scripts.
+- Logistics roadmap / implementation-plan branch order has been updated to:
+  1. Branch 2 — Hauling foundation
+  2. Branch 3 — Manufacturing foundation
+  3. Branch 4 — Construction foundation
+  4. Branch 5 — Sorting Station
+
+### Fixed
+- Dump Zone fill meter now accepts int/float snapshot numeric values correctly and updates visually.
+- Loose-item shared-resource cross-talk was removed so one stack changing color/shape no longer mutates all others.
+- Loose-item default placeholder pop-in was removed by routing visuals through the shared item-visual node.
+- Plot Debug Overlay can now be scrolled instead of growing off-screen.
+- Camera zoom no longer triggers while the cursor is hovering the Plot Debug Overlay.
+
+### Notes / Known limitations
+- General hauling jobs for existing loose items are still not implemented.
+- Reservation logic for loose-item hauling is still not implemented.
+- Current direct-haul remains the scavenger-specific branch-1 special case.
+- Quantity-specific loose-ground scene variants currently fall back to the 1x wrapper unless a dedicated 2x/3x/etc. scene is added later.
+- Workbench manufacturing, construction sites, Basic Stockpile construction, and Sorting Station gameplay are still future branches.

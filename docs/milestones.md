@@ -276,29 +276,33 @@ The project has now already started the first real **early logistics foundation*
   - otherwise fall back to a ground drop
 
 ### Immediate next priority
-The immediate next milestone slice is **Branch 1D** of the logistics roadmap:
+The current logistics visualization / verification slice is now effectively complete for the current scope:
 
-- render the Dump Zone in the owned plot
-- render loose ground items
-- expose enough player-facing/debug readability to verify:
-  - carried item flow
-  - direct-haul into Dump Zone
-  - fallback to ground when Dump Zone is full
+- Dump Zone is rendered in the owned plot
+- loose ground items are rendered
+- carried-item presentation now uses real item identity
+- the NPC Character Sheet shows carrying + drop-off state
+- the Plot Debug Overlay shows dump-zone, loose-item, carried-item, and haul-target summaries
+- shared item visual pipeline foundations are in place with central catalog/registry lookup
 
 ### What should come after that
-After Branch 1D is readable and stable in the client, the next real gameplay phase should be:
+The next real gameplay phase should now follow the new questionnaire-locked order:
 
-- **Phase 2 — Basic Stockpile and Physical Construction Delivery**
-- then **Phase 3 — Sorting Station and Mixed Salvage processing**
+- **Branch 2 — Hauling foundation**
+- **Branch 3 — Manufacturing foundation (Workbench + Wooden Pallets)**
+- **Branch 4 — Construction foundation (Basic Stockpile)**
+- then **Branch 5 — Sorting Station and Mixed Salvage processing**
 
 ### Important direction
 Do not steer the project back toward “more M3 features first” as the default path.
 
 The correct current direction is:
 
-1. finish Branch 1D client verification for the logistics foundation
-2. then continue into stockpiles / construction delivery
-3. then sorting / Mixed Salvage processing
+1. Branch 1 is now readable and debuggable enough for the current scope
+2. next implement **Branch 2 — Hauling foundation**
+3. then **Branch 3 — Manufacturing**
+4. then **Branch 4 — Construction / Basic Stockpile**
+5. then **Branch 5 — Sorting Station**
 
 ---
 

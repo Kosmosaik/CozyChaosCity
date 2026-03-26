@@ -2,9 +2,9 @@
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
 **Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
-**Last updated:** 2026-03-23  
-**Current milestone direction:** **Early logistics foundation in progress; immediate next priority is Branch 1D client representation for Dump Zone + loose items**  
-**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 delivered the real NPC/order foundation. Post-M3 hardening is in place. The repo has now also started the first logistics foundation: authoritative item ids, `plot_objects`, `loose_items`, real NPC carry slots, rubble output rolls, tile-based loose-item spawning/merge, and server-side Dump Zone intake with capacity + fallback behavior.
+**Last updated:** 2026-03-24  
+**Current milestone direction:** **Branch 1 client verification is complete enough for the current scope; immediate next priority is Branch 2 — Hauling foundation**  
+**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 delivered the real NPC/order foundation. Post-M3 hardening is in place. The repo now has the full first client-readable logistics foundation: authoritative item ids, `plot_objects`, `loose_items`, real NPC carry slots, rubble output rolls, tile-based loose-item spawning/merge, server-side Dump Zone intake with capacity + fallback behavior, client rendering for Dump Zone + loose items, item-aware carried visuals, shared item-visual pipeline foundations, and first logistics readability UI.
 
 This document is the handoff reference for any future GPT assistant.
 
@@ -31,7 +31,7 @@ Current playable loop:
   - `Scavenge All`
   - `Scavenge One`
 - server creates authoritative jobs
-- local NPC moves through the work loop and returns toward the shack dropoff
+- local NPC moves through the work loop and current scavenger direct-haul / ground-fallback behavior
 - can cancel the active plot order cleanly
 - can toggle the F3 debug overlay to inspect live job/NPC state
 - player leaves back to the shared world
@@ -39,9 +39,9 @@ Current playable loop:
 Important current direction:
 - the project already has a working first owned-plot mode
 - neighborhood loading/rendering is **not** the active next priority
-- the project is now continuing from the **M3 NPC/order foundation** plus a selective hardening/playtest pass
+- the project is now continuing from the **M3 NPC/order foundation** plus the first readable logistics foundation
 - future work should keep extending stable systems instead of adding rushed feature slices
-- the immediate next priority is not broad order expansion first; it is playtest-driven cleanup and validation on top of the current foundation
+- the next priority is now the dedicated **Hauling foundation** branch, followed by Manufacturing and Construction in that order
 
 ---
 
@@ -171,7 +171,7 @@ Current measurement result:
 
 ---
 
-### Early logistics foundation — partly implemented
+### Early logistics foundation — Branch 1 delivered enough for the next phase
 Delivered:
 - authoritative item/output foundation:
   - `server/src/core/items.ts`
@@ -194,17 +194,34 @@ Delivered:
 - scavengers now place a real item into their hands first, then:
   - direct-haul to Dump Zone when valid and within 8 tiles
   - otherwise drop to the ground
+- Dump Zone is rendered in the client
+- loose-item ground stacks are rendered in the client
+- carry visuals are item-aware instead of generic on/off markers
+- shared item visual pipeline now exists through:
+  - `ItemVisualCatalog.gd`
+  - `ItemVisualRegistry.gd`
+  - `ItemVisualNode.gd`
+  - wrapper item scenes
+- first real wrapper scenes are wired for:
+  - `SCRAP_WOOD`
+  - `SCRAP_METAL`
+  - `MIXED_SALVAGE`
+- the NPC Character Sheet now shows carrying + drop-off state
+- the Plot Debug Overlay now shows dump-zone, loose-item, carried-item, and haul-target summaries
+- the Plot Debug Overlay is now scrollable and captures wheel input instead of leaking it to the gameplay camera
 
-Not yet implemented:
-- Dump Zone rendering in the client
-- loose-item rendering in the client
-- hauling existing loose items into storage
-- pickup reservations for loose-item hauling
-- Basic Stockpile gameplay
+Still not implemented:
+- general hauling jobs for existing loose items
+- loose-item quantity reservations / re-evaluation flow
+- hauling from Dump Zone / station buffers / stockpiles
+- Workbench manufacturing
+- Construction sites / Basic Stockpile construction
 - Sorting Station gameplay
 
 Important current next step:
-- complete **Branch 1D** first so the current server-authoritative logistics loop is visible and debuggable in the client before adding stockpiles/sorting
+- implement **Branch 2 — Hauling foundation** first
+- then **Branch 3 — Manufacturing foundation**
+- then **Branch 4 — Construction foundation**
 
 ---
 

@@ -64,3 +64,57 @@ export function validatePlayer(
   if (rec.secret !== secret) return null;
   return rec;
 }
+
+export type ResolveHelloPlayerResult =
+  | {
+      ok: true;
+      player: PlayerRecord;
+      created: boolean;
+      display_name_backfilled: boolean;
+    }
+  | {
+      ok: false;
+      reason: "auth_failed_invalid_credentials";
+    };
+
+export function resolveHelloPlayer(
+  world: WorldState,
+  playerId?: string,
+  secret?: string,
+  displayName?: string
+): ResolveHelloPlayerResult {
+  const hasStoredCredentials =
+    typeof playerId === "string" &&
+    playerId.length > 0 &&
+    typeof secret === "string" &&
+    secret.length > 0;
+
+  if (hasStoredCredentials) {
+    const player = validatePlayer(world, playerId as string, secret as string);
+    if (!player) {
+      // Do not silently create a brand-new identity here.
+      // That makes reconnect problems look like “my username stopped working”
+      // while actually swapping the player onto a different id and orphaning
+      // their claimed plots.
+      return { ok: false, reason: "auth_failed_invalid_credentials" };
+    }
+
+    const displayNameBackfilled =
+      typeof displayName === "string" &&
+      backfillLegacyPlayerDisplayName(player, displayName);
+
+    return {
+      ok: true,
+      player,
+      created: false,
+      display_name_backfilled: Boolean(displayNameBackfilled),
+    };
+  }
+
+  return {
+    ok: true,
+    player: createPlayer(world, displayName),
+    created: true,
+    display_name_backfilled: false,
+  };
+}

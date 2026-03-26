@@ -5,7 +5,7 @@ class_name OwnedPlotDetailRenderer3D
 #
 # Responsibilities:
 # - render local cells from plot.detail.cells
-# - render starter objects from plot.detail.starter_objects
+# - render plot objects from plot.detail.plot_objects
 # - keep all local-detail visuals under one dedicated root
 #
 # Scale rules for the real-size M2 pass:
@@ -37,6 +37,9 @@ const PLOT_GROUND_SHADER: Shader = preload("res://shaders/plot_ground_random_5.g
 # Real authored local objects should be spawned from wrapper scenes, not raw GLBs directly.
 const SHACK_SCENE: PackedScene = preload("res://scenes/local_objects/StarterShack.tscn")
 const RUBBLE_SCENE: PackedScene = preload("res://scenes/local_objects/Rubble4x4.tscn")
+const DUMP_ZONE_SCENE: PackedScene = preload("res://scenes/local_objects/DumpZone8x8.tscn")
+const WORKBENCH_SCENE: PackedScene = preload("res://scenes/stations/WorkbenchStation.tscn")
+const LOOSE_ITEM_STACK_SCENE: PackedScene = preload("res://scenes/local_objects/LooseItemStack.tscn")
 const NPC_ACTOR_SCENE: PackedScene = preload("res://scenes/actors/OwnedPlotNpcActor3D.tscn")
 
 # Tuning values kept here so asset placement can be adjusted without touching layout logic.
@@ -47,6 +50,10 @@ const SHACK_ASSET_Y_ROTATION_DEGREES: float = 0.0
 const RUBBLE_ASSET_SCALE: Vector3 = Vector3.ONE
 const RUBBLE_ASSET_Y_OFFSET: float = 0.02
 const RUBBLE_ASSET_Y_ROTATION_DEGREES: float = 0.0
+
+const WORKBENCH_ASSET_SCALE: Vector3 = Vector3.ONE
+const WORKBENCH_ASSET_Y_OFFSET: float = 0.0
+const WORKBENCH_ASSET_Y_ROTATION_DEGREES: float = 0.0
 
 const NPC_CLICK_BODY_HEIGHT: float = 1.75
 const NPC_CLICK_BODY_RADIUS: float = 0.45
@@ -61,7 +68,9 @@ var _root: Node3D = null
 var _content_root: Node3D = null
 
 var _ground_node: MeshInstance3D = null
+var _loose_items_root: Node3D = null
 var _rendered_object_nodes_by_id: Dictionary = {}
+var _rendered_loose_item_nodes_by_id: Dictionary = {}
 var _rendered_npc_nodes_by_id: Dictionary = {}
 var _npc_move_tweens_by_id: Dictionary = {}
 var _npc_move_signatures_by_id: Dictionary = {}
@@ -86,6 +95,8 @@ func clear() -> void:
 	_npc_move_signatures_by_id.clear()
 	_rendered_npc_nodes_by_id.clear()
 	_rendered_object_nodes_by_id.clear()
+	_rendered_loose_item_nodes_by_id.clear()
+	_loose_items_root = null
 
 	if _content_root != null and is_instance_valid(_content_root):
 		for child in _content_root.get_children():
@@ -270,6 +281,7 @@ func show_plot_detail(plot: Dictionary) -> void:
 
 	_render_plot_ground(width, height)
 	_sync_plot_objects(detail, width, height)
+	_sync_loose_items(detail, width, height)
 	_sync_npcs(
 		detail,
 		width,
@@ -312,6 +324,7 @@ func refresh_plot_detail(plot: Dictionary) -> void:
 	var snapshot_received_local_ms: int = int(detail.get("_received_local_ms", 0))
 
 	_sync_plot_objects(detail, width, height)
+	_sync_loose_items(detail, width, height)
 	_sync_npcs(
 		detail,
 		width,
@@ -330,6 +343,19 @@ func _ensure_content_root() -> void:
 	_content_root = Node3D.new()
 	_content_root.name = "OwnedPlotContent"
 	_root.add_child(_content_root)
+	
+func _ensure_loose_items_root() -> void:
+	# Loose items get their own child root so they can be synced/cleared without
+	# mixing them into plot objects or NPC actor nodes.
+	if _content_root == null or not is_instance_valid(_content_root):
+		return
+
+	if _loose_items_root != null and is_instance_valid(_loose_items_root):
+		return
+
+	_loose_items_root = Node3D.new()
+	_loose_items_root.name = "LooseItemsRoot"
+	_content_root.add_child(_loose_items_root)
 
 func _render_plot_ground(width: int, height: int) -> void:
 	# Render one continuous textured ground plane for the whole local plot.
@@ -399,6 +425,10 @@ func _sync_plot_objects(detail: Dictionary, width: int, height: int) -> void:
 		next_object_data_by_id[object_id] = object_data
 
 		if _rendered_object_nodes_by_id.has(object_id):
+			var existing_object_node: Node3D = _rendered_object_nodes_by_id.get(object_id, null) as Node3D
+			if existing_object_node != null and is_instance_valid(existing_object_node):
+				if existing_object_node.has_method("apply_snapshot"):
+					existing_object_node.call("apply_snapshot", object_data)
 			continue
 
 		var obj_node: Node3D = _make_starter_object_node(object_data, width, height)
@@ -423,6 +453,69 @@ func _sync_plot_objects(detail: Dictionary, width: int, height: int) -> void:
 
 		_rendered_object_nodes_by_id.erase(object_id)
 		
+func _sync_loose_items(detail: Dictionary, width: int, height: int) -> void:
+	_ensure_loose_items_root()
+	if _loose_items_root == null or not is_instance_valid(_loose_items_root):
+		return
+
+	var loose_items_value: Variant = detail.get("loose_items", [])
+	if typeof(loose_items_value) != TYPE_ARRAY:
+		loose_items_value = []
+
+	var next_loose_item_data_by_id: Dictionary = {}
+
+	var loose_item_array: Array = loose_items_value as Array
+	for loose_item_value in loose_item_array:
+		if typeof(loose_item_value) != TYPE_DICTIONARY:
+			continue
+
+		var loose_item: Dictionary = loose_item_value as Dictionary
+		var loose_item_id: String = str(loose_item.get("id", ""))
+		if loose_item_id == "":
+			continue
+
+		next_loose_item_data_by_id[loose_item_id] = loose_item
+
+		if _rendered_loose_item_nodes_by_id.has(loose_item_id):
+			var existing_loose_item_node: Node3D = _rendered_loose_item_nodes_by_id.get(
+				loose_item_id,
+				null
+			) as Node3D
+
+			if existing_loose_item_node != null and is_instance_valid(existing_loose_item_node):
+				existing_loose_item_node.position = _object_anchor_to_local_position(
+					int(loose_item.get("x", 0)),
+					int(loose_item.get("y", 0)),
+					1,
+					1,
+					width,
+					height
+				)
+
+				if existing_loose_item_node.has_method("apply_snapshot"):
+					existing_loose_item_node.call("apply_snapshot", loose_item)
+
+			continue
+
+		var loose_item_node: Node3D = _make_loose_item_node(loose_item, width, height)
+		if loose_item_node == null:
+			continue
+
+		_rendered_loose_item_nodes_by_id[loose_item_id] = loose_item_node
+		_loose_items_root.add_child(loose_item_node)
+
+	var rendered_loose_item_ids: Array = _rendered_loose_item_nodes_by_id.keys()
+	for loose_item_id_value in rendered_loose_item_ids:
+		var loose_item_id: String = str(loose_item_id_value)
+		if next_loose_item_data_by_id.has(loose_item_id):
+			continue
+
+		var existing_node: Node = _rendered_loose_item_nodes_by_id.get(loose_item_id, null)
+		if existing_node != null and is_instance_valid(existing_node):
+			existing_node.queue_free()
+
+		_rendered_loose_item_nodes_by_id.erase(loose_item_id)
+		
 func _make_starter_object_node(object_data: Dictionary, width: int, height: int) -> Node3D:
 	var kind : String = str(object_data.get("kind", ""))
 	var footprint_w: int = maxi(1, int(object_data.get("footprint_w", 1)))
@@ -433,6 +526,14 @@ func _make_starter_object_node(object_data: Dictionary, width: int, height: int)
 	match kind:
 		"SHACK":
 			obj_node = _make_shack_placeholder(footprint_w, footprint_h)
+		"DUMP_ZONE_8X8":
+			obj_node = _make_dump_zone_object(footprint_w, footprint_h)
+			if obj_node != null and obj_node.has_method("set_object_id"):
+				obj_node.set_object_id(str(object_data.get("id", "")))
+		"WORKBENCH_1X2":
+			obj_node = _make_workbench_object(footprint_w, footprint_h)
+			if obj_node != null and obj_node.has_method("set_object_id"):
+				obj_node.set_object_id(str(object_data.get("id", "")))
 		"RUBBLE_4X4":
 			obj_node = _make_rubble_object(footprint_w, footprint_h)
 			if obj_node != null and obj_node.has_method("set_object_id"):
@@ -459,7 +560,111 @@ func _make_starter_object_node(object_data: Dictionary, width: int, height: int)
 		obj_node.position.x += randf_range(-visual_offset_range, visual_offset_range)
 		obj_node.position.z += randf_range(-visual_offset_range, visual_offset_range)
 
+	if obj_node.has_method("apply_snapshot"):
+		obj_node.call("apply_snapshot", object_data)
+
 	return obj_node
+
+func _make_loose_item_node(loose_item: Dictionary, width: int, height: int) -> Node3D:
+	# Loose items are rendered from their own scene so later branches can add:
+	# - reservation markers
+	# - better meshes
+	# - hover/selection feedback
+	# without bloating the main plot renderer.
+	if LOOSE_ITEM_STACK_SCENE == null:
+		return null
+
+	var instance: Node = LOOSE_ITEM_STACK_SCENE.instantiate()
+	if not (instance is Node3D):
+		return null
+
+	var loose_item_node: Node3D = instance as Node3D
+	loose_item_node.name = "LooseItem_" + str(loose_item.get("id", ""))
+
+	if loose_item_node.has_method("set_record_id"):
+		loose_item_node.call("set_record_id", str(loose_item.get("id", "")))
+
+	loose_item_node.position = _object_anchor_to_local_position(
+		int(loose_item.get("x", 0)),
+		int(loose_item.get("y", 0)),
+		1,
+		1,
+		width,
+		height
+	)
+
+	if loose_item_node.has_method("apply_snapshot"):
+		loose_item_node.call("apply_snapshot", loose_item)
+
+	return loose_item_node
+
+func _make_dump_zone_object(footprint_w: int, footprint_h: int) -> Node3D:
+	# Dump Zone must render as a real object scene so later branches can add
+	# richer presentation and interaction without bloating the plot renderer.
+	if DUMP_ZONE_SCENE != null:
+		var instance: Node = DUMP_ZONE_SCENE.instantiate()
+		if instance is Node3D:
+			var dump_zone_node: Node3D = instance as Node3D
+			dump_zone_node.name = "DumpZone8x8"
+			return dump_zone_node
+
+	# Safe fallback if the scene is missing.
+	# Keep the footprint visible so plot layout remains testable.
+	var node: Node3D = Node3D.new()
+	node.name = "DumpZone8x8Fallback"
+
+	var mesh_instance: MeshInstance3D = MeshInstance3D.new()
+	var mesh: BoxMesh = BoxMesh.new()
+	mesh.size = Vector3(
+		float(footprint_w) * CELL_SIZE_METERS,
+		0.08,
+		float(footprint_h) * CELL_SIZE_METERS
+	)
+	mesh_instance.mesh = mesh
+
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = Color(0.18, 0.24, 0.18, 1.0)
+	material.roughness = 1.0
+	material.emission_enabled = true
+	material.emission = Color(0.05, 0.10, 0.05, 1.0)
+	mesh_instance.material_override = material
+	mesh_instance.position.y = 0.04
+
+	node.add_child(mesh_instance)
+	return node
+
+func _make_workbench_object(footprint_w: int, footprint_h: int) -> Node3D:
+	# Workbench now renders through a dedicated local-object wrapper scene so
+	# input/output buffer props and future station-local UI hooks stay isolated
+	# from the generic plot renderer.
+	if WORKBENCH_SCENE != null:
+		var instance: Node = WORKBENCH_SCENE.instantiate()
+		if instance is Node3D:
+			var workbench_node: Node3D = instance as Node3D
+			workbench_node.name = "WorkbenchStation"
+			return workbench_node
+
+	# Safe fallback if the authored wrapper scene is missing.
+	var node: Node3D = Node3D.new()
+	node.name = "WorkbenchFallback"
+
+	var mesh_instance: MeshInstance3D = MeshInstance3D.new()
+	var mesh: BoxMesh = BoxMesh.new()
+	mesh.size = Vector3(
+		float(footprint_w) * CELL_SIZE_METERS * 0.96,
+		1.0,
+		float(footprint_h) * CELL_SIZE_METERS * 0.96
+	)
+	mesh_instance.mesh = mesh
+
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = Color(0.58, 0.46, 0.32, 1.0)
+	material.roughness = 0.95
+	mesh_instance.material_override = material
+	mesh_instance.position.y = 0.5
+
+	node.add_child(mesh_instance)
+	return node
 
 func _make_rubble_object(footprint_w: int, footprint_h: int) -> Node3D:
 	# Rubble must be instantiated as its real authored root scene, not wrapped

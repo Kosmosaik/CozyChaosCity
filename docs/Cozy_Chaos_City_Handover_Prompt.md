@@ -22,9 +22,9 @@ Follow `docs/GPT_Assistant_Rules.md` strictly.
 
 - Use the **actual current files from the repo**, not assumptions.
 - Give **exact file paths** and **exact insertion/replacement anchors**.
-- Keep code modular.
+- Keep code modular and future proof.
 - For **new files**, provide the **entire file**.
-- For **existing files**, provide the **smallest exact patch possible**, preferably whole-function replacements when practical.
+- For **existing files**, provide preferably whole-function replacements when practical.
 - Keep server/client protocol changes synchronized intentionally.
 - Explain:
   - what each change does
@@ -33,6 +33,8 @@ Follow `docs/GPT_Assistant_Rules.md` strictly.
   - how to test it
 - Leave meaningful comments in code.
 - Do not invent design/balance behavior when the repo or user has not locked it yet — ask first.
+- Avoid adding more code to existing files unless it's really necessary.
+- Do not give me patches with complete files or a whole depo. Give me instructions on how to implement the changes.
 
 ---
 
@@ -71,26 +73,28 @@ The project is already past M3.
   2. receive a real item into carry slots
   3. direct-haul to Dump Zone if valid and within 8 tiles
   4. otherwise drop to the ground
+- Dump Zone is rendered in the owned plot client view
+- loose ground items are rendered in the owned plot client view
+- carried item visuals are item-aware
+- shared item visual pipeline now exists through a catalog / registry / reusable visual node path
+- NPC Character Sheet and Plot Debug Overlay expose current branch-1 logistics state
 
 ### Important current limitations
-- Dump Zone is **not rendered yet** in the client
-- loose ground items are **not rendered yet** in the client
 - current direct-haul only covers newly scavenged output
 - hauling existing loose items into storage is not implemented yet
 - loose-item pickup reservations are not implemented yet
-- Basic Stockpile is not implemented yet
+- Workbench manufacturing is not implemented yet
+- Basic Stockpile construction is not implemented yet
 - Sorting Station gameplay is not implemented yet
 
 ---
 
 ## Current priority order
 
-1. **Branch 1D — Client representation and verification**
-   - render Dump Zone
-   - render loose items
-   - make current logistics behavior readable in the client
-2. **Phase 2 — Basic Stockpile and physical construction delivery**
-3. **Phase 3 — Sorting Station and Mixed Salvage processing**
+1. **Branch 2 — Hauling foundation**
+2. **Branch 3 — Manufacturing foundation (Workbench + Wooden Pallets)**
+3. **Branch 4 — Construction foundation (Basic Stockpile)**
+4. **Branch 5 — Sorting Station and Mixed Salvage processing**
 
 Do **not** steer the project back toward “more M3 feature work first” unless the user explicitly asks for it.
 
@@ -113,10 +117,10 @@ Before proposing changes:
 
 1. Summarize the **actual current repo state** from the latest files.
 2. Confirm exactly what part of the logistics roadmap is already implemented.
-3. Identify the **smallest correct next slice**.
+3. Identify the **smallest correct next slice** inside **Branch 2 — Hauling foundation**.
 4. Then implement **only that slice**.
 
-The expected next slice is probably **Branch 1D**, unless the actual repo state proves otherwise.
+The expected next slice is probably **Branch 2 — Hauling foundation**, unless the actual repo state proves otherwise.
 
 ---
 

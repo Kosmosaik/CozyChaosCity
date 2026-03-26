@@ -20,6 +20,8 @@ signal claim_result_received(result: Dictionary)
 signal clear_plot_object_result_received(result: Dictionary)
 signal issue_plot_order_result_received(result: Dictionary)
 signal cancel_plot_order_result_received(result: Dictionary)
+signal queue_manufacturing_recipe_result_received(result: Dictionary)
+signal clear_manufacturing_queue_result_received(result: Dictionary)
 
 
 signal latency_updated(ms: int)
@@ -32,6 +34,11 @@ signal presence_updated(online: Array) # array of {player_id, display_name}
 # Example: "ws://83.12.34.56:27015"
 const DEFAULT_SERVER_URL := "ws://90.225.57.62:27015"
 const PROTOCOL_VERSION := 3
+
+const WS_INBOUND_BUFFER_SIZE_BYTES := 1024 * 1024
+const WS_OUTBOUND_BUFFER_SIZE_BYTES := 256 * 1024
+const WS_MAX_QUEUED_PACKETS := 8192
+const LARGE_INBOUND_PACKET_WARNING_BYTES := 48 * 1024
 
 # Optional local override:
 # If this file exists, its contents will be used as the server URL.
@@ -55,6 +62,9 @@ var _req_counter: int = 0
 # Heartbeat: keeps server from disconnecting us due to inactivity
 var _heartbeat_interval: float = 3.0
 var _heartbeat_accum: float = 0.0
+var _disconnect_status_override: String = ""
+var _last_process_local_ms: int = 0
+var _last_handled_message_type: String = ""
 
 # -------------------------
 # Profile + identity state
@@ -70,10 +80,24 @@ var secret: String = ""
 var display_name: String = ""
 
 func _ready() -> void:
+	_configure_websocket_peer(_ws)
+
 	# We do NOT auto-connect anymore. UI should call connect_with_profile().
 	_emit_status("Not connected. Enter username and press Connect.")
 
 func _process(delta: float) -> void:
+	var now_ms: int = Time.get_ticks_msec()
+
+	if _last_process_local_ms > 0:
+		var process_gap_ms: int = now_ms - _last_process_local_ms
+		if process_gap_ms >= 2000:
+			push_warning(
+				"NetClient process gap detected: %dms, last_message_type=%s" %
+				[process_gap_ms, _last_handled_message_type]
+			)
+
+	_last_process_local_ms = now_ms
+
 	_poll_ws()
 
 	# Send a lightweight heartbeat so the server doesn't time us out.
@@ -147,6 +171,33 @@ func cancel_plot_order(plot_id: String) -> void:
 		},
 		_next_req_id()
 	)
+	
+func queue_manufacturing_recipe(
+	plot_id: String,
+	station_object_id: String,
+	recipe_id: String,
+	quantity: int
+) -> void:
+	_send(
+		"queue_manufacturing_recipe",
+		{
+			"plot_id": plot_id,
+			"station_object_id": station_object_id,
+			"recipe_id": recipe_id,
+			"quantity": quantity,
+		},
+		_next_req_id()
+	)
+
+func clear_manufacturing_queue(plot_id: String, station_object_id: String) -> void:
+	_send(
+		"clear_manufacturing_queue",
+		{
+			"plot_id": plot_id,
+			"station_object_id": station_object_id,
+		},
+		_next_req_id()
+	)
 
 func _read_override_server_url() -> String:
 	# Optional per-machine override for local/LAN testing.
@@ -183,6 +234,14 @@ func _reset_connection_runtime_state() -> void:
 	_latency_ms = -1.0
 	_clear_presence_snapshot()
 
+func _configure_websocket_peer(peer: WebSocketPeer) -> void:
+	# The owned-plot snapshot is already large enough to exceed Godot's default
+	# 65535-byte websocket buffers on real gameplay saves, so increase the limits
+	# before every connection attempt.
+	peer.inbound_buffer_size = WS_INBOUND_BUFFER_SIZE_BYTES
+	peer.outbound_buffer_size = WS_OUTBOUND_BUFFER_SIZE_BYTES
+	peer.max_queued_packets = WS_MAX_QUEUED_PACKETS
+
 func _reset_socket_for_new_connection() -> void:
 	# Always start a fresh socket object for a new connection attempt.
 	# This avoids carrying half-open or previously closed peer state into the
@@ -191,6 +250,8 @@ func _reset_socket_for_new_connection() -> void:
 		_ws.close()
 
 	_ws = WebSocketPeer.new()
+	_configure_websocket_peer(_ws)
+
 	_is_connected = false
 	_is_connecting = false
 	_reset_connection_runtime_state()
@@ -212,6 +273,7 @@ func _resolve_server_url() -> String:
 	
 func _connect_ws(server_url: String) -> void:
 	_server_url = server_url
+	_disconnect_status_override = ""
 	_reset_socket_for_new_connection()
 
 	var err: int = _ws.connect_to_url(_server_url)
@@ -257,6 +319,8 @@ func _poll_ws() -> void:
 	# - connection attempts that close before login/handshake completes
 	if state == WebSocketPeer.STATE_CLOSED and (_is_connected or _is_connecting):
 		var was_connected: bool = _is_connected
+		var close_code: int = _ws.get_close_code()
+		var close_reason: String = _ws.get_close_reason()
 
 		_is_connected = false
 		_is_connecting = false
@@ -264,22 +328,44 @@ func _poll_ws() -> void:
 
 		if was_connected:
 			emit_signal("disconnected")
-			_emit_status("Disconnected.")
+
+			if close_code == 1009:
+				_emit_status("Disconnected (code=1009, reason=Message too big).")
+			elif close_code != -1:
+				_emit_status(
+					"Disconnected (code=%d, reason=%s)." %
+					[close_code, close_reason]
+				)
+			else:
+				_emit_status("Disconnected.")
 		else:
-			_emit_status("Connection closed before login completed.")
+			if _disconnect_status_override != "":
+				_emit_status(_disconnect_status_override)
+				_disconnect_status_override = ""
+			elif close_code == 1009:
+				_emit_status("Login failed: owned-plot snapshot is too large for the current websocket buffer.")
+			else:
+				_emit_status("Connection closed before login completed.")
 
 	# Process incoming messages
 	while _ws.get_available_packet_count() > 0:
 		var packet: PackedByteArray = _ws.get_packet()
+		if packet.size() >= LARGE_INBOUND_PACKET_WARNING_BYTES:
+			push_warning(
+				"Large inbound websocket packet: %d bytes" % packet.size()
+			)
+
 		var text: String = packet.get_string_from_utf8()
 		_handle_message(text)
 
 func _handle_message(txt: String) -> void:
+	_last_handled_message_type = "unknown"
 	var msg = JSON.parse_string(txt)
 	if typeof(msg) != TYPE_DICTIONARY:
 		return
 
 	var msg_type: String = msg.get("type", "")
+	_last_handled_message_type = msg_type
 	var payload: Dictionary = msg.get("payload", {})
 
 	# Capture a monotonic local receive time once for this message.
@@ -375,6 +461,12 @@ func _handle_message(txt: String) -> void:
 		"cancel_plot_order_result":
 			emit_signal("cancel_plot_order_result_received", payload)
 			
+		"queue_manufacturing_recipe_result":
+			emit_signal("queue_manufacturing_recipe_result_received", payload)
+
+		"clear_manufacturing_queue_result":
+			emit_signal("clear_manufacturing_queue_result_received", payload)
+			
 		"server_pong":
 			# Compute RTT using the request id of the pong (if present)
 			var request_id: String = str(msg.get("req_id", ""))
@@ -397,6 +489,14 @@ func _handle_message(txt: String) -> void:
 			
 func _emit_server_error_status(payload: Dictionary) -> void:
 	var reason: String = str(payload.get("reason", "")).strip_edges()
+	if reason == "auth_failed_invalid_credentials":
+		_disconnect_status_override = (
+			"Stored profile credentials for '%s' do not match the server save. "
+			+ "Restore that profile's player_id/secret or use another profile name."
+		) % profile_name
+		_emit_status(_disconnect_status_override)
+		return
+
 	if reason != "":
 		_emit_status("Server error: %s" % reason)
 		return

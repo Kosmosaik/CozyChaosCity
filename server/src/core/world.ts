@@ -4,7 +4,10 @@ import {
   PlotDetailCell,
   PlotDetailNpc,
   PlotLooseItem,
+  PlotLooseItemReservation,
   PlotObject,
+  PlotObjectItemBufferState,
+  PlotObjectManufacturingState,
   PlotShell,
   PlotType,
   WorldState,
@@ -16,6 +19,10 @@ import {
   rollStarterRubbleOutputRollCount,
 } from "./items";
 import { makeNpcName } from "./npc_names";
+import {
+  findManufacturingInputDestinationForSingleItem,
+  getAllowedManufacturingRecipeIdsForStation,
+} from "./manufacturing";
 
 
 /**
@@ -70,6 +77,7 @@ export function makeStarterNpc(
     home_y: y,
     state: "idle",
     assigned_order: null,
+    assigned_job_id: null,
     target_object_id: null,
     move_to_x: null,
     move_to_y: null,
@@ -96,6 +104,7 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
   const shackY = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
 
   const dumpZonePlacement = getStarterDumpZonePlacement(shackX, clearAreaMinY);
+  const workbenchPlacement = getStarterWorkbenchPlacement(shackX, shackY);
 
   for (let y = 0; y < STARTER_DETAIL_SIZE; y++) {
     for (let x = 0; x < STARTER_DETAIL_SIZE; x++) {
@@ -172,6 +181,7 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
   });
 
   plotObjects.push(makeStarterDumpZoneObject(dumpZonePlacement.x, dumpZonePlacement.y));
+  plotObjects.push(makeStarterWorkbenchObject(workbenchPlacement.x, workbenchPlacement.y));
 
   const starterNpcX = shackX + STARTER_SHACK_SIZE + 1;
   const starterNpcY = shackY + STARTER_SHACK_SIZE - 1;
@@ -336,6 +346,51 @@ function makeStarterDumpZoneObject(x: number, y: number): PlotObject {
   };
 }
 
+function makeEmptyItemBufferState(): PlotObjectItemBufferState {
+  return {
+    // Buffer identity/counts need to exist before we wire delivery/crafting rules.
+    item_counts: {},
+  };
+}
+
+function makeStarterWorkbenchManufacturingState(): PlotObjectManufacturingState {
+  return {
+    station_kind: "WORKBENCH",
+    allowed_recipe_ids: getAllowedManufacturingRecipeIdsForStation("WORKBENCH"),
+    assigned_npc_id: null,
+    queue: [],
+    input_buffer: makeEmptyItemBufferState(),
+    output_buffer: makeEmptyItemBufferState(),
+    active_craft: null,
+  };
+}
+
+function getStarterWorkbenchPlacement(
+  shackX: number,
+  shackY: number
+): { x: number; y: number; footprint_w: number; footprint_h: number } {
+  return {
+    // The starter workbench lives inside the current clear area on the shack's
+    // left side so Branch 3 can start without waiting for Branch 4 construction.
+    x: shackX - STARTER_WORKBENCH_FOOTPRINT_W + 2,
+    y: shackY + 2,
+    footprint_w: STARTER_WORKBENCH_FOOTPRINT_W,
+    footprint_h: STARTER_WORKBENCH_FOOTPRINT_H,
+  };
+}
+
+function makeStarterWorkbenchObject(x: number, y: number): PlotObject {
+  return {
+    id: "starter_workbench",
+    kind: "WORKBENCH_1X2",
+    x,
+    y,
+    footprint_w: STARTER_WORKBENCH_FOOTPRINT_W,
+    footprint_h: STARTER_WORKBENCH_FOOTPRINT_H,
+    manufacturing: makeStarterWorkbenchManufacturingState(),
+  };
+}
+
 function clearCellsInsideFootprint(
   detail: PlotDetail,
   footprintX: number,
@@ -429,6 +484,7 @@ function canDumpZoneAcceptSingleItemNow(
 
 export type DirectHaulDestination =
   | { mode: "DUMP_ZONE"; object_id: string }
+  | { mode: "MANUFACTURING_INPUT"; object_id: string }
   | { mode: "GROUND" };
 
 export function resolveDirectHaulDestinationForSingleItem(
@@ -441,6 +497,33 @@ export function resolveDirectHaulDestinationForSingleItem(
   const detail = plot.detail;
   if (!detail) {
     return { mode: "GROUND" };
+  }
+
+  const manufacturingInputDestination = findManufacturingInputDestinationForSingleItem(
+    plot,
+    itemId,
+    sourceX,
+    sourceY
+  );
+  if (manufacturingInputDestination) {
+    const manufacturingObject = getPlotObjectById(
+      plot,
+      manufacturingInputDestination.object_id
+    );
+    if (manufacturingObject) {
+      const distanceToManufacturingInput = getNearestObjectFootprintDistance(
+        manufacturingObject,
+        sourceX,
+        sourceY
+      );
+
+      if (distanceToManufacturingInput <= DIRECT_HAUL_MAX_DISTANCE_TILES) {
+        return {
+          mode: "MANUFACTURING_INPUT",
+          object_id: manufacturingObject.id,
+        };
+      }
+    }
   }
 
   const dumpZoneObject = getDumpZoneObject(detail);
@@ -574,6 +657,161 @@ function makeLooseItemId(detail: PlotDetail): string {
   }
 
   return `loose_${maxNumericId + 1}`;
+}
+
+function getLooseItemReservations(looseItem: PlotLooseItem): PlotLooseItemReservation[] {
+  if (!Array.isArray(looseItem.reservations)) {
+    looseItem.reservations = [];
+  }
+
+  return looseItem.reservations;
+}
+
+function syncLooseItemLegacyReservationField(looseItem: PlotLooseItem): void {
+  const reservations = getLooseItemReservations(looseItem).filter((reservation) => reservation.quantity > 0);
+  looseItem.reservations = reservations;
+
+  if (reservations.length === 1 && reservations[0]) {
+    looseItem.reserved_by_npc_id = reservations[0].npc_id;
+    return;
+  }
+
+  looseItem.reserved_by_npc_id = null;
+}
+
+export function getLooseItemById(plot: Plot, looseItemId: string): PlotLooseItem | null {
+  const detail = plot.detail;
+  if (!detail) {
+    return null;
+  }
+
+  return getLooseItems(detail).find((looseItem) => looseItem.id === looseItemId) ?? null;
+}
+
+export function getLooseItemReservedQuantity(
+  looseItem: PlotLooseItem,
+  ignoreNpcId?: string | null
+): number {
+  let totalReserved = 0;
+
+  for (const reservation of getLooseItemReservations(looseItem)) {
+    if (reservation.quantity <= 0) {
+      continue;
+    }
+
+    if (ignoreNpcId && reservation.npc_id === ignoreNpcId) {
+      continue;
+    }
+
+    totalReserved += reservation.quantity;
+  }
+
+  return totalReserved;
+}
+
+export function reserveLooseItemQuantity(
+  plot: Plot,
+  looseItemId: string,
+  npcId: string,
+  quantity: number,
+  nowMs: number
+): boolean {
+  if (quantity <= 0) {
+    return false;
+  }
+
+  const looseItem = getLooseItemById(plot, looseItemId);
+  if (!looseItem) {
+    return false;
+  }
+
+  const availableQuantity = looseItem.quantity - getLooseItemReservedQuantity(looseItem, npcId);
+  if (availableQuantity < quantity) {
+    return false;
+  }
+
+  const reservations = getLooseItemReservations(looseItem);
+  const existingReservation = reservations.find((reservation) => reservation.npc_id === npcId);
+  if (existingReservation) {
+    existingReservation.quantity += quantity;
+    existingReservation.reserved_at_ms = nowMs;
+  } else {
+    reservations.push({
+      npc_id: npcId,
+      quantity,
+      reserved_at_ms: nowMs,
+    });
+  }
+
+  syncLooseItemLegacyReservationField(looseItem);
+  return true;
+}
+
+export function releaseLooseItemReservation(
+  plot: Plot,
+  looseItemId: string,
+  npcId: string
+): boolean {
+  const looseItem = getLooseItemById(plot, looseItemId);
+  if (!looseItem) {
+    return false;
+  }
+
+  const reservations = getLooseItemReservations(looseItem);
+  const nextReservations = reservations.filter((reservation) => reservation.npc_id !== npcId);
+  const changed = nextReservations.length !== reservations.length;
+  if (!changed) {
+    return false;
+  }
+
+  looseItem.reservations = nextReservations;
+  syncLooseItemLegacyReservationField(looseItem);
+  return true;
+}
+
+export function pickupReservedLooseItemQuantity(
+  plot: Plot,
+  looseItemId: string,
+  npcId: string,
+  quantity: number
+): { changed: boolean; itemId: ItemId | null; quantityPicked: number } {
+  if (quantity <= 0) {
+    return { changed: false, itemId: null, quantityPicked: 0 };
+  }
+
+  const detail = plot.detail;
+  if (!detail) {
+    return { changed: false, itemId: null, quantityPicked: 0 };
+  }
+
+  const looseItems = getLooseItems(detail);
+  const looseItemIndex = looseItems.findIndex((candidate) => candidate.id === looseItemId);
+  if (looseItemIndex < 0) {
+    return { changed: false, itemId: null, quantityPicked: 0 };
+  }
+
+  const looseItem = looseItems[looseItemIndex];
+  const reservations = getLooseItemReservations(looseItem);
+  const reservation = reservations.find((candidate) => candidate.npc_id === npcId);
+  if (!reservation || reservation.quantity < quantity || looseItem.quantity < quantity) {
+    return { changed: false, itemId: null, quantityPicked: 0 };
+  }
+
+  reservation.quantity -= quantity;
+  looseItem.quantity -= quantity;
+  looseItem.reservations = reservations.filter((candidate) => candidate.quantity > 0);
+  syncLooseItemLegacyReservationField(looseItem);
+
+  const itemId = looseItem.item_id;
+  if (looseItem.quantity <= 0) {
+    looseItems.splice(looseItemIndex, 1);
+  }
+
+  return {
+    changed: true,
+    itemId,
+    quantityPicked: quantity,
+  };
 }
 
 function isTileInsidePlotBounds(detail: PlotDetail, x: number, y: number): boolean {
@@ -712,11 +950,62 @@ export function spawnLooseItemNearTile(
     x: placementTile.x,
     y: placementTile.y,
     reserved_by_npc_id: null,
+    reservations: [],
     created_at_ms: nowMs,
   };
 
   getLooseItems(detail).push(looseItem);
   return { changed: true, looseItem };
+}
+
+export function releaseManufacturingInputBufferToGround(
+  plot: Plot,
+  stationObjectId: string,
+  nowMs: number
+): { changed: boolean; released_quantity: number } {
+  const stationObject = getPlotObjectById(plot, stationObjectId);
+  if (!stationObject?.manufacturing) {
+    return { changed: false, released_quantity: 0 };
+  }
+
+  let changed = false;
+  let releasedQuantity = 0;
+  const bufferedItemCounts = stationObject.manufacturing.input_buffer.item_counts;
+
+  for (const [bufferedItemIdValue, bufferedQuantityValue] of Object.entries(bufferedItemCounts)) {
+    const bufferedItemId = bufferedItemIdValue as ItemId;
+    let remainingQuantity = Math.max(0, Math.floor(Number(bufferedQuantityValue ?? 0)));
+    if (remainingQuantity <= 0) {
+      delete bufferedItemCounts[bufferedItemId];
+      continue;
+    }
+
+    while (remainingQuantity > 0) {
+      const spawned = spawnLooseItemNearTile(
+        plot,
+        bufferedItemId,
+        stationObject.x,
+        stationObject.y,
+        nowMs,
+        stationObject.id
+      );
+      if (!spawned.changed) {
+        break;
+      }
+
+      remainingQuantity -= 1;
+      releasedQuantity += 1;
+      changed = true;
+    }
+
+    if (remainingQuantity > 0) {
+      bufferedItemCounts[bufferedItemId] = remainingQuantity;
+    } else {
+      delete bufferedItemCounts[bufferedItemId];
+    }
+  }
+
+  return { changed, released_quantity: releasedQuantity };
 }
 
 function ensurePlotObjectsCollection(detail: PlotDetail): boolean {
@@ -825,6 +1114,120 @@ function ensureStarterDumpZone(detail: PlotDetail): boolean {
     dumpZonePlacement.y,
     dumpZonePlacement.footprint_w,
     dumpZonePlacement.footprint_h
+  );
+  changed = true;
+
+  return changed;
+}
+
+function ensurePlotObjectItemBufferState(
+  bufferState: PlotObjectItemBufferState | null | undefined
+): { bufferState: PlotObjectItemBufferState; changed: boolean } {
+  if (bufferState && typeof bufferState === "object" && bufferState.item_counts) {
+    return { bufferState, changed: false };
+  }
+
+  return {
+    bufferState: makeEmptyItemBufferState(),
+    changed: true,
+  };
+}
+
+function ensureStarterWorkbench(detail: PlotDetail): boolean {
+  const migratedPlotObjects = ensurePlotObjectsCollection(detail);
+  let changed = migratedPlotObjects;
+
+  const existingWorkbench = detail.plot_objects.find(
+    (obj) => obj.kind === "WORKBENCH_1X2"
+  );
+  if (existingWorkbench) {
+    if (existingWorkbench.id !== "starter_workbench") {
+      existingWorkbench.id = "starter_workbench";
+      changed = true;
+    }
+
+    if (existingWorkbench.footprint_w !== STARTER_WORKBENCH_FOOTPRINT_W) {
+      existingWorkbench.footprint_w = STARTER_WORKBENCH_FOOTPRINT_W;
+      changed = true;
+    }
+
+    if (existingWorkbench.footprint_h !== STARTER_WORKBENCH_FOOTPRINT_H) {
+      existingWorkbench.footprint_h = STARTER_WORKBENCH_FOOTPRINT_H;
+      changed = true;
+    }
+
+    if (!existingWorkbench.manufacturing) {
+      existingWorkbench.manufacturing = makeStarterWorkbenchManufacturingState();
+      changed = true;
+    } else {
+      if (existingWorkbench.manufacturing.station_kind !== "WORKBENCH") {
+        existingWorkbench.manufacturing.station_kind = "WORKBENCH";
+        changed = true;
+      }
+
+      const allowedRecipeIds = getAllowedManufacturingRecipeIdsForStation("WORKBENCH");
+      if (
+        JSON.stringify(existingWorkbench.manufacturing.allowed_recipe_ids ?? []) !==
+        JSON.stringify(allowedRecipeIds)
+      ) {
+        existingWorkbench.manufacturing.allowed_recipe_ids = allowedRecipeIds;
+        changed = true;
+      }
+
+      if (!Array.isArray(existingWorkbench.manufacturing.queue)) {
+        existingWorkbench.manufacturing.queue = [];
+        changed = true;
+      }
+
+      if (typeof existingWorkbench.manufacturing.assigned_npc_id === "undefined") {
+        existingWorkbench.manufacturing.assigned_npc_id = null;
+        changed = true;
+      }
+
+      const inputBufferResult = ensurePlotObjectItemBufferState(
+        existingWorkbench.manufacturing.input_buffer
+      );
+      existingWorkbench.manufacturing.input_buffer = inputBufferResult.bufferState;
+      changed = changed || inputBufferResult.changed;
+
+      const outputBufferResult = ensurePlotObjectItemBufferState(
+        existingWorkbench.manufacturing.output_buffer
+      );
+      existingWorkbench.manufacturing.output_buffer = outputBufferResult.bufferState;
+      changed = changed || outputBufferResult.changed;
+
+      if (typeof existingWorkbench.manufacturing.active_craft === "undefined") {
+        existingWorkbench.manufacturing.active_craft = null;
+        changed = true;
+      }
+    }
+
+    clearCellsInsideFootprint(
+      detail,
+      existingWorkbench.x,
+      existingWorkbench.y,
+      existingWorkbench.footprint_w ?? STARTER_WORKBENCH_FOOTPRINT_W,
+      existingWorkbench.footprint_h ?? STARTER_WORKBENCH_FOOTPRINT_H
+    );
+
+    return changed;
+  }
+
+  const shack = detail.plot_objects.find((obj) => obj.kind === "SHACK");
+  if (!shack) {
+    return changed;
+  }
+
+  const workbenchPlacement = getStarterWorkbenchPlacement(shack.x, shack.y);
+  detail.plot_objects.push(
+    makeStarterWorkbenchObject(workbenchPlacement.x, workbenchPlacement.y)
+  );
+  clearCellsInsideFootprint(
+    detail,
+    workbenchPlacement.x,
+    workbenchPlacement.y,
+    workbenchPlacement.footprint_w,
+    workbenchPlacement.footprint_h
   );
   changed = true;
 
@@ -960,6 +1363,11 @@ function normalizeStarterNpc(
     changed = true;
   }
 
+  if (typeof (npc as PlotDetailNpc & { assigned_job_id?: string | null }).assigned_job_id === "undefined") {
+    (npc as PlotDetailNpc & { assigned_job_id?: string | null }).assigned_job_id = null;
+    changed = true;
+  }
+
   if (typeof (npc as PlotDetailNpc & { haul_target_mode?: string | null }).haul_target_mode === "undefined") {
     (npc as PlotDetailNpc & { haul_target_mode?: string | null }).haul_target_mode = null;
     changed = true;
@@ -1044,6 +1452,28 @@ function ensureStarterNpcData(plot: Plot): boolean {
   if (!Array.isArray(detail.loose_items)) {
     detail.loose_items = [];
     changed = true;
+  }
+
+  for (const looseItem of detail.loose_items) {
+    if (!Array.isArray(looseItem.reservations)) {
+      looseItem.reservations = [];
+      changed = true;
+    }
+
+    if (
+      typeof looseItem.reserved_by_npc_id === "string" &&
+      looseItem.reserved_by_npc_id.length > 0 &&
+      looseItem.reservations.length === 0
+    ) {
+      looseItem.reservations.push({
+        npc_id: looseItem.reserved_by_npc_id,
+        quantity: 1,
+        reserved_at_ms: looseItem.created_at_ms,
+      });
+      changed = true;
+    }
+
+    syncLooseItemLegacyReservationField(looseItem);
   }
 
   return changed;
@@ -1256,9 +1686,11 @@ const STARTER_CLEAR_AREA_SIZE = 8;
 const STARTER_SHACK_SIZE = 4;
 const STARTER_RUBBLE_SIZE = 4;
 const STARTER_DUMP_ZONE_SIZE = 8;
-const STARTER_DUMP_ZONE_GAP_TILES = 2;
+const STARTER_DUMP_ZONE_GAP_TILES = 4;
 const STARTER_DUMP_ZONE_CAPACITY = 200;
-const DIRECT_HAUL_MAX_DISTANCE_TILES = 8;
+const STARTER_WORKBENCH_FOOTPRINT_W = 2;
+const STARTER_WORKBENCH_FOOTPRINT_H = 6;
+const DIRECT_HAUL_MAX_DISTANCE_TILES = 80;
 const DUMP_ZONE_RETRY_BLOCK_MS = 60_000;
 
 function moduleKey(mx: number, my: number): string {
@@ -1407,6 +1839,10 @@ export function normalizeWorldForM0_5(world: WorldState): { changed: boolean; re
     }
 
     if (ensureStarterDumpZone(plot.detail)) {
+      changed = true;
+    }
+
+    if (ensureStarterWorkbench(plot.detail)) {
       changed = true;
     }
 

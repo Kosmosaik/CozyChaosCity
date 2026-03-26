@@ -283,24 +283,30 @@ offset_top = -207.0
 offset_bottom = -106.0
 
 [node name="PlotDebugOverlay" type="PanelContainer" parent="." unique_id=1850748805]
-visible = false
-custom_minimum_size = Vector2(260, 0)
+custom_minimum_size = Vector2(360, 0)
 layout_mode = 1
 offset_left = 16.0
 offset_top = 48.0
-offset_right = 276.0
+offset_right = 376.0
 offset_bottom = 180.0
 script = ExtResource("11_amv7k")
 
-[node name="MarginContainer" type="MarginContainer" parent="PlotDebugOverlay" unique_id=2084575545]
+[node name="ScrollContainer" type="ScrollContainer" parent="PlotDebugOverlay" unique_id=758449126]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 0
+horizontal_scroll_mode = 0
+
+[node name="MarginContainer" type="MarginContainer" parent="PlotDebugOverlay/ScrollContainer" unique_id=2084575545]
 layout_mode = 2
 theme_override_constants/margin_left = 10
 theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 10
 theme_override_constants/margin_bottom = 10
 
-[node name="DebugLabel" type="Label" parent="PlotDebugOverlay/MarginContainer" unique_id=1540479945]
+[node name="DebugLabel" type="Label" parent="PlotDebugOverlay/ScrollContainer/MarginContainer" unique_id=1540479945]
 layout_mode = 2
 theme_override_font_sizes/font_size = 14
-text = "f huwf ewhu9 fewhuf weh9 few hf9we hjf9ew jfiwe jfiew jf0iwe jf0ew jf0iwe fjwe fwejifw jfiewjifew jifwe jifwejifoewjiofweiofweijfw ifjwe ioe"
+text = "Plot Debug"
 autowrap_mode = 3

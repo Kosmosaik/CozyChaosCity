@@ -6,7 +6,7 @@
 offset_left = 1094.0
 offset_top = 48.0
 offset_right = 1350.0
-offset_bottom = 350.0
+offset_bottom = 408.0
 script = ExtResource("1_npc_sheet_script")
 
 [node name="MarginContainer" type="MarginContainer" parent="." unique_id=226492421]
@@ -89,6 +89,26 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 14
 text = "-"
 
+[node name="CarryingLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1718075415]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Carrying:"
+
+[node name="CarryingValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=634323879]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
+[node name="DropoffLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=1251685981]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Drop-off:"
+
+[node name="DropoffValueLabel" type="Label" parent="MarginContainer/VBoxContainer/InfoGrid" unique_id=5366288]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "-"
+
 [node name="TraitsHeaderLabel" type="Label" parent="MarginContainer/VBoxContainer" unique_id=2126006872]
 layout_mode = 2
 text = "Traits"
@@ -108,5 +128,5 @@ text = "Future:"
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.37799093, 0.31005007, 1)
 theme_override_font_sizes/font_size = 11
-text = "Skills / stats will be added in a later phase."
+text = "Skills, Stats and Traits will be added in a later phase."
 autowrap_mode = 3

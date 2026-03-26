@@ -1,0 +1,17 @@
+[gd_scene format=3 uid="uid://0nylvdiejxpc"]
+
+[ext_resource type="Script" uid="uid://bwtp82602mx3t" path="res://scripts/world/item_visuals/StaticItemModelVisual.gd" id="1_ea3mi"]
+[ext_resource type="PackedScene" uid="uid://cls45lllvj6t4" path="res://assets/resources/lumber.glb" id="2_6jbkw"]
+
+[node name="ScrapWoodItemVisual" type="Node3D" unique_id=534259348]
+script = ExtResource("1_ea3mi")
+carry_model_yaw_offset_degrees = 90.0
+loose_ground_model_yaw_offset_degrees = 90.0
+loose_ground_visual_height = 0.0
+
+[node name="ModelRoot" type="Node3D" parent="." unique_id=995303661]
+
+[node name="Model" parent="ModelRoot" unique_id=2082826817 instance=ExtResource("2_6jbkw")]
+
+[node name="Model2" parent="ModelRoot" unique_id=1660796357 instance=ExtResource("2_6jbkw")]
+transform = Transform3D(0.73462963, -0.2909027, 0.61293966, -0.15742333, -0.95184624, -0.2630712, 0.6599525, 0.09676897, -0.7450493, 0.16479358, 0.30818683, 0)
