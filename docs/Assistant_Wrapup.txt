@@ -1,36 +1,15 @@
-This is an end-of-session wrap-up task.
+Session wrap-up reference
 
-Your job:
-1. Open the newly uploaded .zip and summarize the current implemented state from the actual files.
-2. Identify what changed in this session and what is now true in the repo.
-3. Prepare end-of-session wrap-up materials:
-   - recommended git add / commit / push commands
-   - recommended commit message
-   - recommended next branch name
-   - update CHANGELOG entry in the same formatting as current CHANGELOG.md
-   - updates for any docs under /docs/ that should now be changed (Check milestones.md, Technical Summary For GPT Assistant, Latest Milestone implementation plan etc.
-   - a concise technical handoff summary for the next GPT assistant
-   - discord-friendly patch notes in markdown, max 2000 characters. Follow the same format as in "Discord_Format.md" under /docs/
-4. Clearly separate:
-   - what is already implemented
-   - what is next
-   - what is still temporary / known limitations
+This file is kept only as a historical note about the kind of materials that are useful at the end of a development session.
+It does not define project rules or assistant behavior.
 
-Important repo-state guidance:
-- The current session may have changed gameplay, rendering, networking, docs, or workflow priorities.
-- Reflect the current real implementation, not old plans.
-- If priorities changed during development, update the docs to match the new actual priority order.
-- If debug systems are still temporary, say so clearly.
+`docs/GPT_Assistant_Rules.md` is the only assistant-instruction document in this repository.
 
-Output format I want:
-1. Current repo summary
-2. Git commands
-3. Commit message
-4. New branch suggestion
-5. CHANGELOG entry
-6. Docs updates
-7. Technical handoff summary
-8. Discord patch notes (playerfriendly. No technical bull, no fluff. Max 2000 characters).
-
-Do not skip the repo-reading step.
-Base everything on the uploaded zip.
+Typical wrap-up materials that have been useful for this project:
+- current repo summary based on the actual latest zip/repo state
+- recommended git add / commit / push commands
+- recommended commit message and next branch name
+- current CHANGELOG entry
+- updates to active docs under `/docs/`
+- a concise handoff summary
+- player-facing patch notes

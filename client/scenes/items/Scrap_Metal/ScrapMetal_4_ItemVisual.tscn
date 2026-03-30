@@ -1,0 +1,22 @@
+[gd_scene format=3 uid="uid://rhyj71fmvdrd"]
+
+[ext_resource type="Script" uid="uid://bwtp82602mx3t" path="res://scripts/world/item_visuals/StaticItemModelVisual.gd" id="1_56lnm"]
+[ext_resource type="PackedScene" uid="uid://bf6bj50s37w78" path="res://assets/resources/RockBlock.glb" id="2_r2fas"]
+
+[node name="ScrapMetalItemVisual" type="Node3D" unique_id=1108463621]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.15, 0, 0)
+script = ExtResource("1_56lnm")
+loose_ground_visual_height = 0.0
+
+[node name="ModelRoot" type="Node3D" parent="." unique_id=1241025701]
+
+[node name="Model" parent="ModelRoot" unique_id=173000352 instance=ExtResource("2_r2fas")]
+
+[node name="Model2" parent="ModelRoot" unique_id=1953509669 instance=ExtResource("2_r2fas")]
+transform = Transform3D(0.99924, 0, -0.038980775, 0, 1, 0, 0.038980775, 0, 0.99924, 0.024802834, 0.25021312, 0)
+
+[node name="Model4" parent="ModelRoot" unique_id=1797430578 instance=ExtResource("2_r2fas")]
+transform = Transform3D(0.4363091, -0.015376678, -0.8996654, -0.002080222, 0.9998341, -0.018097594, 0.8997944, 0.009767644, 0.4362048, 0.033444285, 0.50477433, -0.02110985)
+
+[node name="Model3" parent="ModelRoot" unique_id=100646355 instance=ExtResource("2_r2fas")]
+transform = Transform3D(0.9941164, -0.004923463, 0.10820474, 0.108297564, 0.026400095, -0.99376786, 0.0020361543, 0.99963933, 0.026777964, 0.302, 0.25, -0.11359458)

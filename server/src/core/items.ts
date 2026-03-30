@@ -201,10 +201,12 @@ const ITEM_DEFINITIONS: Record<ItemId, ItemDefinition> = {
       can_exist_loose: true,
       max_stack_stored: 4,
       dump_zone_capacity_cost: 4,
-      allowed_storage_tags: [],
+      // Branch 3 still has no Basic Stockpile, so finished pallets need a legal
+      // temporary storage destination instead of poisoning the haul loop.
+      allowed_storage_tags: ["DUMP_ZONE"],
     },
     routing: {
-      allow_direct_to_dump_zone: false,
+      allow_direct_to_dump_zone: true,
       allow_direct_to_basic_stockpile: false,
     },
   },
@@ -220,12 +222,12 @@ type WeightedEntry<TValue> = {
 };
 
 const STARTER_RUBBLE_OUTPUT_GROUP_TABLE: WeightedEntry<StarterRubbleOutputGroup>[] = [
-  { value: "CLEAN", weight: 50 },
-  { value: "MIXED", weight: 50 },
+  { value: "CLEAN", weight: 80 },
+  { value: "MIXED", weight: 20 },
 ];
 
 const STARTER_RUBBLE_CLEAN_ITEM_TABLE: WeightedEntry<ItemId>[] = [
-  { value: "SCRAP_WOOD", weight: 1 },
+  { value: "SCRAP_WOOD", weight: 4 },
   { value: "SCRAP_METAL", weight: 1 },
   { value: "TARP", weight: 1 },
 ];

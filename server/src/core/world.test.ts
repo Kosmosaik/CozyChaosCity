@@ -77,15 +77,15 @@ describe("world logistics helpers", () => {
     expect(dumpZone?.storage?.capacity_used).toBe(0);
   });
 
-    it("creates the starter workbench with reusable manufacturing state", () => {
+  it("creates the starter workbench with reusable manufacturing state", () => {
     const plot = makeClaimedPlayerPlot();
     const workbench = plot.detail?.plot_objects.find(
       (obj) => obj.kind === "WORKBENCH_1X2"
     );
 
     expect(workbench?.id).toBe("starter_workbench");
-    expect(workbench?.footprint_w).toBe(2);
-    expect(workbench?.footprint_h).toBe(6);
+    expect(workbench?.footprint_w).toBe(1);
+    expect(workbench?.footprint_h).toBe(4);
     expect(workbench?.manufacturing?.station_kind).toBe("WORKBENCH");
     expect(workbench?.manufacturing?.allowed_recipe_ids).toEqual([
       "WOODEN_PALLET",
@@ -157,6 +157,67 @@ describe("world logistics helpers", () => {
       mode: "DUMP_ZONE",
       object_id: "starter_dump_zone",
     });
+  });
+
+  it("routes wooden pallet output to the dump zone while stockpiles are not implemented yet", () => {
+    const plot = makeClaimedPlayerPlot();
+    const destination = resolveDirectHaulDestinationForSingleItem(
+      plot,
+      "WOODEN_PALLET",
+      23,
+      18,
+      1000
+    );
+
+    expect(destination).toEqual({
+      mode: "DUMP_ZONE",
+      object_id: "starter_dump_zone",
+    });
+  });
+
+  it("deposits a wooden pallet into the dump zone and uses its configured capacity cost", () => {
+    const plot = makeClaimedPlayerPlot();
+    const deposit = tryDepositSingleItemIntoDumpZone(
+      plot,
+      "starter_dump_zone",
+      "WOODEN_PALLET",
+      1000
+    );
+
+    const dumpZone = plot.detail?.plot_objects.find(
+      (obj) => obj.id === "starter_dump_zone"
+    );
+
+    expect(deposit).toEqual({ changed: true, deposited: true });
+    expect(dumpZone?.storage?.capacity_used).toBe(4);
+    expect(dumpZone?.storage?.item_counts.WOODEN_PALLET).toBe(1);
+  });
+
+  it("clears a stale dump-zone retry cooldown when the zone still has space", () => {
+    const plot = makeClaimedPlayerPlot();
+    const dumpZone = plot.detail?.plot_objects.find(
+      (obj) => obj.id === "starter_dump_zone"
+    );
+    if (!dumpZone?.storage) {
+      throw new Error("expected starter dump zone storage");
+    }
+
+    dumpZone.storage.haul_blocked_until_ms = 62_000;
+    dumpZone.storage.capacity_used = 0;
+
+    const destination = resolveDirectHaulDestinationForSingleItem(
+      plot,
+      "SCRAP_WOOD",
+      23,
+      18,
+      2000
+    );
+
+    expect(destination).toEqual({
+      mode: "DUMP_ZONE",
+      object_id: "starter_dump_zone",
+    });
+    expect(dumpZone.storage.haul_blocked_until_ms).toBeNull();
   });
 
   it("deposits a single item into the dump zone and updates abstract totals", () => {

@@ -32,10 +32,33 @@ const STATE_ANIMATION_CANDIDATES: Dictionary = {
 	"idle": ["Idle", "Idle2", "Idle3"],
 	"moving_to_target": ["Walk"],
 	"working": ["Scavenge"],
+	"pickup_recover": ["Scavenge Complete", "Idle"],
 	"carrying_to_dropoff": ["Walk Carry", "Walk"],
-	"dropping_off": ["Scavenge", "Idle"],
+	"dropping_off": ["Scavenge Start", "Scavenge", "Idle"],
+	"dropoff_recover": ["Scavenge Complete", "Idle"],
 	"returning": ["Walk"],
 }
+
+const ACTIVITY_ANIMATION_CANDIDATES: Dictionary = {
+	"Operating workbench": ["Workbench_Work", "Scavenge"],
+	"Picking up item": ["Scavenge Start", "Scavenge", "Idle"],
+	"Finishing pickup": ["Scavenge Complete", "Idle"],
+	"Dropping off item": ["Scavenge Start", "Scavenge", "Idle"],
+	"Finishing dropoff": ["Scavenge Complete", "Idle"],
+}
+
+const LOOPING_ANIMATION_NAMES: Array[String] = [
+	"Walk",
+	"Walk Carry",
+	"Scavenge",
+	"Workbench_Work",
+]
+
+# Workbench operation uses an authored local anchor from the station scene.
+# Allow a much larger visual-only offset here so the worker can read as
+# standing close to the bench even though the authoritative server tile remains
+# on the nearest valid adjacent interaction cell.
+const WORKBENCH_VISUAL_OFFSET_MAX_METERS: float = 4.0
 
 @onready var click_body: StaticBody3D = $ClickBody
 @onready var visual_root: Node3D = $VisualRoot
@@ -46,7 +69,9 @@ var _visual_instance: Node3D = null
 var _animation_player: AnimationPlayer = null
 var _label_anchor: Node3D = null
 var _resolved_animation_names_by_state: Dictionary = {}
+var _resolved_animation_names_by_activity: Dictionary = {}
 var _current_animation_name: String = ""
+var _current_animation_signature: String = ""
 var _last_facing_direction: Vector3 = Vector3.FORWARD
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -87,6 +112,7 @@ func apply_snapshot(
 	has_work_visual_target: bool
 ) -> void:
 	var state: String = str(npc_data.get("state", "idle"))
+	var activity: String = str(npc_data.get("current_activity", ""))
 	var carry_slots_value: Variant = npc_data.get("carry_slots", [])
 	var carry_slots: Array = []
 
@@ -108,11 +134,12 @@ func apply_snapshot(
 	)
 	_update_visual_work_offset(
 		state,
+		activity,
 		current_position,
 		work_visual_target_position,
 		has_work_visual_target
 	)
-	_play_animation_for_state(state)
+	_play_animation_for_snapshot(state, activity)
 
 func _apply_carry_visual_from_slots(carry_slots: Array) -> void:
 	if carry_visual == null:
@@ -195,6 +222,7 @@ func _spawn_visual_if_needed() -> void:
 		_animation_player = _find_animation_player_recursive(_visual_instance)
 
 	_resolve_animation_names()
+	_configure_animation_loop_modes()
 
 	if _animation_player != null and not _animation_player.animation_finished.is_connected(_on_animation_finished):
 		_animation_player.animation_finished.connect(_on_animation_finished)
@@ -203,6 +231,7 @@ func _spawn_visual_if_needed() -> void:
 
 func _resolve_animation_names() -> void:
 	_resolved_animation_names_by_state.clear()
+	_resolved_animation_names_by_activity.clear()
 	_idle_animation_names.clear()
 
 	if _animation_player == null:
@@ -229,11 +258,55 @@ func _resolve_animation_names() -> void:
 
 			continue
 
-		for animation_name_value in animation_candidates:
-			var animation_name: String = str(animation_name_value)
-			if _animation_player.has_animation(animation_name):
-				_resolved_animation_names_by_state[state_name] = animation_name
-				break
+		var resolved_state_animation: String = _find_first_available_animation(
+			animation_candidates
+		)
+		if resolved_state_animation != "":
+			_resolved_animation_names_by_state[state_name] = resolved_state_animation
+
+	for activity_name_value in ACTIVITY_ANIMATION_CANDIDATES.keys():
+		var activity_name: String = str(activity_name_value)
+		var activity_candidates_value: Variant = ACTIVITY_ANIMATION_CANDIDATES.get(
+			activity_name,
+			[]
+		)
+		if typeof(activity_candidates_value) != TYPE_ARRAY:
+			continue
+
+		var activity_candidates: Array = activity_candidates_value as Array
+		var resolved_activity_animation: String = _find_first_available_animation(
+			activity_candidates
+		)
+		if resolved_activity_animation != "":
+			_resolved_animation_names_by_activity[activity_name] = resolved_activity_animation
+			
+func _find_first_available_animation(animation_candidates: Array) -> String:
+	if _animation_player == null:
+		return ""
+
+	for animation_name_value in animation_candidates:
+		var animation_name: String = str(animation_name_value)
+		if _animation_player.has_animation(animation_name):
+			return animation_name
+
+	return ""
+	
+func _configure_animation_loop_modes() -> void:
+	if _animation_player == null:
+		return
+
+	for animation_name in LOOPING_ANIMATION_NAMES:
+		if not _animation_player.has_animation(animation_name):
+			continue
+
+		var animation: Animation = _animation_player.get_animation(animation_name)
+		if animation == null:
+			continue
+
+		# Imported locomotion/work clips are not always authored as looping.
+		# Force the stable runtime contract here so NPCs never slide after one
+		# cycle while the server still thinks they are moving/working.
+		animation.loop_mode = Animation.LOOP_LINEAR
 
 func _resolve_label_anchor_from_visual_wrapper() -> void:
 	# The actor should not know how the imported model is structured.
@@ -290,6 +363,7 @@ func _update_facing(
 
 func _update_visual_work_offset(
 	state: String,
+	activity: String,
 	current_position: Vector3,
 	work_visual_target_position: Vector3,
 	has_work_visual_target: bool
@@ -297,24 +371,52 @@ func _update_visual_work_offset(
 	if visual_root == null:
 		return
 
-	# Reset to neutral unless the NPC is actively working on a rubble object
-	# that has a known client-side visual position.
+	# Reset to neutral unless the NPC is actively working on something that has
+	# a known authored visual target.
 	if state != "working" or not has_work_visual_target:
 		visual_root.position = Vector3.ZERO
 		return
 
-	var desired_offset: Vector3 = work_visual_target_position - current_position
-	desired_offset.y = 0.0
+	# The renderer provides the work visual target in the parent / plot space.
+	# visual_root.position, however, is local to this actor node.
+	#
+	# Because the actor root rotates to face the work target, applying the raw
+	# parent-space delta directly as a local offset produces the wrong result.
+	# Convert the target delta into actor-local space first.
+	var desired_parent_space_offset: Vector3 = (
+		work_visual_target_position - current_position
+	)
+	desired_parent_space_offset.y = 0.0
 
-	# Clamp the visual-only shift so the visible character stays close to the
-	# authoritative root. This avoids the model looking detached from its click
-	# body / selection ring.
-	if desired_offset.length() > MAX_WORK_VISUAL_OFFSET_METERS:
-		desired_offset = desired_offset.normalized() * MAX_WORK_VISUAL_OFFSET_METERS
+	var desired_local_offset: Vector3 = (
+		transform.basis.inverse() * desired_parent_space_offset
+	)
+	desired_local_offset.y = 0.0
 
-	visual_root.position = desired_offset
+	if activity == "Operating workbench":
+		# For workbench operation, the station scene owns the authored visual
+		# stance through NpcPosition. Keep the authoritative server tile unchanged
+		# and only correct presentation here.
+		if desired_local_offset.length() > WORKBENCH_VISUAL_OFFSET_MAX_METERS:
+			desired_local_offset = (
+				desired_local_offset.normalized()
+				* WORKBENCH_VISUAL_OFFSET_MAX_METERS
+			)
 
-func _play_animation_for_state(state: String) -> void:
+		visual_root.position = desired_local_offset
+		return
+
+	# Rubble keeps the smaller presentation-only correction because its visual
+	# target is only compensating for client-side rubble presentation offsets.
+	if desired_local_offset.length() > MAX_WORK_VISUAL_OFFSET_METERS:
+		desired_local_offset = (
+			desired_local_offset.normalized()
+			* MAX_WORK_VISUAL_OFFSET_METERS
+		)
+
+	visual_root.position = desired_local_offset
+
+func _play_animation_for_snapshot(state: String, activity: String) -> void:
 	if _animation_player == null:
 		return
 
@@ -326,18 +428,33 @@ func _play_animation_for_state(state: String) -> void:
 
 	_current_state = state
 
-	var animation_name: String = str(_resolved_animation_names_by_state.get(state, ""))
+	var animation_name: String = str(
+		_resolved_animation_names_by_activity.get(activity, "")
+	)
+
+	if animation_name == "":
+		animation_name = str(_resolved_animation_names_by_state.get(state, ""))
+
 	if animation_name == "":
 		animation_name = str(_resolved_animation_names_by_state.get("idle", ""))
 
 	if animation_name == "":
 		return
 
-	if _current_animation_name == animation_name and _animation_player.is_playing():
+	var animation_signature: String = "%s|%s|%s" % [state, activity, animation_name]
+
+	# Do not suppress replay just because the clip name matches. One-shot clips
+	# such as Scavenge Start must be allowed to restart when the authoritative
+	# activity changes to a new action.
+	if (
+		_current_animation_signature == animation_signature
+		and _animation_player.is_playing()
+	):
 		return
 
 	_animation_player.play(animation_name)
 	_current_animation_name = animation_name
+	_current_animation_signature = animation_signature
 	
 func _play_random_idle_animation() -> void:
 	if _animation_player == null:
@@ -348,6 +465,7 @@ func _play_random_idle_animation() -> void:
 		if fallback_animation_name != "":
 			_animation_player.play(fallback_animation_name)
 			_current_animation_name = fallback_animation_name
+			_current_animation_signature = "idle||" + fallback_animation_name
 		return
 
 	var next_animation_name: String = _idle_animation_names[_rng.randi_range(0, _idle_animation_names.size() - 1)]
@@ -359,6 +477,7 @@ func _play_random_idle_animation() -> void:
 
 	_animation_player.play(next_animation_name)
 	_current_animation_name = next_animation_name
+	_current_animation_signature = "idle||" + next_animation_name
 
 func _on_animation_finished(animation_name: StringName) -> void:
 	if _current_state != "idle":

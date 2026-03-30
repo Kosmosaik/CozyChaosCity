@@ -21,3 +21,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.05, 0.05, 0)
 
 [node name="OutputBufferVisual" type="Node3D" parent="OutputBufferAnchor" unique_id=1627377215]
 script = ExtResource("3_item_visual_script")
+
+[node name="NpcPosition" type="Node3D" parent="." unique_id=568694291]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.86)

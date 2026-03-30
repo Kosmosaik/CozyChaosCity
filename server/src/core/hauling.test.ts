@@ -65,6 +65,10 @@ describe("hauling foundation", () => {
     expect(typeof pickupEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, pickupEndsAtMs as number);
 
+    const pickupRecoverEndsAtMs = laborer.state_ends_at_ms;
+    expect(typeof pickupRecoverEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, pickupRecoverEndsAtMs as number);
+
     const carryEndsAtMs = laborer.state_ends_at_ms;
     expect(typeof carryEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, carryEndsAtMs as number);

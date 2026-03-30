@@ -1,14 +1,16 @@
-import { Plot, PlotDetail, PlotDetailNpc, PlotJob, PlotLooseItem } from "../net/protocol";
+import { Plot, PlotDetail, PlotDetailNpc, PlotJob, PlotLooseItem, PlotObject } from "../net/protocol";
 import {
   getLooseItemById,
+  getPlotObjectById,
   pickupReservedLooseItemQuantity,
   releaseLooseItemReservation,
   reserveLooseItemQuantity,
   resolveDirectHaulDestinationForSingleItem,
 } from "./world";
+import { pickupSingleManufacturingOutputItem } from "./manufacturing";
 
 export const HAUL_JOB_SEARCH_RADIUS_TILES = 10;
-const HAUL_PICKUP_MS = 800;
+const HAUL_PICKUP_MS = 750;
 
 function getDetail(plot: Plot): PlotDetail | null {
   return plot.detail ?? null;
@@ -26,8 +28,34 @@ function manhattanDistance(ax: number, ay: number, bx: number, by: number): numb
   return Math.abs(ax - bx) + Math.abs(ay - by);
 }
 
+function getNearestObjectFootprintDistance(
+  object: PlotObject,
+  fromX: number,
+  fromY: number
+): number {
+  const footprintW = object.footprint_w ?? 1;
+  const footprintH = object.footprint_h ?? 1;
+  const minX = object.x;
+  const maxX = object.x + footprintW - 1;
+  const minY = object.y;
+  const maxY = object.y + footprintH - 1;
+
+  const nearestX = Math.max(minX, Math.min(fromX, maxX));
+  const nearestY = Math.max(minY, Math.min(fromY, maxY));
+
+  return Math.abs(fromX - nearestX) + Math.abs(fromY - nearestY);
+}
+
 function makeLooseItemHaulJobId(looseItemId: string, unitIndex: number): string {
   return `job_haul_loose_${looseItemId}_${unitIndex}`;
+}
+
+function makeManufacturingOutputHaulJobId(
+  stationObjectId: string,
+  itemId: string,
+  unitIndex: number
+): string {
+  return `job_haul_output_${stationObjectId}_${itemId}_${unitIndex}`;
 }
 
 function isPendingHaulJobStatus(status: PlotJob["status"]): boolean {
@@ -43,7 +71,21 @@ function getPendingHaulJobsForLooseItem(detail: PlotDetail, looseItemId: string)
   );
 }
 
-function applyHaulDestinationMetadata(
+function getPendingManufacturingOutputHaulJobs(
+  detail: PlotDetail,
+  stationObjectId: string,
+  itemId: string
+): PlotJob[] {
+  return getJobs(detail).filter(
+    (job) =>
+      job.kind === "HAUL_MANUFACTURING_OUTPUT" &&
+      job.target_object_id === stationObjectId &&
+      job.haul_item_id === itemId &&
+      isPendingHaulJobStatus(job.status)
+  );
+}
+
+function applyLooseItemHaulDestinationMetadata(
   plot: Plot,
   looseItem: PlotLooseItem,
   job: PlotJob,
@@ -80,6 +122,146 @@ function applyHaulDestinationMetadata(
   job.blocked_reason = "no_valid_destination";
 }
 
+function applyManufacturingOutputHaulDestinationMetadata(
+  plot: Plot,
+  stationObject: PlotObject,
+  itemId: PlotLooseItem["item_id"],
+  job: PlotJob,
+  nowMs: number
+): void {
+  const destination = resolveDirectHaulDestinationForSingleItem(
+    plot,
+    itemId,
+    stationObject.x,
+    stationObject.y,
+    nowMs
+  );
+
+  if (
+    destination.mode === "DUMP_ZONE" ||
+    destination.mode === "MANUFACTURING_INPUT"
+  ) {
+    if (job.assigned_npc_id === null) {
+      job.status = "queued";
+    }
+
+    job.haul_destination_mode = destination.mode;
+    job.haul_destination_object_id = destination.object_id;
+    job.blocked_reason = null;
+    return;
+  }
+
+  if (job.assigned_npc_id === null) {
+    job.status = "blocked";
+  }
+
+  job.haul_destination_mode = null;
+  job.haul_destination_object_id = null;
+  job.blocked_reason = "no_valid_destination";
+}
+
+function makeStationItemKey(
+  stationObjectId: string,
+  itemId: PlotLooseItem["item_id"]
+): string {
+  return `${stationObjectId}::${itemId}`;
+}
+
+function retargetPendingLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
+  const detail = getDetail(plot);
+  if (!detail) {
+    return false;
+  }
+
+  const plannedInboundByStationItemKey = new Map<string, number>();
+
+  const pendingEntries = getJobs(detail)
+    .filter(
+      (job) =>
+        job.kind === "HAUL_LOOSE_ITEM" &&
+        isPendingHaulJobStatus(job.status) &&
+        typeof job.target_loose_item_id === "string"
+    )
+    .map((job) => {
+      const looseItem = getLooseItemById(plot, job.target_loose_item_id as string);
+      return looseItem ? { job, looseItem } : null;
+    })
+    .filter(
+      (entry): entry is { job: PlotJob; looseItem: PlotLooseItem } => entry !== null
+    )
+    .sort((left, right) => left.job.created_at_ms - right.job.created_at_ms);
+
+  let changed = false;
+
+  for (const entry of pendingEntries) {
+    const previousStatus = entry.job.status;
+    const previousDestinationMode = entry.job.haul_destination_mode;
+    const previousDestinationObjectId = entry.job.haul_destination_object_id;
+    const previousBlockedReason = entry.job.blocked_reason;
+
+    const destination = resolveDirectHaulDestinationForSingleItem(
+      plot,
+      entry.looseItem.item_id,
+      entry.looseItem.x,
+      entry.looseItem.y,
+      nowMs,
+      {
+        include_pending_manufacturing_jobs: false,
+        planned_inbound_by_station_item_key: plannedInboundByStationItemKey,
+      }
+    );
+
+    if (
+      destination.mode === "DUMP_ZONE" ||
+      destination.mode === "MANUFACTURING_INPUT"
+    ) {
+      if (entry.job.assigned_npc_id === null && entry.job.status === "blocked") {
+        entry.job.status = "queued";
+      }
+
+      entry.job.haul_destination_mode = destination.mode;
+      entry.job.haul_destination_object_id = destination.object_id;
+      entry.job.blocked_reason = null;
+
+      if (destination.mode === "MANUFACTURING_INPUT") {
+        const stationItemKey = makeStationItemKey(
+          destination.object_id,
+          entry.looseItem.item_id
+        );
+
+        plannedInboundByStationItemKey.set(
+          stationItemKey,
+          (plannedInboundByStationItemKey.get(stationItemKey) ?? 0) +
+            (entry.job.haul_quantity ?? 1)
+        );
+      }
+    } else {
+      if (entry.job.assigned_npc_id === null) {
+        entry.job.status = "blocked";
+      }
+
+      entry.job.haul_destination_mode = null;
+      entry.job.haul_destination_object_id = null;
+      entry.job.blocked_reason = "no_valid_destination";
+    }
+
+    entry.job.haul_item_id = entry.looseItem.item_id;
+    entry.job.haul_quantity = 1;
+    entry.job.updated_at_ms = nowMs;
+
+    if (
+      entry.job.status !== previousStatus ||
+      entry.job.haul_destination_mode !== previousDestinationMode ||
+      entry.job.haul_destination_object_id !== previousDestinationObjectId ||
+      entry.job.blocked_reason !== previousBlockedReason
+    ) {
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
 function createLooseItemHaulJob(
   plot: Plot,
   looseItem: PlotLooseItem,
@@ -104,7 +286,42 @@ function createLooseItemHaulJob(
     updated_at_ms: nowMs,
   };
 
-  applyHaulDestinationMetadata(plot, looseItem, job, nowMs);
+  applyLooseItemHaulDestinationMetadata(plot, looseItem, job, nowMs);
+  return job;
+}
+
+function createManufacturingOutputHaulJob(
+  plot: Plot,
+  stationObject: PlotObject,
+  itemId: PlotLooseItem["item_id"],
+  unitIndex: number,
+  nowMs: number
+): PlotJob {
+  const job: PlotJob = {
+    id: makeManufacturingOutputHaulJobId(stationObject.id, itemId, unitIndex),
+    kind: "HAUL_MANUFACTURING_OUTPUT",
+    source_order_kind: null,
+    source_target_scope: null,
+    target_object_id: stationObject.id,
+    target_loose_item_id: null,
+    haul_item_id: itemId,
+    haul_quantity: 1,
+    haul_destination_mode: null,
+    haul_destination_object_id: null,
+    blocked_reason: null,
+    status: "queued",
+    assigned_npc_id: null,
+    created_at_ms: nowMs,
+    updated_at_ms: nowMs,
+  };
+
+  applyManufacturingOutputHaulDestinationMetadata(
+    plot,
+    stationObject,
+    itemId,
+    job,
+    nowMs
+  );
   return job;
 }
 
@@ -239,7 +456,65 @@ function chooseBestLooseItemHaulJob(
   return bestMatch;
 }
 
-export function syncLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
+function chooseBestManufacturingOutputHaulJob(
+  plot: Plot,
+  npc: PlotDetailNpc
+): { job: PlotJob; stationObject: PlotObject } | null {
+  const detail = getDetail(plot);
+  if (!detail) {
+    return null;
+  }
+
+  let bestMatch: { job: PlotJob; stationObject: PlotObject } | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const job of getJobs(detail)) {
+    if (
+      job.kind !== "HAUL_MANUFACTURING_OUTPUT" ||
+      job.status !== "queued" ||
+      job.assigned_npc_id !== null ||
+      typeof job.target_object_id !== "string"
+    ) {
+      continue;
+    }
+
+    const stationObject = getPlotObjectById(plot, job.target_object_id);
+    if (!stationObject?.manufacturing) {
+      continue;
+    }
+
+    const itemId = job.haul_item_id;
+    if (!itemId) {
+      continue;
+    }
+
+    const bufferedQuantity = Math.max(
+      0,
+      Math.floor(stationObject.manufacturing.output_buffer.item_counts[itemId] ?? 0)
+    );
+    if (bufferedQuantity <= 0) {
+      continue;
+    }
+
+    const distance = getNearestObjectFootprintDistance(stationObject, npc.x, npc.y);
+    if (distance > HAUL_JOB_SEARCH_RADIUS_TILES) {
+      continue;
+    }
+
+    if (
+      bestMatch === null ||
+      distance < bestDistance ||
+      (distance === bestDistance && job.created_at_ms < bestMatch.job.created_at_ms)
+    ) {
+      bestMatch = { job, stationObject };
+      bestDistance = distance;
+    }
+  }
+
+  return bestMatch;
+}
+
+function syncGroundLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
   const detail = getDetail(plot);
   if (!detail) {
     return false;
@@ -252,16 +527,12 @@ export function syncLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
     const pendingJobs = getPendingHaulJobsForLooseItem(detail, looseItem.id);
     const desiredPendingJobCount = looseItem.quantity;
 
-    for (const job of pendingJobs) {
-      applyHaulDestinationMetadata(plot, looseItem, job, nowMs);
-      job.haul_item_id = looseItem.item_id;
-      job.haul_quantity = 1;
-      job.updated_at_ms = nowMs;
-      changed = true;
-    }
-
     if (pendingJobs.length < desiredPendingJobCount) {
-      for (let unitIndex = pendingJobs.length; unitIndex < desiredPendingJobCount; unitIndex += 1) {
+      for (
+        let unitIndex = pendingJobs.length;
+        unitIndex < desiredPendingJobCount;
+        unitIndex += 1
+      ) {
         jobs.push(createLooseItemHaulJob(plot, looseItem, unitIndex + 1, nowMs));
         changed = true;
       }
@@ -269,6 +540,7 @@ export function syncLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
 
     if (pendingJobs.length > desiredPendingJobCount) {
       let overflow = pendingJobs.length - desiredPendingJobCount;
+
       for (const job of pendingJobs) {
         if (overflow <= 0) {
           break;
@@ -310,6 +582,158 @@ export function syncLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
     changed = true;
   }
 
+  // Retarget after counts are synced so manufacturing demand is allocated once, deterministically.
+  if (retargetPendingLooseItemHaulJobs(plot, nowMs)) {
+    changed = true;
+  }
+
+  return changed;
+}
+
+function syncManufacturingOutputHaulJobs(plot: Plot, nowMs: number): boolean {
+  const detail = getDetail(plot);
+  if (!detail) {
+    return false;
+  }
+
+  const jobs = getJobs(detail);
+  let changed = false;
+
+  for (const plotObject of detail.plot_objects) {
+    if (!plotObject.manufacturing) {
+      continue;
+    }
+
+    const outputItemIds = new Set<string>([
+      ...Object.keys(plotObject.manufacturing.output_buffer.item_counts ?? {}),
+      ...jobs
+        .filter(
+          (job) =>
+            job.kind === "HAUL_MANUFACTURING_OUTPUT" &&
+            job.target_object_id === plotObject.id &&
+            typeof job.haul_item_id === "string"
+        )
+        .map((job) => String(job.haul_item_id)),
+    ]);
+
+    for (const itemIdValue of outputItemIds) {
+      const itemId = itemIdValue as PlotLooseItem["item_id"];
+      const bufferedQuantity = Math.max(
+        0,
+        Math.floor(plotObject.manufacturing.output_buffer.item_counts[itemId] ?? 0)
+      );
+      const pendingJobs = getPendingManufacturingOutputHaulJobs(
+        detail,
+        plotObject.id,
+        itemId
+      );
+
+      for (const job of pendingJobs) {
+        applyManufacturingOutputHaulDestinationMetadata(
+          plot,
+          plotObject,
+          itemId,
+          job,
+          nowMs
+        );
+        job.haul_item_id = itemId;
+        job.haul_quantity = 1;
+        job.updated_at_ms = nowMs;
+        changed = true;
+      }
+
+      if (pendingJobs.length < bufferedQuantity) {
+        for (
+          let unitIndex = pendingJobs.length;
+          unitIndex < bufferedQuantity;
+          unitIndex += 1
+        ) {
+          jobs.push(
+            createManufacturingOutputHaulJob(
+              plot,
+              plotObject,
+              itemId,
+              unitIndex + 1,
+              nowMs
+            )
+          );
+          changed = true;
+        }
+      }
+
+      if (pendingJobs.length > bufferedQuantity) {
+        let overflow = pendingJobs.length - bufferedQuantity;
+        for (const job of pendingJobs) {
+          if (overflow <= 0) {
+            break;
+          }
+
+          if (job.assigned_npc_id !== null || job.status === "reserved") {
+            continue;
+          }
+
+          job.status = "cancelled";
+          job.blocked_reason = "source_quantity_reduced";
+          job.updated_at_ms = nowMs;
+          overflow -= 1;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  for (const job of jobs) {
+    if (
+      job.kind !== "HAUL_MANUFACTURING_OUTPUT" ||
+      !isPendingHaulJobStatus(job.status) ||
+      typeof job.target_object_id !== "string"
+    ) {
+      continue;
+    }
+
+    const stationObject = getPlotObjectById(plot, job.target_object_id);
+    if (!stationObject?.manufacturing || !job.haul_item_id) {
+      if (job.assigned_npc_id === null) {
+        job.status = "cancelled";
+        job.blocked_reason = "source_missing";
+        job.updated_at_ms = nowMs;
+        changed = true;
+      }
+      continue;
+    }
+
+    const bufferedQuantity = Math.max(
+      0,
+      Math.floor(stationObject.manufacturing.output_buffer.item_counts[job.haul_item_id] ?? 0)
+    );
+    if (bufferedQuantity > 0) {
+      continue;
+    }
+
+    if (job.assigned_npc_id !== null) {
+      continue;
+    }
+
+    job.status = "cancelled";
+    job.blocked_reason = "source_missing";
+    job.updated_at_ms = nowMs;
+    changed = true;
+  }
+
+  return changed;
+}
+
+export function syncLooseItemHaulJobs(plot: Plot, nowMs: number): boolean {
+  let changed = false;
+
+  if (syncGroundLooseItemHaulJobs(plot, nowMs)) {
+    changed = true;
+  }
+
+  if (syncManufacturingOutputHaulJobs(plot, nowMs)) {
+    changed = true;
+  }
+
   return changed;
 }
 
@@ -324,6 +748,24 @@ export function assignNextLooseItemHaulJob(
   }
 
   return reserveLooseItemHaulJobForNpc(plot, npc, bestMatch, nowMs);
+}
+
+export function assignNextManufacturingOutputHaulJob(
+  plot: Plot,
+  npc: PlotDetailNpc,
+  nowMs: number
+): { ok: boolean; job: PlotJob | null; stationObject: PlotObject | null } {
+  const bestMatch = chooseBestManufacturingOutputHaulJob(plot, npc);
+  if (!bestMatch) {
+    return { ok: false, job: null, stationObject: null };
+  }
+
+  bestMatch.job.status = "reserved";
+  bestMatch.job.assigned_npc_id = npc.id;
+  bestMatch.job.updated_at_ms = nowMs;
+  bestMatch.job.blocked_reason = null;
+
+  return { ok: true, job: bestMatch.job, stationObject: bestMatch.stationObject };
 }
 
 export function assignSpecificLooseItemHaulJob(
@@ -371,4 +813,28 @@ export function pickupLooseItemForHaulJob(
     npcId,
     job.haul_quantity ?? 1
   );
+}
+
+export function pickupManufacturingOutputForHaulJob(
+  plot: Plot,
+  job: PlotJob
+): { changed: boolean; itemId: PlotLooseItem["item_id"] | null; quantityPicked: number } {
+  if (
+    job.kind !== "HAUL_MANUFACTURING_OUTPUT" ||
+    typeof job.target_object_id !== "string" ||
+    !job.haul_item_id
+  ) {
+    return { changed: false, itemId: null, quantityPicked: 0 };
+  }
+
+  const pickup = pickupSingleManufacturingOutputItem(
+    plot,
+    job.target_object_id,
+    job.haul_item_id
+  );
+  if (!pickup.picked_up || !pickup.item_id) {
+    return { changed: pickup.changed, itemId: null, quantityPicked: 0 };
+  }
+
+  return { changed: true, itemId: pickup.item_id, quantityPicked: 1 };
 }

@@ -427,7 +427,7 @@ func _build_haul_jobs_summary_text(jobs: Array) -> String:
 
 		var job: Dictionary = job_value as Dictionary
 		var job_kind: String = str(job.get("kind", ""))
-		if job_kind != "HAUL_LOOSE_ITEM":
+		if job_kind != "HAUL_LOOSE_ITEM" and job_kind != "HAUL_MANUFACTURING_OUTPUT":
 			continue
 
 		total_haul_jobs += 1

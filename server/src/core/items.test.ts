@@ -50,7 +50,8 @@ describe("items foundation", () => {
     expect(pallet.name).toBe("Wooden Pallet");
     expect(pallet.carry.class).toBe("LARGE");
     expect(pallet.carry.hand_slots_required).toBe(2);
-    expect(pallet.routing.allow_direct_to_dump_zone).toBe(false);
+    expect(pallet.storage.allowed_storage_tags).toContain("DUMP_ZONE");
+    expect(pallet.routing.allow_direct_to_dump_zone).toBe(true);
   });
 
   it("lists all currently defined branch-1 foundation items", () => {

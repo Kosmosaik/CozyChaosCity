@@ -43,7 +43,10 @@ const ITEM_VISUAL_DEFINITIONS: Dictionary = {
 	"WOODEN_PALLET": {
 		"carry_scene_path": "res://scenes/items/wooden_pallet.tscn",
 		"loose_ground_variant_scene_paths": {
-			1: "res://scenes/items/wooden_pallet.tscn"
+			1: "res://scenes/items/Wooden_Pallet/wooden_pallet.tscn",
+			2: "res://scenes/items/Wooden_Pallet/wooden_pallet_2.tscn",
+			3: "res://scenes/items/Wooden_Pallet/wooden_pallet_3.tscn",
+			4: "res://scenes/items/Wooden_Pallet/wooden_pallet_4.tscn",
 		}
 	}
 	# TARP intentionally stays on placeholder fallback until a wrapper scene exists.

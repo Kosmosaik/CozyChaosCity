@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://dqvhe1l3soy17"]
+
+[ext_resource type="Script" uid="uid://dr6du38wi5xlg" path="res://scripts/world/actors/NpcVisual.gd" id="1_r1l3i"]
+[ext_resource type="PackedScene" uid="uid://c2fgmfmmovboy" path="res://assets/NPC/NPC2.glb" id="2_r1l3i"]
+
+[node name="NpcVisual" type="Node3D" unique_id=962107321]
+script = ExtResource("1_r1l3i")
+
+[node name="ModelRoot" type="Node3D" parent="." unique_id=1791210495]
+
+[node name="Model" parent="ModelRoot" unique_id=187191292 instance=ExtResource("2_r1l3i")]
+
+[node name="LabelAnchorFallback" type="Marker3D" parent="." unique_id=686548939]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)

@@ -103,7 +103,7 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
   const shackX = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
   const shackY = Math.floor((STARTER_DETAIL_SIZE - STARTER_SHACK_SIZE) / 2);
 
-  const dumpZonePlacement = getStarterDumpZonePlacement(shackX, clearAreaMinY);
+  const dumpZonePlacement = getStarterDumpZonePlacement(clearAreaMinX, clearAreaMinY);
   const workbenchPlacement = getStarterWorkbenchPlacement(shackX, shackY);
 
   for (let y = 0; y < STARTER_DETAIL_SIZE; y++) {
@@ -123,7 +123,8 @@ function makeStarterPlotDetail(plotId: string): PlotDetail {
         dumpZonePlacement.footprint_h
       );
 
-      const isWalkableStarterGround = insideStarterClearArea || insideStarterDumpZone;
+      const isWalkableStarterGround =
+        insideStarterClearArea || insideStarterDumpZone;
 
       cells.push({
         x,
@@ -313,15 +314,15 @@ function footprintsOverlap(
 }
 
 function getStarterDumpZonePlacement(
-  shackX: number,
+  clearAreaMinX: number,
   clearAreaMinY: number
 ): { x: number; y: number; footprint_w: number; footprint_h: number } {
-  // The current starter clear area is only 8x8 and the shack already consumes 4x4,
-  // so the starter dump zone has to carve out its own cleared footprint.
-  // We anchor it to the right of the shack with a small gap so it stays near the
-  // home area without overlapping the shack or starter rubble chunks.
+  const clearAreaMaxX = clearAreaMinX + STARTER_CLEAR_AREA_SIZE - 1;
+
   return {
-    x: shackX + STARTER_SHACK_SIZE + STARTER_DUMP_ZONE_GAP_TILES,
+    // Keep the starter dump zone directly connected to the starter clear area.
+    // This makes the dump zone part of the same walkable region from the start.
+    x: clearAreaMaxX + 1,
     y: clearAreaMinY,
     footprint_w: STARTER_DUMP_ZONE_SIZE,
     footprint_h: STARTER_DUMP_ZONE_SIZE,
@@ -465,6 +466,9 @@ function canDumpZoneAcceptSingleItemNow(
   itemId: ItemId,
   nowMs: number
 ): boolean {
+  // Reserved for future time-based dump-zone rules.
+  void nowMs;
+
   const storage = getOrCreateDumpZoneStorageState(dumpZoneObject);
   const itemDefinition = getItemDefinition(itemId);
 
@@ -472,14 +476,18 @@ function canDumpZoneAcceptSingleItemNow(
     return false;
   }
 
-  if (
-    typeof storage.haul_blocked_until_ms === "number" &&
-    nowMs < storage.haul_blocked_until_ms
-  ) {
-    return false;
+  const nextCapacityUsed =
+    storage.capacity_used + itemDefinition.storage.dump_zone_capacity_cost;
+
+  if (nextCapacityUsed <= storage.capacity_max) {
+    // Current branch does not extract from the dump zone yet.
+    // If there is still space, any old retry timestamp is stale and should not
+    // keep unrelated hauling blocked.
+    storage.haul_blocked_until_ms = null;
+    return true;
   }
 
-  return storage.capacity_used + itemDefinition.storage.dump_zone_capacity_cost <= storage.capacity_max;
+  return false;
 }
 
 export type DirectHaulDestination =
@@ -492,7 +500,11 @@ export function resolveDirectHaulDestinationForSingleItem(
   itemId: ItemId,
   sourceX: number,
   sourceY: number,
-  nowMs: number
+  nowMs: number,
+  options?: {
+    include_pending_manufacturing_jobs?: boolean;
+    planned_inbound_by_station_item_key?: Map<string, number>;
+  }
 ): DirectHaulDestination {
   const detail = plot.detail;
   if (!detail) {
@@ -503,13 +515,20 @@ export function resolveDirectHaulDestinationForSingleItem(
     plot,
     itemId,
     sourceX,
-    sourceY
+    sourceY,
+    {
+      include_pending_jobs: options?.include_pending_manufacturing_jobs,
+      planned_inbound_by_station_item_key:
+        options?.planned_inbound_by_station_item_key,
+    }
   );
+
   if (manufacturingInputDestination) {
     const manufacturingObject = getPlotObjectById(
       plot,
       manufacturingInputDestination.object_id
     );
+
     if (manufacturingObject) {
       const distanceToManufacturingInput = getNearestObjectFootprintDistance(
         manufacturingObject,
@@ -531,6 +550,14 @@ export function resolveDirectHaulDestinationForSingleItem(
     return { mode: "GROUND" };
   }
 
+  const itemDefinition = getItemDefinition(itemId);
+
+  // Items that are not legal dump-zone storage should not poison the dump zone
+  // with a retry cooldown. They simply have no dump-zone destination.
+  if (!itemDefinition.storage.allowed_storage_tags.includes("DUMP_ZONE")) {
+    return { mode: "GROUND" };
+  }
+
   const distanceToDumpZone = getNearestObjectFootprintDistance(
     dumpZoneObject,
     sourceX,
@@ -542,6 +569,8 @@ export function resolveDirectHaulDestinationForSingleItem(
 
   if (!canDumpZoneAcceptSingleItemNow(dumpZoneObject, itemId, nowMs)) {
     const storage = getOrCreateDumpZoneStorageState(dumpZoneObject);
+
+    // Retry cooldown is only for real capacity pressure, not unsupported items.
     storage.haul_blocked_until_ms = nowMs + DUMP_ZONE_RETRY_BLOCK_MS;
     return { mode: "GROUND" };
   }
@@ -1077,18 +1106,13 @@ function ensureStarterDumpZone(detail: PlotDetail): boolean {
       existingDumpZone.footprint_w ?? STARTER_DUMP_ZONE_SIZE,
       existingDumpZone.footprint_h ?? STARTER_DUMP_ZONE_SIZE
     );
+
     return changed;
   }
 
-  const shack = detail.plot_objects.find((obj) => obj.kind === "SHACK");
-  if (!shack) {
-    return changed;
-  }
-
-  const dumpZonePlacement = getStarterDumpZonePlacement(
-    shack.x,
-    Math.floor((detail.height - STARTER_CLEAR_AREA_SIZE) / 2)
-  );
+  const clearAreaMinX = Math.floor((detail.width - STARTER_CLEAR_AREA_SIZE) / 2);
+  const clearAreaMinY = Math.floor((detail.height - STARTER_CLEAR_AREA_SIZE) / 2);
+  const dumpZonePlacement = getStarterDumpZonePlacement(clearAreaMinX, clearAreaMinY);
 
   detail.plot_objects = detail.plot_objects.filter(
     (obj) =>
@@ -1108,6 +1132,7 @@ function ensureStarterDumpZone(detail: PlotDetail): boolean {
   detail.plot_objects.push(
     makeStarterDumpZoneObject(dumpZonePlacement.x, dumpZonePlacement.y)
   );
+
   clearCellsInsideFootprint(
     detail,
     dumpZonePlacement.x,
@@ -1115,8 +1140,8 @@ function ensureStarterDumpZone(detail: PlotDetail): boolean {
     dumpZonePlacement.footprint_w,
     dumpZonePlacement.footprint_h
   );
-  changed = true;
 
+  changed = true;
   return changed;
 }
 
@@ -1140,6 +1165,7 @@ function ensureStarterWorkbench(detail: PlotDetail): boolean {
   const existingWorkbench = detail.plot_objects.find(
     (obj) => obj.kind === "WORKBENCH_1X2"
   );
+
   if (existingWorkbench) {
     if (existingWorkbench.id !== "starter_workbench") {
       existingWorkbench.id = "starter_workbench";
@@ -1165,7 +1191,8 @@ function ensureStarterWorkbench(detail: PlotDetail): boolean {
         changed = true;
       }
 
-      const allowedRecipeIds = getAllowedManufacturingRecipeIdsForStation("WORKBENCH");
+      const allowedRecipeIds =
+        getAllowedManufacturingRecipeIdsForStation("WORKBENCH");
       if (
         JSON.stringify(existingWorkbench.manufacturing.allowed_recipe_ids ?? []) !==
         JSON.stringify(allowedRecipeIds)
@@ -1202,12 +1229,26 @@ function ensureStarterWorkbench(detail: PlotDetail): boolean {
       }
     }
 
+    const footprintW =
+      existingWorkbench.footprint_w ?? STARTER_WORKBENCH_FOOTPRINT_W;
+    const footprintH =
+      existingWorkbench.footprint_h ?? STARTER_WORKBENCH_FOOTPRINT_H;
+
     clearCellsInsideFootprint(
       detail,
       existingWorkbench.x,
       existingWorkbench.y,
-      existingWorkbench.footprint_w ?? STARTER_WORKBENCH_FOOTPRINT_W,
-      existingWorkbench.footprint_h ?? STARTER_WORKBENCH_FOOTPRINT_H
+      footprintW,
+      footprintH
+    );
+
+    // Keep the authored south/front operate tile usable.
+    clearCellsInsideFootprint(
+      detail,
+      existingWorkbench.x,
+      existingWorkbench.y + footprintH,
+      footprintW,
+      1
     );
 
     return changed;
@@ -1222,6 +1263,7 @@ function ensureStarterWorkbench(detail: PlotDetail): boolean {
   detail.plot_objects.push(
     makeStarterWorkbenchObject(workbenchPlacement.x, workbenchPlacement.y)
   );
+
   clearCellsInsideFootprint(
     detail,
     workbenchPlacement.x,
@@ -1229,8 +1271,17 @@ function ensureStarterWorkbench(detail: PlotDetail): boolean {
     workbenchPlacement.footprint_w,
     workbenchPlacement.footprint_h
   );
-  changed = true;
 
+  // Keep the authored south/front operate tile usable.
+  clearCellsInsideFootprint(
+    detail,
+    workbenchPlacement.x,
+    workbenchPlacement.y + workbenchPlacement.footprint_h,
+    workbenchPlacement.footprint_w,
+    1
+  );
+
+  changed = true;
   return changed;
 }
 
@@ -1686,10 +1737,9 @@ const STARTER_CLEAR_AREA_SIZE = 8;
 const STARTER_SHACK_SIZE = 4;
 const STARTER_RUBBLE_SIZE = 4;
 const STARTER_DUMP_ZONE_SIZE = 8;
-const STARTER_DUMP_ZONE_GAP_TILES = 4;
 const STARTER_DUMP_ZONE_CAPACITY = 200;
-const STARTER_WORKBENCH_FOOTPRINT_W = 2;
-const STARTER_WORKBENCH_FOOTPRINT_H = 6;
+const STARTER_WORKBENCH_FOOTPRINT_W = 1;
+const STARTER_WORKBENCH_FOOTPRINT_H = 4;
 const DIRECT_HAUL_MAX_DISTANCE_TILES = 80;
 const DUMP_ZONE_RETRY_BLOCK_MS = 60_000;
 

@@ -73,6 +73,8 @@ When providing code edits, you must specify **exactly** where they go:
   - “near the top”
   - “around the handler”
 
+- The developer prefers whole functions to be replaced rather than patched when possible.
+
 ---
 
 ## 5) Whole-file vs patch rules
@@ -229,5 +231,6 @@ When adding anything new, think like this:
 3. how do I keep it extensible?
 4. how do I avoid rewriting it in two milestones?
 5. how do I keep client, server, data, and UI roles cleanly separated?
+6. how do I avoid growing god-objects or god-functions?
 
 That is the standard expected for future assistants.

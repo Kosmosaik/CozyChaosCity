@@ -1,6 +1,6 @@
 # Cozy Chaos City — Logistics / Storage / Sorting Technical Implementation Roadmap
 
-_Last updated: 2026-03-24_
+_Last updated: 2026-03-30_
 
 ## Purpose
 
@@ -10,25 +10,25 @@ It is based on:
 - the current repo state and M3 foundation
 - `docs/Logistics-Storage-Sorting-Implementation-Plan.md`
 - the follow-up clarifications given after that plan
-- the project architecture rules in `docs/GPT_Assistant_Rules.md`
+- the project architecture reference in `docs/GPT_Assistant_Rules.md`
 
 This is not a replacement for the design plan. It is the **technical execution roadmap** that defines what should be built first, what each branch is responsible for, and what must remain deferred.
 
-## Current implementation status after the 2026-03-24 session
+## Current implementation status after the 2026-03-30 session
 
 ### Completed branches
 - **Branch 0A — Authoritative Item / Output Definitions**
-  - Stable item ids now exist for:
+  - Stable item ids exist for:
     - `SCRAP_WOOD`
     - `SCRAP_METAL`
     - `TARP`
     - `MIXED_SALVAGE`
     - `WOODEN_PALLET`
-  - Authoritative starter-rubble output rules now live in `server/src/core/items.ts`
+  - Authoritative starter-rubble output rules live in `server/src/core/items.ts`
   - Dedicated server tests exist for the item/output foundation
 
 - **Branch 0B — Domain / Protocol Refactor for Logistics State**
-  - `starter_objects` has been replaced by `plot_objects`
+  - `starter_objects` was replaced by `plot_objects`
   - protocol/domain state now includes:
     - `PlotObject`
     - `PlotLooseItem`
@@ -38,59 +38,81 @@ This is not a replacement for the design plan. It is the **technical execution r
   - legacy migration paths exist for older owned-plot saves
 
 - **Branch 1A — Rubble Yield State and Loose Item Spawning**
-  - rubble now uses `remaining_output_rolls`
+  - rubble uses `remaining_output_rolls`
   - each completed work round yields one real item
   - loose items exist as authoritative plot state
-  - tile-based merge behavior is implemented:
-    - same item + same tile = merge
-    - different item + same tile = choose another tile
+  - tile-based merge behavior is implemented
 
-- **Branch 1B — NPC Carry
-  - scavengers now carry a real item in `carry_slots`
-  - direct-haul decision is server-authoritative for newly scavenged output
-  - current routing is:
-    - nearby valid Dump Zone within 8 tiles
-    - otherwise ground fallback
+- **Branch 1B — NPC Carry / Dump Zone Fallback Flow**
+  - scavengers carry real items in `carry_slots`
+  - fresh scavenger output now routes through the shared hauling framework on the success path
+  - safe direct-carry fallback still exists for blocked edge cases
 
 - **Branch 1C — Dump Zone Object and Intake Logic**
-  - starting Dump Zone now exists as a real plot object
-  - Dump Zone now has authoritative abstract storage state
+  - starting Dump Zone exists as a real plot object
+  - Dump Zone has authoritative abstract storage state
   - capacity is enforced
-  - full-state handling now blocks retry for 1 minute and safely falls back to loose ground items
+  - full-state handling blocks retry temporarily and safely falls back to loose ground items
+  - fresh starter plots now place the Dump Zone directly adjacent to the starter clear area so it is part of the same connected walkable region from the beginning
 
 - **Branch 1D — Client Representation and Verification for Branch 1**
   - Dump Zone is rendered in the owned plot
   - loose ground items are rendered in the owned plot
-  - carried-item visuals now reflect real item identity
-  - NPC Character Sheet now shows carrying and drop-off state
-  - Plot Debug Overlay now shows dump-zone, loose-item, carried-item, and haul-target summaries
-  - Plot Debug Overlay is now scrollable and blocks camera wheel zoom while hovered
+  - carried-item visuals reflect real item identity
+  - NPC Character Sheet shows carrying and drop-off state
+  - Plot Debug Overlay shows dump-zone, loose-item, carried-item, haul-target, haul-job, and reservation summaries
 
 - **Branch 1E — Shared Item Visual Asset Pipeline**
-  - shared item visual catalog/registry/node foundation now exists
-  - carry and loose-item visuals now resolve through one shared path
-  - missing assets fall back to placeholder visuals cleanly
-  - quantity-specific loose-ground scene variants are supported through central catalog mapping
+  - shared item visual catalog/registry/node foundation exists
+  - carry and loose-item visuals resolve through one shared path
   - first wrapper scenes are wired for:
     - `SCRAP_WOOD`
     - `SCRAP_METAL`
     - `MIXED_SALVAGE`
+    - `WOODEN_PALLET`
 
-
-
-### Current next branch
 - **Branch 2 — Hauling Foundation**
-  - add a real server-authoritative hauling job layer
-  - treat hauling as an automatic background task that all NPCs can do in early game
-  - Change the current Scavenger behavior to do hauling instead of direct-haul
+  - authoritative `HAUL_LOOSE_ITEM` jobs now exist
+  - loose-item quantity reservations and conflict re-evaluation are implemented
+  - idle NPCs can reserve, pick up, and deliver existing loose items automatically
+  - ground-only roaming/search exists for out-of-range haul work
+  - manual clear, queue changes, and released workbench inputs can wake idle workers immediately
+  - current destination priority is:
+    1. manufacturing demand
+    2. dump-zone cleanup
+    3. ground fallback / no-destination blocked state
+
+- **Branch 3 — Manufacturing Foundation**
+  - starter workbench exists as a real plot object with authoritative manufacturing state
+  - first recipe exists:
+    - `WOODEN_PALLET = 4 SCRAP_WOOD`
+    - `10s` craft time
+    - `1` output
+  - workbench queue / clear flow exists through the Orders UI and server protocol
+  - manufacturing input/output buffers exist on the server
+  - Scrap Wood can be hauled into the workbench input buffer through the shared hauling system
+  - clearing the workbench queue can release buffered inputs back to loose items
+  - ready workbenches are detected automatically once buffered inputs are sufficient
+  - one NPC can reserve the station, walk to the authored south/front operate cell, and start the craft
+  - active craft state locks/consumes input-buffer materials and runs authoritatively for the recipe duration
+  - completed crafts write real `WOODEN_PALLET` counts into the output buffer
+  - finished pallet output creates normal hauling work through the shared logistics system
+  - first station-buffer visuals now mirror both workbench input Scrap Wood and output pallets
+  - workbench work stance now resolves through the authored station anchor plus correct actor-local visual offset math
+
+### Current next slice
+- **Branch 4 — Construction Foundation**
+  - add the first blueprint/build-site flow
+  - require physical delivery of `WOODEN_PALLET` to the build site
+  - build the first usable `Basic Stockpile`
+  - keep stockpile filters/storage authoritative on the server
 
 ### Important current limitations
-- Current direct-haul still covers newly scavenged output only. (we will change that in Branch 2)
-- General hauling jobs for existing loose items, Dump Zone extraction, manufacturing output, and construction delivery do not exist yet.
-- Reservation rules are not yet implemented for item hauling.
-- Workbench manufacturing does not exist yet.
+- Dump Zone extraction into manufacturing / stockpiles is not implemented yet.
 - Construction sites and Basic Stockpile construction do not exist yet.
 - Sorting Station gameplay does not exist yet.
+- Full mid-segment haul reprioritization while already walking is still deferred.
+- UI/UX polish is intentionally deferred to a later dedicated branch.
 
 ---
 
@@ -466,18 +488,19 @@ Turn hauling into a real server-authoritative background logistics task that can
 - Use a first hauling search radius of **10 tiles**.
 - Make idle NPCs roam around the plot to find haulable items.
 - Make sure roaming NPCs can not walk on other tiles/footprints than the ground.
-- Surface later debugging hooks for:
+- Surface debugging hooks for:
   - haul job counts
   - reserved quantities
   - destination counts
   - blocked reasons
 
-### Exit criteria
-- Existing loose items with a valid destination create hauling jobs automatically.
-- Idle/available NPCs can reserve, pick up, and deliver those items if they are in range.
-- Reservation conflicts resolve by re-evaluation instead of item destruction or permanent job deadlock.
-- Current scavenger direct-haul is changed to use the hauling framework. They will haul when they have no higher-priority task.
-- NPCs roam around the plot to find haulable items without walking through other tiles/footprints than the ground.
+### Current implemented result
+- Existing loose items with a valid destination already create hauling jobs automatically.
+- Idle/available NPCs can reserve, pick up, and deliver those items in range.
+- Reservation conflicts resolve by re-evaluation instead of item destruction or permanent deadlock.
+- Fresh scavenger output already routes into the hauling framework on the success path.
+- NPCs already roam around the plot to find haulable items without walking through non-ground footprints.
+- Remaining future extensions for this branch are new haul sources, not the core hauling foundation itself.
 
 ---
 
@@ -503,8 +526,8 @@ Introduce the first real production station and recipe loop so Wooden Pallets be
 - Require physical delivery of ingredients to the Workbench.
 - Allow the player to control manufacturing from:
   - the Orders panel
-  - the station-local UI
-- Support player-controlled quantity adjustment for pallet crafting.
+  - the station-local UI (later)
+- Support player-controlled quantity adjustment for pallet crafting later.
 - Block crafting when output buffer is full.
 - Lock recipe inputs once crafting starts.
 - If the player cancels queued work or removes the station, release unusable buffered ingredients back into hauling.
@@ -514,12 +537,24 @@ Introduce the first real production station and recipe loop so Wooden Pallets be
   - output pallets
   - simple crafting animation / VFX hooks
 
-### Exit criteria
-- The player can place or access a Workbench, queue Wooden Pallet crafting, deliver Scrap Wood to it, and receive real `WOODEN_PALLET` outputs through the same logistics system.
-- Completed pallet outputs can be hauled like any other item.
-- The recipe/station path is reusable for later stations and recipes.
+### Current implemented result
+- Starter Workbench exists as a real plot object with authoritative manufacturing state.
+- Orders UI can queue and clear Wooden Pallet work on the starter workbench.
+- Input/output buffer state already exists on the server.
+- Scrap Wood can already be hauled into the workbench input buffer through the shared hauling system.
+- Queue clearing can already release buffered Scrap Wood back into loose items and wake idle haulers.
+- First-pass station visuals already mirror input-buffer Scrap Wood on the left side of the workbench.
+- Output visuals now mirror real pallet counts when finished work writes `WOODEN_PALLET` into the output buffer.
+- Finished pallet output now enters the normal hauling system automatically.
 
-Important Note!: Workbench will initially just be "spawned" into the world on entering a plot, but will in Branch 4 be moved into the construction foundation as a buildable item.
+### Branch status for the current scope
+- Branch 3 core gameplay exit criteria are met for the current roadmap scope.
+- Remaining work around manufacturing is polish-oriented rather than foundation-blocking:
+  - richer station-local UI / progress feedback
+  - additional presentation polish and VFX
+  - more recipes and more station types later
+
+Important Note!: Workbench is still spawned as a starter plot object for now. Branch 4 can later move it onto the construction foundation as a buildable item.
 
 ---
 

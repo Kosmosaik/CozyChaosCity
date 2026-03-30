@@ -255,7 +255,7 @@ The repo now meets the M3 foundation goal:
 
 ### Next recommended direction after M3
 
-The project has now already started the first real **early logistics foundation** on top of the M3 NPC/order base.
+The project has now moved beyond the first logistics foundation and into a completed first manufacturing loop.
 
 ### What is already true in the repo
 - owned-plot logistics now has authoritative item ids
@@ -270,39 +270,29 @@ The project has now already started the first real **early logistics foundation*
   - abstract storage
   - finite capacity
   - 1-minute retry block when full
-- scavengers now:
-  - receive a real item into their hands first
-  - direct-haul to the Dump Zone when it is valid and within range
-  - otherwise fall back to a ground drop
+  - starter-generation placement directly connected to the main starter clear area
+- Branch 2 hauling foundation is in place for existing loose items, including reservations and roaming/search
+- Branch 3 manufacturing core loop is in place for the starter workbench:
+  - queue / clear through Orders UI
+  - ingredient hauling into the input buffer
+  - authoritative active craft start and timing
+  - real pallet output written into the output buffer
+  - finished pallet output hauled through the normal logistics system
+- client-side station visuals now mirror workbench input and output buffers
+- workbench operate presentation now uses the authored station anchor correctly while keeping the server tile authoritative
 
-### Immediate next priority
-The current logistics visualization / verification slice is now effectively complete for the current scope:
+### Current roadmap direction
+The next gameplay branch is now:
 
-- Dump Zone is rendered in the owned plot
-- loose ground items are rendered
-- carried-item presentation now uses real item identity
-- the NPC Character Sheet shows carrying + drop-off state
-- the Plot Debug Overlay shows dump-zone, loose-item, carried-item, and haul-target summaries
-- shared item visual pipeline foundations are in place with central catalog/registry lookup
-
-### What should come after that
-The next real gameplay phase should now follow the new questionnaire-locked order:
-
-- **Branch 2 — Hauling foundation**
-- **Branch 3 — Manufacturing foundation (Workbench + Wooden Pallets)**
 - **Branch 4 — Construction foundation (Basic Stockpile)**
-- then **Branch 5 — Sorting Station and Mixed Salvage processing**
 
-### Important direction
-Do not steer the project back toward “more M3 features first” as the default path.
+After that:
+- **Branch 5 — Sorting Station and Mixed Salvage processing**
+- a later dedicated **UI/UX polish branch** can improve readability without redefining the gameplay foundations already in place
 
-The correct current direction is:
-
-1. Branch 1 is now readable and debuggable enough for the current scope
-2. next implement **Branch 2 — Hauling foundation**
-3. then **Branch 3 — Manufacturing**
-4. then **Branch 4 — Construction / Basic Stockpile**
-5. then **Branch 5 — Sorting Station**
+### Current planning note
+Branch 3 is functionally complete enough for the current roadmap scope.
+Remaining manufacturing work is mainly polish/UI rather than foundation-blocking gameplay work.
 
 ---
 

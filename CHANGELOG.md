@@ -2,6 +2,47 @@
 
 This project is in early development. Version numbers are informal for now.
 
+## [0.0.16] — 2026-03-30 — Manufacturing Core Loop Complete + Starter Layout/Workbench Presentation Cleanup
+
+### Added
+- Branch 3 manufacturing core loop is now complete for the current gameplay scope:
+  - ready workbenches are detected automatically once buffered inputs are sufficient
+  - one NPC can reserve the station, walk to the authored operate tile, and start the craft
+  - active craft state now locks/consumes recipe inputs from the input buffer
+  - the first recipe runs authoritatively for `10s`
+  - completed crafts now write real `WOODEN_PALLET` counts into the output buffer
+  - finished pallet output now creates normal hauling work through the shared logistics path
+- Workbench output presentation now has real authoritative data to mirror, so the station wrapper can display pallet output instead of an empty future-only anchor.
+- New starter plots now generate with the Dump Zone directly connected to the starter clear area instead of leaving the zone as a disconnected walkable island.
+
+### Changed
+- Manufacturing branch status has moved from “foundation only” to “core loop working” in the repo:
+  - queueing
+  - ingredient hauling
+  - active crafting
+  - output buffering
+  - output hauling
+- Workbench interaction routing keeps operation on the authored south/front operate cell while input and output interactions remain semantically separated.
+- Workbench NPC presentation now converts station-authored work anchors into actor-local space before applying the visual offset, so the authored `NpcPosition` finally controls the stance correctly while the server tile remains authoritative.
+- Starter Dump Zone placement is now sourced from the starter clear-area layout rather than a gap-based placement rule.
+- Active docs and handoff summaries now reflect the real repo state and treat `docs/GPT_Assistant_Rules.md` as the only assistant-instruction document.
+
+### Fixed
+- Fixed laborers idling even when pallet work was fully buffered and ready to start.
+- Fixed workbench crafts failing to progress from buffered ingredients into a real active craft/output loop.
+- Fixed finished pallet output staying trapped in the manufacturing buffer instead of entering the hauling system.
+- Fixed NPCs becoming stranded in the starter Dump Zone because the initial starter layout generated it as a disconnected walkable region.
+- Fixed workbench work-stance presentation using the wrong coordinate space, which caused the NPC to stand far away from the authored `NpcPosition` anchor even when the scene setup was correct.
+
+### Notes / Known limitations
+- Dump Zone extraction into manufacturing / stockpiles is still not implemented.
+- Construction sites / Basic Stockpile construction are still not implemented.
+- Sorting Station gameplay is still not implemented.
+- Workbench manufacturing is still limited to one starter station and one recipe in the current gameplay scope.
+- UI/UX polish is intentionally deferred to a later dedicated branch.
+
+---
+
 ## [0.0.1] — 2026-03-05 — Milestone 0 Complete (Networking + Claiming + Persistence + Profiles)
 
 ### Added
@@ -639,3 +680,80 @@ This project is in early development. Version numbers are informal for now.
 - Current direct-haul remains the scavenger-specific branch-1 special case.
 - Quantity-specific loose-ground scene variants currently fall back to the 1x wrapper unless a dedicated 2x/3x/etc. scene is added later.
 - Workbench manufacturing, construction sites, Basic Stockpile construction, and Sorting Station gameplay are still future branches.
+
+---
+
+## [0.0.15] — 2026-03-26 — Hauling Foundation Complete + Manufacturing Foundation Part 1 + Session Hardening
+
+### Added
+- Full Branch 2 hauling foundation on the server:
+  - authoritative `HAUL_LOOSE_ITEM` jobs
+  - loose-item quantity reservations
+  - shared haul destination metadata
+  - idle haul assignment for existing loose items
+  - ground-only roaming/search for out-of-range haul work
+- Hauling debug visibility on the client through expanded Plot Debug Overlay sections for:
+  - haul jobs
+  - loose-item reservations
+  - destination/reason summaries
+- Shared hauling reuse for fresh scavenger output:
+  - newly scavenged items now enter the hauling job path instead of staying a pure special-case direct-haul branch on the success path
+- First Branch 3 manufacturing foundation:
+  - starter `WORKBENCH_1X2` plot object
+  - authoritative manufacturing station state on plot objects
+  - first recipe definition layer in `server/src/core/manufacturing.ts`
+  - first recipe: `WOODEN_PALLET = 4 SCRAP_WOOD`, `10s`, output `1`
+  - workbench queue / clear request flow
+  - manufacturing input/output buffers on the server
+- Manufacturing routing extensions:
+  - `MANUFACTURING_INPUT` haul destination mode
+  - scrap wood can now route into the workbench input buffer when pallet work is queued
+  - cleared workbench queues can release buffered inputs back to loose world items
+- First station-buffer visual foundation on the client:
+  - manufacturing-station wrapper scene around the authored workbench model
+  - catalog-based buffer slot mapping
+  - left-side input visuals for `SCRAP_WOOD`
+  - right-side output visual anchor ready for future pallet output
+- Session / disconnect hardening:
+  - websocket close/error/timeout diagnostics on server and client
+  - larger Godot websocket buffers to survive large owned-plot snapshots
+  - auth failure now rejects invalid stored credentials instead of silently creating a new player id
+  - startup/job maintenance diagnostics for large plot updates
+
+### Changed
+- Branch order is now reflected in code and docs as:
+  1. Branch 2 — Hauling foundation
+  2. Branch 3 — Manufacturing foundation
+  3. Branch 4 — Construction foundation
+  4. Branch 5 — Sorting Station
+- Haul selection now prioritizes:
+  - manufacturing input demand over dump-zone cleanup
+  - then distance / age as tie-breakers
+- Idle NPCs now wake immediately after:
+  - manual rubble clear
+  - queueing workbench recipes
+  - clearing workbench queues
+- Owned-plot client payloads now filter out completed/cancelled job history.
+- Stale terminal jobs are now pruned from authoritative plot state after short retention so saves and plot updates stop growing forever.
+- The workbench client wrapper now uses the authored workbench scene as its visual model rather than replacing it with a separate standalone prop scene.
+- Connection timeout behavior is temporarily more forgiving while payload-size diagnostics remain active.
+
+### Fixed
+- Fixed the old idle/returning spam and snap-back behavior by idling workers in place instead of sending them through a fake return-home phase.
+- Fixed released workbench input wood sitting idle after queue clear by refreshing haul jobs and waking idle workers immediately.
+- Fixed workbench ingredient hauling priority so required `SCRAP_WOOD` beats lower-priority dump-zone cleanup when both are available.
+- Fixed reconnect confusion where the same display name could silently get a brand-new player id after an auth mismatch.
+- Fixed websocket disconnects caused by oversized owned-plot payloads hitting Godot's default 65535-byte websocket buffer.
+- Fixed a regression where the main authoritative NPC tick loop had been lost during websocket diagnostics work, causing NPCs to stop progressing through jobs.
+
+### Notes / Known limitations
+- Branch 2 is now complete enough for the current roadmap scope, but hauling from the Dump Zone / station buffers / stockpiles is still a future source-type expansion.
+- Branch 3 is only partly complete:
+  - queueing exists
+  - input hauling exists
+  - input visuals exist
+  - active crafting and pallet output generation do not exist yet
+- Workbench output visuals are wired but remain empty until active crafting starts writing real `WOODEN_PALLET` counts into the output buffer.
+- Full mid-segment haul reprioritization while already walking is still deferred.
+- Large owned-plot update warnings remain enabled because payload growth still needs monitoring even though the immediate disconnect is fixed.
+

@@ -13,9 +13,48 @@ The goal is to build the system in staged branches so that:
 - A **Sorting Station** converts Mixed Salvage into usable materials
 - The player gets a first useful **city inventory / logistics UI**
 
-This plan is specifically designed to reduce ambiguity for future GPT assistants and avoid placeholder features or invented systems that are not yet intended.
+This plan is specifically designed to reduce ambiguity in future handoffs and avoid placeholder features or invented systems that are not yet intended.
 
 ---
+
+## Current implementation status (2026-03-30)
+
+### Already implemented
+- Branch 1 extraction / loose items / Dump Zone intake is implemented.
+- Branch 2 hauling foundation is implemented:
+  - authoritative loose-item haul jobs
+  - reservations and re-evaluation
+  - idle haul assignment
+  - ground-only roaming/search
+  - shared hauling path for successful fresh scavenger output
+- Branch 3 manufacturing core loop is implemented for the current gameplay scope:
+  - starter Workbench plot object and manufacturing state
+  - first Wooden Pallet recipe definition
+  - authoritative manufacturing queue state
+  - authoritative input/output buffers on the server
+  - Orders UI queue/clear flow
+  - Scrap Wood hauling into the workbench input buffer
+  - queue-clear release of buffered inputs back to loose items
+  - ready-station detection and reservation
+  - authoritative active craft start / input locking / 10-second timer
+  - real `WOODEN_PALLET` output written into the output buffer
+  - finished pallet output turned into normal hauling work
+  - workbench input/output station visuals on the client
+- Fresh starter plots now generate with the Dump Zone directly connected to the starter clear area.
+
+### Current next slice
+- Branch 4 construction foundation:
+  - blueprint placement / build-site state
+  - physical delivery of 4 `WOODEN_PALLET`
+  - worker build progress
+  - first usable `Basic Stockpile`
+
+### Important current limitations
+- Dump Zone extraction into manufacturing is not implemented yet.
+- Construction / Basic Stockpile work has not started yet.
+- Sorting Station gameplay is not implemented yet.
+- Full mid-walk haul reprioritization is still deferred.
+- UI/UX polish is intentionally deferred to a later dedicated branch.
 
 # 1. Locked Design Decisions
 
@@ -407,7 +446,70 @@ This keeps item identity visually consistent and avoids rewriting presentation c
 
 ---
 
-## Branch 2 — Basic Stockpile Construction and Physical Delivery
+## Branch 2 — Hauling Foundation
+
+### Goal
+Turn hauling into a true background logistics layer for existing loose items instead of tying movement only to scavenger dropoff.
+
+### In scope
+- authoritative haul jobs for existing loose items
+- reservations / re-evaluation
+- idle haul assignment
+- ground-only roaming/search
+- shared hauling path for fresh scavenger output
+- haul priority rules
+- debug visibility for jobs / reservations / blocked reasons
+
+### Current status
+Implemented.
+
+### Success condition
+Existing loose items create authoritative haul jobs, idle NPCs can reserve/pick up/deliver them, and roaming/search works without NPCs walking through blocked footprints.
+
+---
+
+## Branch 3 — Manufacturing Foundation
+
+### Goal
+Introduce the first real production station so Wooden Pallets become manufactured physical items instead of a future special case.
+
+### In scope
+- starter Workbench object/state
+- first recipe: `4 Scrap Wood -> 1 Wooden Pallet`
+- queue / clear flow through Orders UI and server protocol
+- authoritative input/output buffers
+- Scrap Wood hauling into the input buffer
+- first station-buffer visuals
+- this branch now includes active crafting and pallet output hauling
+
+### Current status
+Complete for the current gameplay scope.
+
+Implemented in the repo:
+- starter Workbench plot object
+- authoritative manufacturing state
+- queue / clear request flow
+- input/output buffers
+- Scrap Wood hauling into input buffer
+- queue-clear release back to loose items
+- ready-station detection and reservation
+- active crafting timer
+- input locking / consumption
+- writing real pallet output into the output buffer
+- haul work for finished pallets
+- client station visuals for both input Scrap Wood and output pallets
+
+### Success condition
+The player can queue Wooden Pallets, deliver Scrap Wood, complete a real craft, and then haul finished pallets through the normal logistics system.
+
+### Remaining non-blocking work
+- richer station-local manufacturing UI / progress feedback
+- additional presentation polish and VFX
+- more recipes and more station types later
+
+---
+
+## Branch 4 — Basic Stockpile Construction and Physical Delivery
 
 ### Goal
 Introduce the first true buildable filtered storage and the first real physical construction delivery loop.
@@ -439,7 +541,7 @@ The player can build a Basic Stockpile through physical material delivery, assig
 
 ---
 
-## Branch 3 — Sorting Station and Mixed Salvage Processing
+## Branch 5 — Sorting Station and Mixed Salvage Processing
 
 ### Goal
 Introduce the processing loop that converts Mixed Salvage into usable materials.
@@ -449,7 +551,7 @@ Introduce the processing loop that converts Mixed Salvage into usable materials.
 - physical material delivery required to construct it
 - Sorting Station order request through the Order system
 - worker-time sorting process
-- Dump Zone → Sorting Station input flow
+- Dump Zone -> Sorting Station input flow
 - random output conversion into:
   - Scrap Wood
   - Scrap Metal
@@ -469,7 +571,7 @@ The player can order Mixed Salvage from the Dump Zone to be sorted into usable m
 
 ---
 
-## Branch 4 — First City Inventory / Logistics UI
+## Branch 6 — First City Inventory / Logistics UI
 
 ### Goal
 Give the player a practical exact-number logistics view while the later NPC-reporting fantasy is still under development.
@@ -509,11 +611,13 @@ The player can inspect exact city inventory totals and source breakdowns and see
 Implementation order should be:
 
 1. **Branch 1 — Resource extraction / loose items / Dump Zone**
-2. **Branch 2 — Basic Stockpile + physical construction delivery**
-3. **Branch 3 — Sorting Station**
-4. **Branch 4 — Inventory / logistics UI**
+2. **Branch 2 — Hauling foundation**
+3. **Branch 3 — Manufacturing foundation (Workbench + Wooden Pallets)**
+4. **Branch 4 — Basic Stockpile + physical construction delivery**
+5. **Branch 5 — Sorting Station**
+6. **Branch 6 — Inventory / logistics UI**
 
-This order matches both the gameplay flow and the technical dependency chain.
+This order matches the current gameplay flow and technical dependency chain.
 
 ---
 
@@ -540,40 +644,13 @@ These are intentionally deferred and should **not** be quietly added as placehol
 
 # 5. Branch Guiding Statement
 
-Use this as the main scope guard for the next GPT assistant:
+Use this as the main scope guard for the current implementation phase:
 
-**Build the first early-game logistics foundation in staged branches: Rubble extraction and Dump Zone intake first, then buildable filtered stockpiles with physical construction delivery, then Mixed Salvage sorting, then an exact-number city inventory UI.**
-
----
-
-# 6. Notes for the Next GPT Assistant
-
-## Do not invent placeholder systems
-If something is not yet included in the branch scope, do not create temporary fake versions unless explicitly requested.
-
-## Do not widen scope
-The branch should stay focused on the success condition defined for that branch.
-
-## Do not assume later systems already exist
-Examples:
-- company-owned storage
-- reporting uncertainty
-- tiny-item storage
-- market/import logic
-- NPC inventory mistakes
-
-## Treat the Basic Stockpile structure as locked
-Even if final footprint details are adjusted, the design intent is fixed:
-
-- 1 stockpile object
-- 4 pallet slots
-- 2x2 pallet arrangement
-- visible storage stacks
-- filtered by slot
+**Build the early-game logistics foundation in staged branches: extraction and Dump Zone intake first, hauling second, Workbench manufacturing third, then Basic Stockpile construction, then Mixed Salvage sorting, then an exact-number city inventory UI.**
 
 ---
 
-# 7. Final Summary
+# 6. Final Summary
 
 This implementation phase is about establishing a clean foundation for:
 
@@ -582,6 +659,8 @@ This implementation phase is about establishing a clean foundation for:
 - dropping
 - hauling
 - dumping
+- manufacturing
+- construction delivery
 - stockpiling
 - sorting
 - first-pass inventory visibility

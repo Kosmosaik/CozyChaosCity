@@ -2,11 +2,11 @@
 
 **Project:** CozyChaosCityBuilder (Cozy Chaos City)  
 **Stack:** Godot 4 client + Node.js/TypeScript WebSocket server  
-**Last updated:** 2026-03-24  
-**Current milestone direction:** **Branch 1 client verification is complete enough for the current scope; immediate next priority is Branch 2 — Hauling foundation**  
-**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 delivered the real NPC/order foundation. Post-M3 hardening is in place. The repo now has the full first client-readable logistics foundation: authoritative item ids, `plot_objects`, `loose_items`, real NPC carry slots, rubble output rolls, tile-based loose-item spawning/merge, server-side Dump Zone intake with capacity + fallback behavior, client rendering for Dump Zone + loose items, item-aware carried visuals, shared item-visual pipeline foundations, and first logistics readability UI.
+**Last updated:** 2026-03-30  
+**Current milestone direction:** **Branch 3 manufacturing is complete for the current gameplay scope; immediate next priority is Branch 4 — Construction foundation**  
+**Current state:** M1 is complete. M2 delivered the first owned-plot gameplay foundation. M3 delivered the real NPC/order foundation. Branch 1 extraction/client verification is complete, Branch 2 hauling foundation is implemented, and Branch 3 manufacturing now has a working end-to-end pallet loop. The repo now has authoritative item ids, `plot_objects`, `loose_items`, real NPC carry slots, rubble output rolls, shared haul jobs/reservations/roaming, starter workbench state, active craft state, manufacturing queue/input/output flow, and client-readable logistics + station-buffer visuals.
 
-This document is the handoff reference for any future GPT assistant.
+This document is the current technical handoff summary for the repo.
 
 ---
 
@@ -41,7 +41,7 @@ Important current direction:
 - neighborhood loading/rendering is **not** the active next priority
 - the project is now continuing from the **M3 NPC/order foundation** plus the first readable logistics foundation
 - future work should keep extending stable systems instead of adding rushed feature slices
-- the next priority is now the dedicated **Hauling foundation** branch, followed by Manufacturing and Construction in that order
+- the next priority is now **Branch 4 — Construction**, followed by Sorting and later UI/UX polish
 
 ---
 
@@ -171,8 +171,8 @@ Current measurement result:
 
 ---
 
-### Early logistics foundation — Branch 1 delivered enough for the next phase
-Delivered:
+### Early logistics foundation and current branch status
+Delivered in the current repo:
 - authoritative item/output foundation:
   - `server/src/core/items.ts`
   - `server/src/core/items.test.ts`
@@ -191,9 +191,28 @@ Delivered:
   - abstract storage
   - finite capacity
   - full-state retry block
-- scavengers now place a real item into their hands first, then:
-  - direct-haul to Dump Zone when valid and within 8 tiles
-  - otherwise drop to the ground
+  - starter-generation placement directly connected to the main starter clear area
+- Branch 2 hauling foundation now exists through:
+  - authoritative `HAUL_LOOSE_ITEM` jobs
+  - quantity reservations / re-evaluation
+  - idle haul assignment for existing loose items
+  - ground-only roaming/search
+  - shared hauling path for successful fresh scavenger output
+  - priority-aware manufacturing-input routing over dump-zone cleanup
+- manual clear and manufacturing queue changes can now wake idle workers immediately
+- Branch 3 manufacturing core loop now exists through:
+  - starter workbench plot object
+  - `server/src/core/manufacturing.ts`
+  - first recipe definition for `WOODEN_PALLET`
+  - workbench queue / clear flow
+  - authoritative input/output buffers
+  - Scrap Wood hauling into manufacturing input
+  - queue-clear release of buffered inputs back to loose items
+  - ready-station detection and reservation
+  - active craft start with locked input consumption
+  - 10-second authoritative craft timer
+  - real `WOODEN_PALLET` output generation into the output buffer
+  - hauling finished pallet output through the shared logistics system
 - Dump Zone is rendered in the client
 - loose-item ground stacks are rendered in the client
 - carry visuals are item-aware instead of generic on/off markers
@@ -202,26 +221,31 @@ Delivered:
   - `ItemVisualRegistry.gd`
   - `ItemVisualNode.gd`
   - wrapper item scenes
-- first real wrapper scenes are wired for:
-  - `SCRAP_WOOD`
-  - `SCRAP_METAL`
-  - `MIXED_SALVAGE`
+- first station-buffer visual foundation now exists through:
+  - `ManufacturingStationVisual.gd`
+  - `ManufacturingStationVisualCatalog.gd`
+  - workbench wrapper scene using the authored workbench model
+  - workbench input/output buffer visuals
+  - authored NPC work anchor resolved in actor-local presentation space
 - the NPC Character Sheet now shows carrying + drop-off state
-- the Plot Debug Overlay now shows dump-zone, loose-item, carried-item, and haul-target summaries
-- the Plot Debug Overlay is now scrollable and captures wheel input instead of leaking it to the gameplay camera
+- the Plot Debug Overlay now shows dump-zone, loose-item, carried-item, haul-target, haul-job, and reservation summaries
+- session / payload hardening now exists for real playtests:
+  - invalid stored credentials are rejected instead of silently creating a new player id
+  - websocket close/timeout diagnostics exist on client and server
+  - larger Godot websocket buffers prevent the current oversized plot snapshots from immediately disconnecting the client
+  - terminal job history is pruned and filtered from client payloads
 
 Still not implemented:
-- general hauling jobs for existing loose items
-- loose-item quantity reservations / re-evaluation flow
-- hauling from Dump Zone / station buffers / stockpiles
-- Workbench manufacturing
+- Dump Zone extraction / stockpile extraction into manufacturing
 - Construction sites / Basic Stockpile construction
 - Sorting Station gameplay
+- full mid-segment haul reprioritization while already walking
+- UI/UX polish branch work
 
 Important current next step:
-- implement **Branch 2 — Hauling foundation** first
-- then **Branch 3 — Manufacturing foundation**
-- then **Branch 4 — Construction foundation**
+- continue with **Branch 4 — Construction foundation**
+- then **Branch 5 — Sorting Station**
+- do the dedicated **UI/UX polish branch** later without redefining the gameplay foundations already in place
 
 ---
 
@@ -233,9 +257,11 @@ cozy-chaos-city/
   README.md
   docs/
     Assistant_Wrapup.txt
+    CozyChaosCity_Branch_Design_Questionnaire.md
+    CozyChaosCity_Logistics_Technical_Implementation_Roadmap.md
     GPT_Assistant_Rules.md
-    Handover_prompt.txt
-    M3_Implementation_Plan.md
+    Logistics-Storage-Sorting-Implementation-Plan.md
+    NEXT_GPT_HANDOVER_2026-03-26.md
     TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md
     milestones.md
 
@@ -251,6 +277,9 @@ cozy-chaos-city/
         client_view.ts
         config.ts
         dev_metrics.ts
+        hauling.ts
+        items.ts
+        manufacturing.ts
         npc.ts
         players.ts
         presence.ts
@@ -268,15 +297,21 @@ cozy-chaos-city/
     scenes/
       actors/
         NpcVisual.tscn
+        OwnedPlotNpcActor3D.tscn
+      items/
+      local_objects/
+        DumpZone8x8.tscn
+        LooseItemStack.tscn
+        Rubble4x4.tscn
+        StarterShack.tscn
+      stations/
+        WorkbenchStation.tscn
+        workbench.tscn
       ui/
         BottomActionBar.tscn
         NpcCharacterSheet.tscn
         NpcOverheadLabel.tscn
         OrdersMenuPanel.tscn
-      local_objects/
-        Rubble4x4.tscn
-        RubbleClearSmoke.tscn
-        StarterShack.tscn
       world/
         GameWorld3D.tscn
         PlotTile3D.tscn
@@ -299,6 +334,7 @@ cozy-chaos-city/
       world/
         CameraRigBasic.gd
         GameWorld3D.gd
+        ItemPresentation.gd
         LocalPlotInteractor.gd
         OwnedPlotDetailRenderer3D.gd
         PlotRenderer3D.gd
@@ -307,24 +343,17 @@ cozy-chaos-city/
         actors/
           NpcVisual.gd
           OwnedPlotNpcActor3D.gd
+        item_visuals/
+          ItemVisualCatalog.gd
+          ItemVisualNode.gd
+          ItemVisualRegistry.gd
         local_objects/
+          DumpZone8x8.gd
+          LooseItemStack.gd
+          ManufacturingStationVisual.gd
+          ManufacturingStationVisualCatalog.gd
           Rubble4x4.gd
-    shaders/
-      plot_ground_random_5.gdshader
-    assets/
-      NPC/
-      Shed.glb
-      Rubble_A.glb
-      ground_textures/
-      particles/
 ```
-
-Notes:
-- Ignore `.godot/` and `.tmp` files for logic work
-- `client/PlotView.gd` is legacy and not part of the active world flow
-- The active world flow is the Godot 3D path under `client/scenes/world/` and `client/scripts/world/`
-
----
 
 ## 4) Current server architecture
 
@@ -573,6 +602,10 @@ These are true in the project direction now:
 - the active plot order can be cancelled cleanly
 - the NPC selects nearby rubble jobs and performs the work loop
 - duplicate conflicting scavenging orders are rejected
+- existing loose items can generate shared haul jobs and be delivered automatically
+- idle NPCs can roam to find haul work on clear ground
+- the player can queue and clear Wooden Pallet work on the starter workbench
+- Scrap Wood can be hauled into the workbench input buffer
 - the developer can inspect live plot job/NPC state with F3
 - NPC movement presentation now uses server-authored snapshot timing instead of local wall-clock time
 - NPC visuals now route through the project-owned `NpcVisual` wrapper scene
@@ -583,99 +616,46 @@ These are true in the project direction now:
 ## 7) What is still temporary / limited
 
 Still temporary or incomplete:
-- local NPC visuals/animation are still early
-- `Scavenge All` is still a temporary convenience action until targeted/area selection replaces it
+- Dump Zone extraction into manufacturing or stockpiles is not implemented yet
+- local NPC visuals/animation are still early and a dedicated UI/UX polish branch is planned later
 - the debug overlay is a temporary development tool
-- there is still only the first simple scavenging-family order domain
+- there is still only the first small manufacturing domain (one station, one recipe)
 - no broader economy/business/logistics systems exist yet
 - neighborhood rendering is not implemented
 - local mode still renders only the owned plot
 - interior/private room systems are not implemented
 - `server/src/index.ts` still carries too many responsibilities
 - profile filename sanitization is still deferred
-- the current uploaded repo README is truncated and should be restored before final handoff/cleanup
 - archives are still noisy unless `.git`, `node_modules`, `.godot`, and temp files are excluded manually
 
 ---
 
-## 8)Updated M3 Direction
+## 8) Current architecture cautions
 
-M3 is no longer only about “basic NPC scavenging.”
-Any new NPC/order feature added after this point should extend the stable foundation instead of reintroducing one-off UI or job hacks.
+Important current architectural truths:
+- gameplay progression remains server-authoritative
+- client payloads now intentionally filter terminal job history instead of mirroring raw authoritative history forever
+- manufacturing buffer visuals are presentation-only mirrors of authoritative buffer counts
+- the authored workbench scene is still the visible workbench model; the wrapper scene/script adds station-local anchors and snapshot presentation
+- session/auth handling now rejects bad stored credentials instead of silently swapping player identity
+- websocket payload size still needs monitoring even though the immediate 1009 disconnect was mitigated with larger client buffers
 
-M3 now covers the first complete NPC gameplay foundation for owned plots:
-- server-authoritative NPC jobs
-- identity fields
-- readable current activity
-- role/job specialization
-- Character Sheet
-- overhead labels
-- role-based order eligibility
-- expandable order UI foundation
-- server-authoritative active-order cancellation
-- temporary live debug overlay for system validation
+## 9) Reference docs
 
-### Critical implementation rules
+Useful current docs:
+- `docs/GPT_Assistant_Rules.md`
+- `CHANGELOG.md`
+- `docs/milestones.md`
+- `docs/CozyChaosCity_Logistics_Technical_Implementation_Roadmap.md`
+- `docs/Logistics-Storage-Sorting-Implementation-Plan.md`
+- `docs/CozyChaosCity_Branch_Design_Questionnaire.md`
 
-#### 1. Stability before content
-Do not add new NPC/order content in a way that forces immediate refactor afterward.
+## 10) Current next slice
 
-#### 2. One authoritative NPC model
-NPC-facing data should come from one coherent model, not spread across unrelated structures.
-
-#### 3. Separate internal state from player-facing activity
-Keep:
-- `state` for simulation
-- `current_activity` for UI/player readability
-
-#### 4. Centralize role eligibility
-Do not scatter role checks across multiple files. Use centralized helpers/services.
-
-#### 5. Character Sheet must be future-ready
-Even if fields are initially sparse, the structure must support future expansion.
-
-#### 6. No inferred local variable declarations in GDScript
-Do not use `:=` for local runtime/gameplay/UI variables in Godot scripts.
-Use explicit local types instead.
-
-Example:
-```gdscript
-var npc_id: String = ...
-var result: Dictionary = ...
-var tween: Tween = ...
-var duration_sec: float = ...
-```
-
----
-
-## 9) Recommended implementation principles for future GPT assistants
-
-Follow `docs/GPT_Assistant_Rules.md` strictly.
-
-Especially:
-- never guess file contents
-- always read the actual repo first
-- give exact file paths and exact insertion/replacement anchors
-- keep code modular
-- never use inferred local variable types in GDScript
-- keep public/client DTOs separate from raw server state
-- don't grow existing scripts unless it's really necessary
-- leave useful comments in code explaining the code
-- provide:
-  - what changes
-  - why
-  - where
-  - how to test
-
-Additional project-specific guidance:
-- prefer static UI setup in Godot editor for persistent UI
-- keep protocol changes synchronized on both server and client
-- keep server quality gates passing after important architecture changes
-- build small real foundations, not milestone-only hacks
-- do not write as if neighborhood rendering is still the immediate next step
-
----
-
-## 10) Handoff warning for the next assistant
-
-Nothing. Listen to what the developer wants.
+The next practical slice is still inside **Branch 3**:
+- detect when a queued pallet recipe has enough Scrap Wood buffered
+- start one authoritative active craft on the workbench
+- lock/consume the required Scrap Wood from the input buffer
+- complete the 10-second craft
+- write real `WOODEN_PALLET` output into the output buffer
+- create haul work for finished pallets

@@ -15,7 +15,7 @@ This repository is currently focused on the early durable foundation:
 
 - `client/` — Godot client project
 - `server/` — TypeScript WebSocket server
-- `docs/` — milestone docs, architecture notes, GPT assistant rules, hardening plans
+- `docs/` — milestone docs, architecture notes, handoff summaries, and hardening plans
 
 ---
 
@@ -97,16 +97,17 @@ A handoff archive should contain the real project source, docs, and config — n
 
 ## Current architectural direction
 
-The project is currently building on the more durable M3 direction plus a post-M3 hardening/playtest pass:
+The project is currently building on the more durable M3 direction plus the early logistics/manufacturing foundation:
 
 - server-authoritative gameplay
 - explicit protocol boundaries
 - stable owned-plot foundation
 - extensible NPC / orders systems
-- selective hardening before broader content growth
+- completed first hauling + manufacturing loop
+- next gameplay priority: Construction / Basic Stockpile
 
 See:
-- `docs/GPT_Assistant_Rules.md`
+- `docs/GPT_Assistant_Rules.md` *(the only assistant-instruction document)*
 - `docs/TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md`
 - `docs/foundation-hardening-benchmarking-and-scalability-plan/`
 

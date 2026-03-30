@@ -1,9 +1,10 @@
 GPT handover bundle
 Project: cozy-chaos-city
-Generated: 2026-03-24T15:59:36.487645
+Generated: 2026-03-30T09:23:43.478339
 
 Included files:
 CHANGELOG.md
+HANDOVER_SUMMARY.txt
 README.md
 client/0.png
 client/1.png
@@ -35,6 +36,8 @@ client/assets/ground_textures/1.png
 client/assets/ground_textures/2.png
 client/assets/ground_textures/3.png
 client/assets/ground_textures/4.png
+client/assets/manufactured/LastPall.glb
+client/assets/manufactured/LastPall_0.png
 client/assets/NPC/NPC2.glb
 client/assets/NPC/NPC2_0.png
 client/assets/NPC/NPC2_1.png
@@ -60,23 +63,34 @@ client/assets/resources/RockBlock.glb
 client/assets/resources/RockBlock_0.png
 client/assets/resources/trash.glb
 client/assets/resources/trash_0.png
-client/assets/storage/LastPall.glb
-client/assets/storage/LastPall_0.png
 client/scenes/fire.tscn
 client/scenes/test.tscn
+client/scenes/actors/NpcTest.tscn
 client/scenes/actors/NpcVisual.tscn
 client/scenes/actors/OwnedPlotNpcActor3D.tscn
-client/scenes/items/MixedSalvageItemVisual.tscn
-client/scenes/items/MixedSalvage_2_ItemVisual.tscn
-client/scenes/items/MixedSalvage_3_ItemVisual.tscn
-client/scenes/items/MixedSalvage_4_ItemVisual.tscn
-client/scenes/items/ScrapMetalItemVisual.tscn
-client/scenes/items/ScrapWoodItemVisual.tscn
+client/scenes/items/Mixed_Salvage/MixedSalvageItemVisual.tscn
+client/scenes/items/Mixed_Salvage/MixedSalvage_2_ItemVisual.tscn
+client/scenes/items/Mixed_Salvage/MixedSalvage_3_ItemVisual.tscn
+client/scenes/items/Mixed_Salvage/MixedSalvage_4_ItemVisual.tscn
+client/scenes/items/Scrap_Metal/ScrapMetalItemVisual.tscn
+client/scenes/items/Scrap_Metal/ScrapMetal_2_ItemVisual.tscn
+client/scenes/items/Scrap_Metal/ScrapMetal_3_ItemVisual.tscn
+client/scenes/items/Scrap_Metal/ScrapMetal_4_ItemVisual.tscn
+client/scenes/items/Scrap_Wood/ScrapWoodItemVisual.tscn
+client/scenes/items/Scrap_Wood/ScrapWood_2_ItemVisual.tscn
+client/scenes/items/Scrap_Wood/ScrapWood_3_ItemVisual.tscn
+client/scenes/items/Scrap_Wood/ScrapWood_4_ItemVisual.tscn
+client/scenes/items/Wooden_Pallet/wooden_pallet.tscn
+client/scenes/items/Wooden_Pallet/wooden_pallet_2.tscn
+client/scenes/items/Wooden_Pallet/wooden_pallet_3.tscn
+client/scenes/items/Wooden_Pallet/wooden_pallet_4.tscn
 client/scenes/local_objects/DumpZone8x8.tscn
 client/scenes/local_objects/LooseItemStack.tscn
 client/scenes/local_objects/Rubble4x4.tscn
 client/scenes/local_objects/RubbleClearSmoke.tscn
 client/scenes/local_objects/StarterShack.tscn
+client/scenes/stations/workbench.tscn
+client/scenes/stations/WorkbenchStation.tscn
 client/scenes/ui/BottomActionBar.tscn
 client/scenes/ui/NpcCharacterSheet.tscn
 client/scenes/ui/NpcOverheadLabel.tscn
@@ -112,17 +126,19 @@ client/scripts/world/item_visuals/ItemVisualRegistry.gd
 client/scripts/world/item_visuals/StaticItemModelVisual.gd
 client/scripts/world/local_objects/DumpZone8x8.gd
 client/scripts/world/local_objects/LooseItemStack.gd
+client/scripts/world/local_objects/ManufacturingStationVisual.gd
+client/scripts/world/local_objects/ManufacturingStationVisualCatalog.gd
 client/scripts/world/local_objects/Rubble4x4.gd
 client/shaders/plot_ground_random_5.gdshader
 client/sound/transition.ogg
 docs/Assistant_Wrapup.txt
 docs/CozyChaosCity_Branch_Design_Questionnaire.md
 docs/CozyChaosCity_Logistics_Technical_Implementation_Roadmap.md
-docs/Cozy_Chaos_City_Handover_Prompt.md
 docs/discord_patch_notes_v0.0.12.md
 docs/GPT_Assistant_Rules.md
 docs/Logistics-Storage-Sorting-Implementation-Plan.md
 docs/milestones.md
+docs/NEXT_GPT_HANDOVER_2026-03-26.md
 docs/TECHNICAL_SUMMARY_FOR_GPT_ASSISTANT.md
 docs/design and ideas/player_to_npc_scenarios.md
 docs/design and ideas/Tech_Tree.md
@@ -147,8 +163,12 @@ server/src/core/client_view.ts
 server/src/core/config.ts
 server/src/core/dev_metrics.test.ts
 server/src/core/dev_metrics.ts
+server/src/core/hauling.test.ts
+server/src/core/hauling.ts
 server/src/core/items.test.ts
 server/src/core/items.ts
+server/src/core/manufacturing.test.ts
+server/src/core/manufacturing.ts
 server/src/core/npc.test.ts
 server/src/core/npc.ts
 server/src/core/npc_names.ts

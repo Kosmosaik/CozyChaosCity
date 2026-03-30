@@ -343,10 +343,17 @@ describe("npc job system", () => {
     expect(typeof carryEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, carryEndsAtMs as number);
 
-    // dropping_off -> next state, item abstracted into dump zone
+    // dropping_off -> dropoff_recover, item abstracted into dump zone
     const dropEndsAtMs = scavenger.state_ends_at_ms;
     expect(typeof dropEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, dropEndsAtMs as number);
+
+    expect(scavenger.state).toBe("dropoff_recover");
+    expect(scavenger.current_activity).toBe("Finishing dropoff");
+
+    const recoverEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof recoverEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, recoverEndsAtMs as number);
 
     const completedHaulJobs = (plot.detail?.jobs ?? []).filter(
       (job) => job.kind === "HAUL_LOOSE_ITEM" && job.status === "completed"
@@ -392,10 +399,17 @@ describe("npc job system", () => {
     expect(typeof carryEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, carryEndsAtMs as number);
 
-    // dropping_off -> next state, item falls back to the ground
+    // dropping_off -> dropoff_recover, item falls back to the ground
     const dropEndsAtMs = scavenger.state_ends_at_ms;
     expect(typeof dropEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, dropEndsAtMs as number);
+
+    expect(scavenger.state).toBe("dropoff_recover");
+    expect(scavenger.current_activity).toBe("Finishing dropoff");
+
+    const recoverEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof recoverEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, recoverEndsAtMs as number);
 
     expect(scavenger.carry_slots).toEqual([]);
     expect((plot.detail?.loose_items ?? []).length).toBeGreaterThan(0);
@@ -581,6 +595,13 @@ describe("npc job system", () => {
     const pickupEndsAtMs = laborer.state_ends_at_ms;
     expect(typeof pickupEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, pickupEndsAtMs as number);
+
+    expect(laborer.state).toBe("pickup_recover");
+    expect(laborer.current_activity).toBe("Finishing pickup");
+
+    const pickupRecoverEndsAtMs = laborer.state_ends_at_ms;
+    expect(typeof pickupRecoverEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, pickupRecoverEndsAtMs as number);
 
     expect(laborer.haul_target_mode).toBe("MANUFACTURING_INPUT");
     expect(laborer.haul_target_object_id).toBe("starter_workbench");
@@ -768,6 +789,92 @@ describe("npc job system", () => {
     expect((roamingNpc?.move_to_y ?? 0)).toBeGreaterThanOrEqual(16);
   });
 
+  it("approaches the starter workbench from the authored south-front operate cell", () => {
+    const plot = makeClaimedPlayerPlot();
+    const workbench = (plot.detail?.plot_objects ?? []).find(
+      (obj) => obj.id === "starter_workbench"
+    );
+    const laborer = (plot.detail?.npcs ?? []).find(
+      (npc) => npc.job_type === "LABORER"
+    );
+
+    if (!workbench?.manufacturing || !laborer) {
+      throw new Error("expected starter workbench and laborer");
+    }
+
+    queueManufacturingRecipe(plot, workbench.id, "WOODEN_PALLET", 1, 1000);
+    workbench.manufacturing.input_buffer.item_counts.SCRAP_WOOD = 4;
+
+    laborer.x = workbench.x - 4;
+    laborer.y = workbench.y;
+    laborer.home_x = laborer.x;
+    laborer.home_y = laborer.y;
+    laborer.state = "idle";
+    laborer.current_activity = "Idle";
+    laborer.state_started_at_ms = null;
+    laborer.state_ends_at_ms = null;
+    laborer.move_to_x = null;
+    laborer.move_to_y = null;
+    laborer.assigned_job_id = null;
+    laborer.carry_slots = [];
+
+    tickNpcSimulation({ plots: [plot] }, 1200);
+
+    expect(laborer.state).toBe("moving_to_target");
+    expect(laborer.current_activity).toBe("Walking to workbench");
+    expect(laborer.move_to_x).toBe(workbench.x);
+    expect(laborer.move_to_y).toBe(workbench.y + (workbench.footprint_h ?? 1));
+  });
+
+  it("allows an idle npc to start roaming from the dump-zone footprint when distant haul work exists", () => {
+    const plot = makeClaimedPlayerPlot();
+    queueManufacturingRecipe(plot, "starter_workbench", "WOODEN_PALLET", 1, 1000);
+
+    const laborer = (plot.detail?.npcs ?? []).find(
+      (npc) => npc.job_type === "LABORER"
+    );
+
+    if (!laborer) {
+      throw new Error("expected starter laborer");
+    }
+
+    // Put the laborer on the dump-zone footprint to prove that dump zones remain
+    // pass-through and no rescue/snapback is required before roaming.
+    laborer.x = 26;
+    laborer.y = 23;
+    laborer.home_x = 26;
+    laborer.home_y = 23;
+    laborer.state = "idle";
+    laborer.current_activity = "Idle";
+    laborer.state_started_at_ms = null;
+    laborer.state_ends_at_ms = null;
+    laborer.move_to_x = null;
+    laborer.move_to_y = null;
+    laborer.assigned_job_id = null;
+    laborer.carry_slots = [];
+
+    // Put required wood outside the 10-tile pickup radius so some idle npc must
+    // start a roam slice first.
+    spawnLooseItemNearTile(plot, "SCRAP_WOOD", 17, 18, 1100);
+
+    tickNpcSimulation({ plots: [plot] }, 1200);
+
+    const roamingNpc = (plot.detail?.npcs ?? []).find(
+      (npc) =>
+        npc.state === "moving_to_target" &&
+        npc.current_activity === "Roaming for haul work"
+    );
+
+    expect(roamingNpc).toBeTruthy();
+    expect(typeof roamingNpc?.move_to_x).toBe("number");
+    expect(typeof roamingNpc?.move_to_y).toBe("number");
+
+    // The laborer started on the dump-zone footprint and should remain there
+    // until the move completes. Dump-zone pass-through must not snap him away.
+    expect(laborer.x).toBe(26);
+    expect(laborer.y).toBe(23);
+  });
+
   it("idles in place after the last drop-off instead of entering returning", () => {
     const plot = makeClaimedPlayerPlot();
 
@@ -815,6 +922,13 @@ describe("npc job system", () => {
     const dropEndsAtMs = scavenger.state_ends_at_ms;
     expect(typeof dropEndsAtMs).toBe("number");
     tickNpcSimulation({ plots: [plot] }, dropEndsAtMs as number);
+
+    expect(scavenger.state).toBe("dropoff_recover");
+    expect(scavenger.current_activity).toBe("Finishing dropoff");
+
+    const recoverEndsAtMs = scavenger.state_ends_at_ms;
+    expect(typeof recoverEndsAtMs).toBe("number");
+    tickNpcSimulation({ plots: [plot] }, recoverEndsAtMs as number);
 
     expect(scavenger.state).toBe("idle");
     expect(scavenger.current_activity).toBe("Idle");

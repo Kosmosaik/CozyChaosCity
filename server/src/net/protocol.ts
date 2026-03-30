@@ -31,8 +31,10 @@ export type PlotNpcState =
   | "idle"
   | "moving_to_target"
   | "working"
+  | "pickup_recover"
   | "carrying_to_dropoff"
   | "dropping_off"
+  | "dropoff_recover"
   | "returning";
 
 export type PlotNpcHaulTargetMode =
@@ -40,7 +42,11 @@ export type PlotNpcHaulTargetMode =
   | "DUMP_ZONE"
   | "MANUFACTURING_INPUT";
 
-export type PlotJobKind = "SCAVENGE_RUBBLE" | "HAUL_LOOSE_ITEM";
+export type PlotJobKind =
+  | "SCAVENGE_RUBBLE"
+  | "HAUL_LOOSE_ITEM"
+  | "HAUL_MANUFACTURING_OUTPUT";
+  
 export type PlotJobStatus =
   | "queued"
   | "reserved"

@@ -26,11 +26,11 @@ const NPC_PLACEHOLDER_HEIGHT: float = 1.8
 const NPC_PLACEHOLDER_RADIUS: float = 0.40
 
 # Player-facing ground is one continuous textured surface.
-const GROUND_TEXTURE_0: Texture2D = preload("res://assets/ground_textures/0.png")
-const GROUND_TEXTURE_1: Texture2D = preload("res://assets/ground_textures/1.png")
-const GROUND_TEXTURE_2: Texture2D = preload("res://assets/ground_textures/2.png")
-const GROUND_TEXTURE_3: Texture2D = preload("res://assets/ground_textures/3.png")
-const GROUND_TEXTURE_4: Texture2D = preload("res://assets/ground_textures/4.png")
+const GROUND_TEXTURE_0: Texture2D = preload("res://1.png")
+const GROUND_TEXTURE_1: Texture2D = preload("res://1.png")
+const GROUND_TEXTURE_2: Texture2D = preload("res://1.png")
+const GROUND_TEXTURE_3: Texture2D = preload("res://1.png")
+const GROUND_TEXTURE_4: Texture2D = preload("res://1.png")
 
 const PLOT_GROUND_SHADER: Shader = preload("res://shaders/plot_ground_random_5.gdshader")
 
@@ -936,8 +936,26 @@ func _apply_npc_snapshot_to_node(
 		var target_object_id: String = str(target_object_id_value)
 		var target_object_node: Node3D = _rendered_object_nodes_by_id.get(target_object_id, null) as Node3D
 		if target_object_node != null and is_instance_valid(target_object_node):
-			work_visual_target_position = target_object_node.position
-			has_work_visual_target = true
+			var visual_target_node: Node3D = target_object_node
+
+			if target_object_node.has_method("get_npc_position_node"):
+				var visual_target_value: Variant = target_object_node.call("get_npc_position_node")
+				if visual_target_value is Node3D:
+					var resolved_visual_target_node: Node3D = visual_target_value as Node3D
+					if resolved_visual_target_node != null and is_instance_valid(resolved_visual_target_node):
+						visual_target_node = resolved_visual_target_node
+
+			if visual_target_node == target_object_node:
+				work_visual_target_position = target_object_node.position
+				has_work_visual_target = true
+			else:
+				var parent_node: Node = target_object_node.get_parent()
+				if parent_node is Node3D:
+					var parent_3d: Node3D = parent_node as Node3D
+					work_visual_target_position = parent_3d.to_local(
+						visual_target_node.global_position
+					)
+					has_work_visual_target = true
 
 	if snap_immediately:
 		npc_node.position = current_pos

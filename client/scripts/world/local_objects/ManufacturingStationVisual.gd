@@ -7,6 +7,7 @@ const ManufacturingStationVisualCatalog = preload(
 
 @onready var input_buffer_visual: ItemVisualNode = $InputBufferAnchor/InputBufferVisual
 @onready var output_buffer_visual: ItemVisualNode = $OutputBufferAnchor/OutputBufferVisual
+@onready var npc_position_node: Node3D = $NpcPosition
 
 var _object_id: String = ""
 
@@ -15,6 +16,9 @@ func set_object_id(object_id: String) -> void:
 
 func get_object_id() -> String:
 	return _object_id
+	
+func get_npc_position_node() -> Node3D:
+	return npc_position_node
 
 func apply_snapshot(object_data: Dictionary) -> void:
 	var manufacturing_value: Variant = object_data.get("manufacturing", {})

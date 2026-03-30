@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://cnf7emjftbsxi"]
+
+[ext_resource type="PackedScene" uid="uid://dmcgqmtbbl48n" path="res://assets/manufactured/LastPall.glb" id="1_h70na"]
+
+[node name="WoodenPallet" type="Node3D" unique_id=414314185]
+
+[node name="Model" parent="." unique_id=1645547408 instance=ExtResource("1_h70na")]
+
+[node name="Model2" parent="." unique_id=1594070154 instance=ExtResource("1_h70na")]
+transform = Transform3D(0.9986295, 0, 0.05233596, 0, 1, 0, -0.05233596, 0, 0.9986295, 0, 0.236, -0.032)
